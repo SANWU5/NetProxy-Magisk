@@ -23,8 +23,9 @@ class ThemeManager(prefs: SharedPreferences) {
         _state = MutableStateFlow(
             ThemeUiState(
                 colorMode = p.colorMode,
+                darkStyle = p.darkStyle,
+                accent = p.accent,
                 enablePredictiveBack = p.enablePredictiveBack,
-                enableSmoothCorner = p.enableSmoothCorner,
                 pageScale = p.pageScale,
             )
         )
@@ -36,14 +37,19 @@ class ThemeManager(prefs: SharedPreferences) {
         _state.update { it.copy(colorMode = mode) }
     }
 
+    fun setDarkStyle(style: Int) {
+        store.setDarkStyle(style)
+        _state.update { it.copy(darkStyle = style) }
+    }
+
+    fun setAccent(accent: Int) {
+        store.setAccent(accent)
+        _state.update { it.copy(accent = accent) }
+    }
+
     fun setEnablePredictiveBack(enabled: Boolean) {
         store.setEnablePredictiveBack(enabled)
         _state.update { it.copy(enablePredictiveBack = enabled) }
-    }
-
-    fun setEnableSmoothCorner(enabled: Boolean) {
-        store.setEnableSmoothCorner(enabled)
-        _state.update { it.copy(enableSmoothCorner = enabled) }
     }
 
     fun setPageScale(scale: Float) {
@@ -51,4 +57,3 @@ class ThemeManager(prefs: SharedPreferences) {
         _state.update { it.copy(pageScale = scale) }
     }
 }
-

@@ -26,6 +26,13 @@ internal data class ModuleWifiConfig(
     @Transient val revision: String = ""
 )
 
+/** 记录核心日志的开关；旧版 module.json 没有这个字段时按关闭处理。 */
+@Serializable
+internal data class ModuleLoggingConfig(
+    @SerialName("logging") val enabled: Boolean = false,
+    @Transient val revision: String = ""
+)
+
 @Serializable
 internal data class ModuleAutoStartConfig(
     @SerialName("auto_start") val enabled: Boolean = false,

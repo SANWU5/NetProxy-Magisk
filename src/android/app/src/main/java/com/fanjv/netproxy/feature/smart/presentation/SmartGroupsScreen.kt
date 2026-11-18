@@ -12,6 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -19,17 +21,13 @@ import com.fanjv.netproxy.R
 import com.fanjv.netproxy.core.di.netProxyViewModel
 import com.fanjv.netproxy.core.ui.component.CouiBarMenuButton
 import com.fanjv.netproxy.core.ui.component.MenuAction
-import com.fanjv.netproxy.core.ui.component.SheetAction
-import com.fanjv.netproxy.core.ui.component.showActionSheet
 import com.fanjv.netproxy.feature.smart.model.SmartGroup
 import com.fanjv.netproxy.navigation.LocalNavigator
 import com.fanjv.netproxy.navigation.Route
 import dev.aiingjie.coui.Coui
 import dev.aiingjie.coui.CouiActionRow
 import dev.aiingjie.coui.CouiDialogButton
-import dev.aiingjie.coui.CouiGlyph
 import dev.aiingjie.coui.CouiGroup
-import dev.aiingjie.coui.CouiIcon
 import dev.aiingjie.coui.CouiInfoRow
 import dev.aiingjie.coui.CouiLoading
 import dev.aiingjie.coui.CouiRadio
@@ -40,7 +38,10 @@ import dev.aiingjie.coui.couiCardItems
 import dev.aiingjie.coui.couiPressable
 import androidx.compose.ui.platform.LocalConfiguration
 
-/** 智能分组：手动按地区整理全部节点，选择某个分组的自动选择，或管理自建分组。 */
+/**
+ * 智能分组：手动按地区整理全部节点，或管理自建分组。点按分组进入组内选择自动选择或某个节点；
+ * 点按右侧圆圈直接使用分组，沿用组内的选择，从未在组内选择过节点时使用自动选择。
+ */
 @Composable
 internal fun SmartGroupsScreen(
     onBack: () -> Unit,
@@ -84,17 +85,15 @@ internal fun SmartGroupsScreen(
     val newCustomText = stringResource(R.string.smart_new_custom)
     val testAllText = stringResource(R.string.smart_test_all)
     val useText = stringResource(R.string.smart_use)
-    val editText = stringResource(R.string.smart_edit)
-    val testText = stringResource(R.string.smart_test)
-    val deleteText = stringResource(R.string.smart_delete)
-    val deleteMessage = stringResource(R.string.smart_delete_message)
     val cancelText = stringResource(android.R.string.cancel)
     val regionTitle = stringResource(R.string.smart_region_groups)
     val customTitle = stringResource(R.string.smart_custom_groups)
     val availableText = stringResource(R.string.smart_available)
     val emptyText = stringResource(R.string.smart_no_available)
     val editedText = stringResource(R.string.smart_edited)
-    val currentText = stringResource(R.string.smart_current)
+    val autoText = stringResource(R.string.smart_auto)
+    val autoNowText = stringResource(R.string.smart_mode_auto)
+    val manualText = stringResource(R.string.smart_mode_manual)
 
     fun generate() {
         if (smart.groups.none { !it.custom }) {
@@ -107,34 +106,26 @@ internal fun SmartGroupsScreen(
         ))
     }
 
+    /** 分组内的选择：手动选择的节点，或自动选择（服务运行时附带它当前使用的节点）。 */
+    fun mode(group: SmartGroup): String {
+        val manual = group.manual
+        return when {
+            manual != null -> String.format(manualText, manual.node)
+            smart.running && group.selectedNode.isNotEmpty() -> String.format(autoNowText, group.selectedNode)
+            else -> autoText
+        }
+    }
+
     fun summary(group: SmartGroup): String = buildList {
         add(if (group.available > 0) String.format(availableText, group.available) else emptyText)
         if (group.edited) add(editedText)
-        if (smart.running && group.selectedNode.isNotEmpty()) add(String.format(currentText, group.selectedNode))
+        add(mode(group))
     }.joinToString(" · ")
-
-    fun showActions(group: SmartGroup) = overlay.showActionSheet(
-        title = group.name,
-        message = summary(group),
-        actions = buildList {
-            if (group.available > 0 && smart.active != group.id) add(SheetAction(useText) { viewModel.select(group.id) })
-            add(SheetAction(editText) { navigator.push(Route.SmartGroupEdit(group.id)) })
-            if (smart.running && group.available > 0) add(SheetAction(testText) { viewModel.test(group.id) })
-            add(SheetAction(deleteText, danger = true) {
-                overlay.showDialog(deleteText, String.format(deleteMessage, group.name), listOf(
-                    CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) { viewModel.delete(group.id) {} },
-                    CouiDialogButton(cancelText),
-                ))
-            })
-        },
-        cancel = cancelText,
-    )
 
     val inUse = smart.groups.firstOrNull { it.id == smart.active }
     val inUseTitle = stringResource(R.string.smart_in_use)
     val inUseValue = inUse?.name ?: stringResource(R.string.smart_not_in_use)
-    val inUseSummary = if (inUse != null && smart.running && inUse.selectedNode.isNotEmpty()) String.format(currentText, inUse.selectedNode)
-    else stringResource(R.string.smart_in_use_summary)
+    val inUseSummary = inUse?.let(::mode)
     val introTitle = stringResource(R.string.smart_intro_title)
     val introSummary = stringResource(R.string.smart_intro_summary)
     val footer = stringResource(R.string.smart_groups_footer)
@@ -174,21 +165,22 @@ internal fun SmartGroupsScreen(
         }
         item {
             CouiGroup(first = true) {
-                CouiInfoRow(inUseTitle, inUseValue, summary = inUseSummary)
+                CouiInfoRow(inUseTitle, inUseValue, summary = inUseSummary,
+                    onClick = inUse?.let { group -> { navigator.push(Route.SmartGroupDetail(group.id)) } })
             }
         }
         val regions = smart.groups.filter { !it.custom }
         val customs = smart.groups.filter { it.custom }
         if (regions.isNotEmpty()) {
             couiCardItems(regions, key = { it.id }, title = regionTitle) { group ->
-                SmartGroupRow(group, summary(group), smart.active == group.id, smart.running, idle,
-                    onSelect = { viewModel.select(group.id) }, onMore = { showActions(group) })
+                SmartGroupRow(group, summary(group), smart.active == group.id, smart.running, idle, useText,
+                    onOpen = { navigator.push(Route.SmartGroupDetail(group.id)) }, onSelect = { viewModel.select(group.id) })
             }
         }
         if (customs.isNotEmpty()) {
             couiCardItems(customs, key = { it.id }, title = customTitle) { group ->
-                SmartGroupRow(group, summary(group), smart.active == group.id, smart.running, idle,
-                    onSelect = { viewModel.select(group.id) }, onMore = { showActions(group) })
+                SmartGroupRow(group, summary(group), smart.active == group.id, smart.running, idle, useText,
+                    onOpen = { navigator.push(Route.SmartGroupDetail(group.id)) }, onSelect = { viewModel.select(group.id) })
             }
         }
         item {
@@ -200,6 +192,7 @@ internal fun SmartGroupsScreen(
     }
 }
 
+/** 点按行进入组内选择；点按右侧圆圈直接使用这个分组。 */
 @Composable
 private fun SmartGroupRow(
     group: SmartGroup,
@@ -207,22 +200,25 @@ private fun SmartGroupRow(
     active: Boolean,
     running: Boolean,
     idle: Boolean,
+    useText: String,
+    onOpen: () -> Unit,
     onSelect: () -> Unit,
-    onMore: () -> Unit,
 ) {
+    val usable = idle && group.available > 0
     CouiRow(
         title = group.name,
         summary = summary,
-        enabled = idle && group.available > 0,
-        role = Role.RadioButton,
-        onClick = { if (!active) onSelect() },
+        enabled = idle,
+        role = Role.Button,
+        onClick = onOpen,
     ) {
-        if (running && group.delay > 0) DelayText(group.delay)
+        if (running && group.delay != 0) DelayText(group.delay)
         Box(
-            Modifier.padding(start = 4.dp).size(36.dp).couiPressable(shape = CircleShape, role = Role.Button, onClick = onMore),
+            Modifier.padding(start = 4.dp).size(44.dp)
+                .couiPressable(enabled = usable, shape = CircleShape, role = Role.RadioButton) { if (!active) onSelect() }
+                .semantics { contentDescription = useText },
             contentAlignment = Alignment.Center,
-        ) { CouiIcon(CouiGlyph.More, Coui.colors.labelTertiary) }
-        CouiRadio(selected = active)
+        ) { CouiRadio(selected = active, enabled = group.available > 0) }
     }
 }
 

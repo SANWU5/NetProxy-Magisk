@@ -64,6 +64,8 @@ class CouiDockBar(
     private val slop = ViewConfiguration.get(activity).scaledTouchSlop.toFloat()
     private var dark = false
     private var materialApplied = false
+    /** 应用自己的明暗设置；为空时跟随系统。底栏是独立的 View，不在应用的 Compose 主题里。 */
+    private val darkOverride = mutableStateOf<Boolean?>(null)
     private val touch = CouiDockTouch()
 
     private val pressScale = CouiSpring(1f, .35f, .62f, .0002f)
@@ -102,7 +104,7 @@ class CouiDockBar(
     init {
         val content = ComposeView(activity).apply {
             setContent {
-                val dark = isSystemInDarkTheme()
+                val dark = darkOverride.value ?: isSystemInDarkTheme()
                 SideEffect { updateSurface(dark) }
                 val current by page.collectAsState()
                 CouiDockContent(tabs, current, touch, dark, onPage)
@@ -116,6 +118,11 @@ class CouiDockBar(
             FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
             bottomMargin = (16 * density).roundToInt()
         })
+    }
+
+    /** 让底栏跟随应用选择的浅色或深色，而不是系统设置。 */
+    fun setDark(dark: Boolean) {
+        darkOverride.value = dark
     }
 
     fun setBottomInset(insetPx: Int) {

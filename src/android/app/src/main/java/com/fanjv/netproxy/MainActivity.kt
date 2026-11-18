@@ -1,10 +1,13 @@
 package com.fanjv.netproxy
 
+import com.fanjv.netproxy.navigation.Route.SmartGroupDetail
 import com.fanjv.netproxy.navigation.Route.SmartGroupEdit
 import com.fanjv.netproxy.navigation.Route.SmartGroups
+import com.fanjv.netproxy.feature.smart.presentation.SmartGroupDetailScreen
 import com.fanjv.netproxy.feature.smart.presentation.SmartGroupEditScreen
 import com.fanjv.netproxy.feature.smart.presentation.SmartGroupsScreen
 import android.os.Build
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -27,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -51,9 +55,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.fanjv.netproxy.core.ui.component.LocalModuleAvailability
 import com.fanjv.netproxy.core.ui.component.ModulePage
+import com.fanjv.netproxy.core.ui.theme.AccentColor
 import com.fanjv.netproxy.core.ui.theme.AppThemeSettings
 import com.fanjv.netproxy.core.ui.theme.ColorMode
+import com.fanjv.netproxy.core.ui.theme.DarkStyle
 import com.fanjv.netproxy.core.ui.theme.NetProxyTheme
+import com.fanjv.netproxy.core.ui.theme.appCouiColors
 import com.fanjv.netproxy.feature.about.presentation.AboutScreen
 import com.fanjv.netproxy.feature.apps.presentation.AppsScreen
 import com.fanjv.netproxy.feature.catalog.presentation.nodes.CatalogNodesViewModel
@@ -105,7 +112,6 @@ import top.yukonga.miuix.kmp.nav.core.NavDisplay
 import dev.aiingjie.coui.CouiDockTab
 import dev.aiingjie.coui.CouiOverlayHost
 import dev.aiingjie.coui.CouiTabs
-import dev.aiingjie.coui.CouiTheme
 import dev.aiingjie.coui.LocalCouiOverlay
 
 class MainActivity : ComponentActivity() {
@@ -139,12 +145,17 @@ class MainActivity : ComponentActivity() {
             }
             val appThemeSettings = AppThemeSettings(
                 colorMode = ColorMode.fromValue(themeState.colorMode),
-                enableSmoothCorner = themeState.enableSmoothCorner,
+                darkStyle = DarkStyle.fromValue(themeState.darkStyle),
+                accent = AccentColor.fromValue(themeState.accent),
                 enablePredictiveBack = themeState.enablePredictiveBack,
             )
-            val darkMode = appThemeSettings.colorMode.isDark ||
-                    (appThemeSettings.colorMode.isSystem && androidx.compose.foundation.isSystemInDarkTheme())
+            val darkMode = appThemeSettings.colorMode.resolveDark(androidx.compose.foundation.isSystemInDarkTheme())
+            val couiColors = remember(darkMode, appThemeSettings.darkStyle, appThemeSettings.accent) {
+                appCouiColors(darkMode, appThemeSettings.darkStyle, appThemeSettings.accent)
+            }
 
+            // 系统栏图标、窗口底色与悬浮底栏都不在 Compose 主题里，按应用的明暗设置同步，
+            // 避免强制浅色或深色时出现半边跟随系统的界面。
             SideEffect {
                 WindowInsetsControllerCompat(window, window.decorView).apply {
                     isAppearanceLightStatusBars = !darkMode
@@ -153,14 +164,14 @@ class MainActivity : ComponentActivity() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     window.isNavigationBarContrastEnforced = false
                 }
+                window.setBackgroundDrawable(ColorDrawable(couiColors.page.toArgb()))
+                dock.setDark(darkMode)
             }
 
             CompositionLocalProvider(LocalDensity provides density, LocalDockHost provides dock) {
-                NetProxyTheme(appThemeSettings = appThemeSettings) {
-                    CouiTheme(dark = darkMode) {
-                        CouiOverlayHost {
-                            NetProxyApp(themeViewModel)
-                        }
+                NetProxyTheme(appThemeSettings = appThemeSettings, dark = darkMode, colors = couiColors) {
+                    CouiOverlayHost {
+                        NetProxyApp(themeViewModel)
                     }
                 }
             }
@@ -260,6 +271,11 @@ internal fun NetProxyApp(themeViewModel: ThemeViewModel) {
                 entry<SmartGroups> {
                     ModulePage(R.string.smart_groups, R.string.smart_load_failed, { navigator.pop() }) {
                         SmartGroupsScreen(onBack = { navigator.pop() })
+                    }
+                }
+                entry<SmartGroupDetail> {
+                    ModulePage(R.string.smart_groups, R.string.smart_load_failed, { navigator.pop() }) {
+                        SmartGroupDetailScreen(id = it.id, onBack = { navigator.pop() })
                     }
                 }
                 entry<SmartGroupEdit> {
@@ -410,11 +426,14 @@ private fun MainScreenBackHandler(
     enablePredictiveBack: Boolean,
     onBackToFirst: () -> Unit,
 ) {
-    val isPagerBackHandlerEnabled by remember(selected) {
+    val overlay = LocalCouiOverlay.current
+    // 弹窗或底部面板打开时，返回先关闭它们，不切回第一个分页。
+    val isPagerBackHandlerEnabled by remember(selected, overlay) {
         derivedStateOf {
             navigator.backStack.lastOrNull() is Main &&
                     navigator.backStack.size == 1 &&
-                    selected != 0
+                    selected != 0 &&
+                    !overlay.isCovering
         }
     }
 

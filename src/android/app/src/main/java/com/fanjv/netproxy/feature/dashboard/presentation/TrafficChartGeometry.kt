@@ -2,63 +2,48 @@ package com.fanjv.netproxy.feature.dashboard.presentation
 
 import androidx.compose.ui.geometry.Offset
 
-internal data class TrafficChartGeometry(
-    val download: List<Offset>,
-    val upload: List<Offset>
-)
+/** 流量图显示最近一分钟。 */
+internal const val TRAFFIC_WINDOW_MILLIS = 60_000L
 
-internal fun trafficChartGeometry(samples: List<TrafficSample>): TrafficChartGeometry {
-    if (samples.isEmpty()) {
-        val baseline = listOf(Offset(0f, 0f), Offset(1f, 0f))
-        return TrafficChartGeometry(baseline, baseline)
-    }
-    val maxSpeed = maxOf(
-        samples.maxOf { it.downloadBytesPerSecond },
-        samples.maxOf { it.uploadBytesPerSecond },
-        1L
-    ).toFloat() * 1.15f
-    return TrafficChartGeometry(
-        download = normalizedSeries(samples.map { it.downloadBytesPerSecond }, maxSpeed),
-        upload = normalizedSeries(samples.map { it.uploadBytesPerSecond }, maxSpeed)
-    )
+/**
+ * 纵轴上限：窗口内最大速率留 15% 余量，至少按 1 KB/s 计算，
+ * 空闲时几十字节的波动不会被放大成满幅曲线。
+ */
+internal fun trafficChartPeak(samples: List<TrafficSample>): Float = maxOf(
+    samples.maxOfOrNull { it.downloadBytesPerSecond } ?: 0L,
+    samples.maxOfOrNull { it.uploadBytesPerSecond } ?: 0L,
+    1024L,
+).toFloat() * 1.15f
+
+/**
+ * 显示延迟：比最近一次采样间隔多半个间隔。画面的右边缘比最新采样晚这么多，
+ * 最新的点从右边缘外平滑滑入，采样稍有延迟时右端也不会露出空白。
+ */
+internal fun trafficDisplayDelay(samples: List<TrafficSample>): Long {
+    val interval = if (samples.size < 2) 1000L
+    else (samples.last().timestampMillis - samples[samples.lastIndex - 1].timestampMillis).coerceIn(250L, 5000L)
+    return interval + interval / 2
 }
 
-internal fun interpolateTrafficChartGeometry(
-    from: TrafficChartGeometry,
-    to: TrafficChartGeometry,
-    progress: Float
-): TrafficChartGeometry {
-    val fraction = progress.coerceIn(0f, 1f)
-    if (fraction >= 1f) return to
-    return TrafficChartGeometry(
-        download = interpolateSeries(from.download, to.download, fraction),
-        upload = interpolateSeries(from.upload, to.upload, fraction)
-    )
-}
-
-private fun interpolateSeries(
-    from: List<Offset>,
-    to: List<Offset>,
-    progress: Float
-): List<Offset> = to.mapIndexed { index, target ->
-    val start = from.getOrNull(index) ?: return@mapIndexed target
-    Offset(
-        x = lerp(start.x, target.x, progress),
-        y = lerp(start.y, target.y, progress)
-    )
-}
-
-private fun lerp(start: Float, end: Float, progress: Float): Float =
-    start + (end - start) * progress
-
-private fun normalizedSeries(values: List<Long>, maxSpeed: Float): List<Offset> {
-    if (values.isEmpty()) return listOf(Offset(0f, 0f), Offset(1f, 0f))
-    if (values.size == 1) {
-        val y = values.first().toFloat() / maxSpeed
-        return listOf(Offset(0f, y), Offset(1f, y))
-    }
-    val divisor = (values.lastIndex).toFloat()
-    return values.mapIndexed { index, value ->
-        Offset(index / divisor, (value.toFloat() / maxSpeed).coerceIn(0f, 1f))
+/**
+ * 把采样按时间投影到画布比例坐标：x 把 [end - window, end] 映射到 0..1，y 按 [peak] 归一化到 0..1（0 在底部）。
+ * 窗口两侧各多保留一个相邻点，折线在左右边缘连续地滑入滑出；绘制时裁剪到画布内。
+ */
+internal fun trafficPoints(
+    samples: List<TrafficSample>,
+    end: Long,
+    window: Long,
+    peak: Float,
+    value: (TrafficSample) -> Long,
+): List<Offset> {
+    val start = end - window
+    val first = samples.indexOfFirst { it.timestampMillis >= start }
+    val last = samples.indexOfLast { it.timestampMillis <= end }
+    val from = if (first < 0) samples.lastIndex else (first - 1).coerceAtLeast(0)
+    val to = (last + 1).coerceAtMost(samples.lastIndex)
+    if (samples.isEmpty() || to < from) return emptyList()
+    return (from..to).map { index ->
+        val sample = samples[index]
+        Offset((sample.timestampMillis - start).toFloat() / window, (value(sample) / peak).coerceIn(0f, 1f))
     }
 }

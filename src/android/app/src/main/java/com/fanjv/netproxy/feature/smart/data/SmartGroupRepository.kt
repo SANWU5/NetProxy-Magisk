@@ -36,9 +36,19 @@ internal class SmartGroupRepository(private val client: ModuleApiClient) {
     /** 让分组的自动选择重新测速；id 为空时测试全部分组。 */
     suspend fun test(id: String): SmartGroups = decode(client.post("/smart-groups/delay", buildJsonObject { put("id", id) }).data)
 
-    /** 节点页改用这个分组的自动选择。 */
+    /** 从外部选择分组：节点页改用这个分组，沿用分组内的选择（从未手动选择过时为自动选择）。 */
     suspend fun select(id: String) {
         client.put("/selection", buildJsonObject { put("smart_group_id", id) })
+    }
+
+    /** 在分组内选择节点；manual 为空表示改用分组的自动选择。节点页随之改用这个分组。 */
+    suspend fun selectNode(id: String, manual: SmartNodeRef?) {
+        client.put("/smart-groups/$id/selection", buildJsonObject {
+            if (manual != null) put("manual", buildJsonObject {
+                put("group_id", manual.groupId)
+                put("node", manual.node)
+            })
+        })
     }
 
     private fun body(name: String, members: List<SmartNodeRef>) = buildJsonObject {

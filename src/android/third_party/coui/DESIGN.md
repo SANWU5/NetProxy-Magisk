@@ -51,7 +51,7 @@
 | `barSubtitle` | 13 固定 | Regular | 1.174 | 二级页副标题 |
 | `rowTitle` | 16 | Medium | 1.158 | 行标题 |
 | `rowSummary` | 13 | Regular | 1.174 | 行摘要 |
-| `rowValue` | 13 | Regular | 1.174 | 信息行右侧的值 |
+| `rowValue` | 13 | Regular | 1.174 | 信息行右侧的值；等宽数字（`tnum`），数值变化时宽度不变 |
 | `jumpValue` | 14 固定 | Regular | 1.225 | 跳转行右侧的值、滑杆数值 |
 | `category` | 12 | Medium | 1.143 | 分组标题 |
 | `footer` | 12 | Regular | 1.35 | 分组底部说明 |

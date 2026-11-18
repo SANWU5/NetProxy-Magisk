@@ -9,6 +9,7 @@ import com.fanjv.netproxy.feature.smart.data.SmartGroupRepository
 import com.fanjv.netproxy.feature.smart.model.SmartGroups
 import com.fanjv.netproxy.feature.smart.model.SmartNodeRef
 import com.fanjv.netproxy.feature.smart.model.SmartSummary
+import com.fanjv.netproxy.feature.smart.model.key
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,8 @@ internal data class SmartUiState(
     /** 正在执行的写操作；非空时界面禁用其他写入。 */
     val busy: String = "",
     val error: String = "",
+    /** 最近一次测速失败或超时的成员（「来源分组 id/节点名」）。内核会删除失败的测速记录，页面据此继续显示失败。 */
+    val failed: Set<String> = emptySet(),
 )
 
 internal sealed interface SmartEvent {
@@ -91,7 +94,21 @@ internal class SmartGroupsViewModel(
         repository.current()
     }
 
-    fun test(id: String) = write(if (id.isEmpty()) "test" else "test:$id") { repository.test(id) }
+    /** 在分组内选择节点（manual 为空表示自动选择），节点页随之改用这个分组。 */
+    fun selectNode(id: String, manual: SmartNodeRef?) = write("select:$id") {
+        repository.selectNode(id, manual)
+        emit(SmartEvent.Selected)
+        repository.current()
+    }
+
+    fun test(id: String) = write(if (id.isEmpty()) "test" else "test:$id") {
+        val smart = repository.test(id)
+        val tested = smart.groups.filter { id.isEmpty() || it.id == id }
+        val testedKeys = tested.flatMap { group -> group.members.map { it.key } }.toSet()
+        val failed = tested.flatMap { group -> group.delays.filterValues { it < 0 }.keys }.toSet()
+        _state.update { it.copy(failed = it.failed - testedKeys + failed) }
+        smart
+    }
 
     /** 新建（id 为空）或保存分组，成功后回调新的分组 id。 */
     fun save(id: String?, name: String, members: List<SmartNodeRef>, onDone: (String) -> Unit) {

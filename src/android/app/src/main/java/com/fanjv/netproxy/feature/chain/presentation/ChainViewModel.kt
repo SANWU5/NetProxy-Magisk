@@ -40,7 +40,7 @@ internal data class ChainUiState(
     /** 前置选择面板的可选项：全部节点分组与智能/自建分组。 */
     val nodeGroups: List<CatalogNodeGroup> = emptyList(),
     val smartGroups: List<SmartGroup> = emptyList(),
-    /** 本次进入页面后做过链路测速，界面据此显示诊断结论。 */
+    /** 本次进入页面后做过链路测速，界面据此显示前置与链路的延迟。 */
     val tested: Boolean = false,
 )
 

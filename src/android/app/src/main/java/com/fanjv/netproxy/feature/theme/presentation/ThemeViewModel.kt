@@ -11,8 +11,8 @@ internal class ThemeViewModel(
     val state: StateFlow<ThemeUiState> = manager.state
 
     fun setThemeMode(mode: Int) = manager.setThemeMode(mode)
+    fun setDarkStyle(style: Int) = manager.setDarkStyle(style)
+    fun setAccent(accent: Int) = manager.setAccent(accent)
     fun setEnablePredictiveBack(enabled: Boolean) = manager.setEnablePredictiveBack(enabled)
-    fun setEnableSmoothCorner(enabled: Boolean) = manager.setEnableSmoothCorner(enabled)
     fun setPageScale(scale: Float) = manager.setPageScale(scale)
 }
-

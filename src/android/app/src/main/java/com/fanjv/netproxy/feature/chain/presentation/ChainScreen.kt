@@ -198,7 +198,6 @@ internal fun ChainScreen(
     val frontDelayTitle = stringResource(R.string.chain_front_delay)
     val linkDelayTitle = stringResource(R.string.chain_link_delay)
     val linkFooter = stringResource(if (chain.running) R.string.chain_mode_footer else R.string.chain_service_stopped)
-    val verdict = verdict(chain, state.tested, mode)
 
     CouiLargeTitlePage(
         title = stringResource(R.string.chain),
@@ -231,12 +230,6 @@ internal fun ChainScreen(
                 if (state.tested && mode.usesManual && manualDelay != null) {
                     CouiRow(linkDelayTitle, summary = chain.manual) { DelayText(manualDelay) }
                 }
-            }
-        }
-        if (verdict != null) {
-            item {
-                CouiTopTips(verdict.status, stringResource(verdict.title), Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
-                    body = verdict.body?.let { stringResource(it) })
             }
         }
         item {
@@ -302,23 +295,6 @@ internal fun ChainScreen(
     }
 }
 
-/** 链路测速的诊断结论。 */
-private class Verdict(val status: CouiStatus, val title: Int, val body: Int?)
-
-private fun verdict(chain: ChainState, tested: Boolean, mode: ChainMode): Verdict? {
-    if (!tested || !chain.running) return null
-    val front = chain.frontDelay
-    val landing = if (mode.usesManual) chain.delays[chain.manual] else chain.delays.values.maxOrNull()
-    return when {
-        front != null && front < 0 -> Verdict(CouiStatus.Error, R.string.chain_verdict_front_failed, R.string.chain_verdict_front_failed_body)
-        landing != null && landing < 0 && front != null ->
-            Verdict(CouiStatus.Error, R.string.chain_verdict_landing_failed, R.string.chain_verdict_landing_failed_body)
-        landing != null && landing < 0 -> Verdict(CouiStatus.Error, R.string.chain_verdict_failed, R.string.chain_verdict_landing_failed_body)
-        landing != null && landing > 0 -> Verdict(CouiStatus.Success, R.string.chain_verdict_ok, null)
-        else -> null
-    }
-}
-
 @Composable
 private fun frontSummary(chain: ChainState): String {
     val setting = chain.frontSetting
@@ -358,6 +334,7 @@ private fun FrontPicker(
     val localName = stringResource(R.string.node_local_config)
     val availableText = stringResource(R.string.smart_available)
     val autoText = stringResource(R.string.chain_front_auto_summary)
+    val manualText = stringResource(R.string.smart_mode_manual)
     CouiGroup(first = true, footer = stringResource(R.string.chain_front_picker_footer)) {
         CouiRadioRow(stringResource(R.string.chain_front_follow), setting == null, { onPick(null) },
             summary = stringResource(R.string.chain_front_follow_summary))
@@ -365,9 +342,11 @@ private fun FrontPicker(
     if (state.smartGroups.isNotEmpty()) {
         CouiGroup(title = stringResource(R.string.chain_front_smart_groups)) {
             state.smartGroups.forEach { group ->
+                // 智能分组作为前置时沿用分组内的选择：手动选择的节点，或自动选择。
+                val mode = group.manual?.let { String.format(manualText, it.node) } ?: autoText
                 CouiRadioRow(
                     group.name, setting?.smartId == group.id, { onPick(ChainFront(smartId = group.id)) },
-                    summary = String.format(availableText, group.available) + " · " + autoText,
+                    summary = String.format(availableText, group.available) + " · " + mode,
                     enabled = group.available > 0,
                 )
             }

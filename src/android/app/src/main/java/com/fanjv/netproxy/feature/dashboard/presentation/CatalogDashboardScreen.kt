@@ -87,6 +87,7 @@ internal fun CatalogDashboardScreen(
                 isRunning = state.isReady,
                 serviceControlEnabled = availability?.available == true && state.connected &&
                     !state.loading && !state.isServiceControlBusy,
+                animateChart = isActive && state.isReady,
                 onToggleService = viewModel::toggleService
             )
         }

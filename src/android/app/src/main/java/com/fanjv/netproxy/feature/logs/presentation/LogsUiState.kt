@@ -15,6 +15,9 @@ internal data class LogContent(
 internal data class LogsUiState(
     val service: LogContent = LogContent(),
     val kernel: LogContent = LogContent(),
+    /** 记录核心日志开关；尚未读到时为空。 */
+    val logging: Boolean? = null,
+    val loggingBusy: Boolean = false,
 ) {
     operator fun get(type: LogType): LogContent = if (type == LogType.SERVICE) service else kernel
     fun with(type: LogType, content: LogContent): LogsUiState =

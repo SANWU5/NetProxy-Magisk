@@ -1,7 +1,12 @@
 package com.fanjv.netproxy.feature.theme.presentation
 
 import android.content.SharedPreferences
+import com.fanjv.netproxy.core.ui.theme.AccentColor
 import com.fanjv.netproxy.core.ui.theme.ColorMode
+import com.fanjv.netproxy.core.ui.theme.DarkStyle
+import com.fanjv.netproxy.core.ui.theme.appCouiColors
+import dev.aiingjie.coui.CouiDarkColors
+import dev.aiingjie.coui.CouiLightColors
 import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,7 +19,8 @@ class ThemePreferenceStoreTest {
         val settings = ThemePreferenceStore(preferences()).read()
 
         assertEquals(ColorMode.SYSTEM.value, settings.colorMode)
-        assertTrue(settings.enableSmoothCorner)
+        assertEquals(DarkStyle.ENHANCED.value, settings.darkStyle)
+        assertEquals(AccentColor.BLUE.value, settings.accent)
         assertFalse(settings.enablePredictiveBack)
         assertEquals(1.0f, settings.pageScale, 0f)
     }
@@ -26,7 +32,8 @@ class ThemePreferenceStoreTest {
 
         assertEquals(settings.colorMode, state.colorMode)
         assertEquals(settings.enablePredictiveBack, state.enablePredictiveBack)
-        assertEquals(settings.enableSmoothCorner, state.enableSmoothCorner)
+        assertEquals(settings.darkStyle, state.darkStyle)
+        assertEquals(settings.accent, state.accent)
         assertEquals(settings.pageScale, state.pageScale, 0f)
     }
 
@@ -35,14 +42,16 @@ class ThemePreferenceStoreTest {
         val settings = ThemePreferenceStore(
             preferences(
                 "color_mode" to ColorMode.DARK.value,
-                "enable_smooth_corner" to false,
+                "dark_style" to DarkStyle.SOFT.value,
+                "accent_color" to AccentColor.GREEN.value,
                 "enable_predictive_back" to true,
                 "page_scale" to 0.9f,
             )
         ).read()
 
         assertEquals(ColorMode.DARK.value, settings.colorMode)
-        assertFalse(settings.enableSmoothCorner)
+        assertEquals(DarkStyle.SOFT.value, settings.darkStyle)
+        assertEquals(AccentColor.GREEN.value, settings.accent)
         assertTrue(settings.enablePredictiveBack)
         assertEquals(0.9f, settings.pageScale, 0f)
     }
@@ -60,6 +69,30 @@ class ThemePreferenceStoreTest {
             assertEquals(legacy.value, state.colorMode)
             assertEquals(appearance, ColorMode.fromValue(state.colorMode).appearance)
         }
+    }
+
+    @Test
+    fun defaultAccentKeepsTheOriginalCouiColors() {
+        assertEquals(CouiLightColors, appCouiColors(false, DarkStyle.SOFT, AccentColor.BLUE))
+        assertEquals(CouiDarkColors, appCouiColors(true, DarkStyle.ENHANCED, AccentColor.BLUE))
+    }
+
+    @Test
+    fun darkStyleAndAccentChangeOnlyTheirOwnColors() {
+        val soft = appCouiColors(true, DarkStyle.SOFT, AccentColor.GREEN)
+        assertEquals(CouiDarkColors.label, soft.label)
+        assertTrue(soft.page != CouiDarkColors.page)
+        assertEquals(AccentColor.GREEN.dark, soft.accent)
+        assertEquals(AccentColor.GREEN.darkText, soft.accentText)
+        assertEquals(AccentColor.GREEN.light, appCouiColors(false, DarkStyle.SOFT, AccentColor.GREEN).accent)
+    }
+
+    @Test
+    fun followSystemResolvesWithTheSystemSetting() {
+        assertTrue(ColorMode.SYSTEM.resolveDark(systemDark = true))
+        assertFalse(ColorMode.SYSTEM.resolveDark(systemDark = false))
+        assertFalse(ColorMode.LIGHT.resolveDark(systemDark = true))
+        assertTrue(ColorMode.DARK.resolveDark(systemDark = false))
     }
 
     private fun preferences(vararg values: Pair<String, Any>): SharedPreferences {

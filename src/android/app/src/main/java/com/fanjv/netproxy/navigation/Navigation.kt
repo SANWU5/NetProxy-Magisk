@@ -77,6 +77,11 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object SmartGroups : Route
 
+    /** 智能分组详情：在分组内选择自动选择或某个节点。 */
+    @Parcelize
+    @Serializable
+    data class SmartGroupDetail(val id: String) : Route
+
     /** 智能分组或自建分组的编辑页；id 为空表示新建自建分组。 */
     @Parcelize
     @Serializable

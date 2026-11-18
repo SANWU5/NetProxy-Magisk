@@ -137,9 +137,13 @@ fun CouiOverlayHost(state: CouiOverlayState = remember { CouiOverlayState() }, c
     }
 }
 
+/**
+ * 弹出层的返回处理只在显示时进入组合：返回事件交给最后注册的处理，
+ * 这样弹出层总是先于页面、导航栈与底栏的返回处理收到返回，一次返回就能关闭它。
+ */
 @Composable
-private fun SafeBackHandler(enabled: Boolean, onBack: () -> Unit) {
-    if (LocalOnBackPressedDispatcherOwner.current != null) BackHandler(enabled, onBack)
+private fun OverlayBackHandler(visible: Boolean, onBack: () -> Unit) {
+    if (visible && LocalOnBackPressedDispatcherOwner.current != null) BackHandler(onBack = onBack)
 }
 
 @Composable
@@ -158,7 +162,7 @@ private fun DialogLayer(state: CouiOverlayState) {
     if (current != null) shown = current
     val visible = current != null
     Dim(visible) { if (shown?.cancelable == true) state.dismissDialog() }
-    SafeBackHandler(visible) { if (shown?.cancelable == true) state.dismissDialog() }
+    OverlayBackHandler(visible) { if (shown?.cancelable == true) state.dismissDialog() }
     Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars), contentAlignment = Alignment.BottomCenter) {
         AnimatedVisibility(
             visible,
@@ -212,7 +216,7 @@ private fun PanelLayer(state: CouiOverlayState) {
     if (current != null) shown = current
     val visible = current != null
     Dim(visible) { state.dismissPanel() }
-    SafeBackHandler(visible) { state.dismissPanel() }
+    OverlayBackHandler(visible) { state.dismissPanel() }
     val colors = Coui.colors
     Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars).padding(top = 40.dp), contentAlignment = Alignment.BottomCenter) {
         AnimatedVisibility(
@@ -250,7 +254,7 @@ private fun MenuLayer(state: CouiOverlayState) {
         if (visible) progress.animateTo(1f, CouiMotion.pressSpring())
         else { progress.animateTo(0f, tween(CouiMotion.DIALOG_OUT, easing = CouiMotion.OutEase)); shown = null }
     }
-    SafeBackHandler(visible) { state.dismissMenu() }
+    OverlayBackHandler(visible) { state.dismissMenu() }
     val spec = shown ?: return
     val colors = Coui.colors
     Box(Modifier.fillMaxSize().clickable(remember { MutableInteractionSource() }, indication = null) { state.dismissMenu() })

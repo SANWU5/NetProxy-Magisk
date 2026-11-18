@@ -53,6 +53,7 @@ import dev.aiingjie.coui.CouiDimens
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiLoading
 import dev.aiingjie.coui.CouiRow
+import dev.aiingjie.coui.CouiSwitchRow
 import dev.aiingjie.coui.CouiSubPage
 import dev.aiingjie.coui.LocalCouiOverlay
 import dev.aiingjie.coui.couiPressable
@@ -118,6 +119,9 @@ internal fun LogsScreen(
     LaunchedEffect(currentType) {
         viewModel.refresh(currentType)
     }
+    LaunchedEffect(Unit) { viewModel.loadLogging(::showMessage) }
+    val loggingOnText = stringResource(R.string.logs_record_core_enabled)
+    val loggingOffText = stringResource(R.string.logs_record_core_disabled)
 
     val content = logsState[currentType]
     val logs = content.entries
@@ -225,9 +229,29 @@ internal fun LogsScreen(
         actions = { CouiBarMenuButton(stringResource(R.string.more_options), menu) },
         header = { LogTypeTabs(tabs, selectedTabIndex) { selectedTabIndex = it } },
     ) {
+        // 核心日志页顶部是记录开关：关闭后核心不再逐条记录连接。
+        val showLoggingSwitch = currentType == LogType.KERNEL
+        if (showLoggingSwitch) {
+            item {
+                CouiGroup(first = true, footer = stringResource(R.string.logs_record_core_footer)) {
+                    CouiSwitchRow(
+                        title = stringResource(R.string.logs_record_core),
+                        checked = logsState.logging == true,
+                        onCheckedChange = { enabled ->
+                            viewModel.setLogging(enabled) { error ->
+                                showMessage(error ?: if (enabled) loggingOnText else loggingOffText)
+                                if (error == null) viewModel.refresh(LogType.KERNEL)
+                            }
+                        },
+                        summary = stringResource(R.string.logs_record_core_summary),
+                        enabled = logsState.logging != null && !logsState.loggingBusy,
+                    )
+                }
+            }
+        }
         if (logs.isEmpty()) {
             item {
-                CouiGroup(first = true) {
+                CouiGroup(first = !showLoggingSwitch) {
                     if (content.loading) CouiRow(stringResource(R.string.loading), leading = { CouiLoading() })
                     else CouiRow(
                         stringResource(if (content.error.isNotEmpty()) R.string.logs_read_failed else R.string.no_logs),

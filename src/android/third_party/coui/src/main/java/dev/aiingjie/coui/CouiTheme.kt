@@ -137,7 +137,8 @@ private fun couiType(): CouiType {
         barSubtitle = style(13.dp.fixedSp(), normal, 1.1739f),
         rowTitle = style(16.sp, medium, 1.158f),
         rowSummary = style(13.sp, normal, 1.1739f),
-        rowValue = style(13.sp, normal, 1.1739f),
+        // 右侧数值用等宽数字：延迟、占用率等每秒变化时宽度不变，文字不会左右抖动。
+        rowValue = style(13.sp, normal, 1.1739f).copy(fontFeatureSettings = "tnum"),
         jumpValue = style(14.dp.fixedSp(), normal, 1.2245f),
         category = style(12.sp, medium, 1.143f),
         footer = style(12.sp, normal, 1.35f),

@@ -75,7 +75,7 @@ internal class NetProxyViewModelFactory(
                 container.inboundRepository
             )
 
-            LogsViewModel::class.java -> LogsViewModel(container.logRepository)
+            LogsViewModel::class.java -> LogsViewModel(container.logRepository, container.configRepository)
             ChainViewModel::class.java -> ChainViewModel(
                 container.chainRepository, container.appPackageRepository, container.nodeRepository, container.smartGroupRepository,
             )

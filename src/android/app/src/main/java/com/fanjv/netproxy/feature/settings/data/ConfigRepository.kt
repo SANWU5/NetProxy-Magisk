@@ -4,6 +4,7 @@ import com.fanjv.netproxy.core.api.ModuleApiClient
 import com.fanjv.netproxy.feature.settings.model.ManagedConfigDocument
 import com.fanjv.netproxy.feature.settings.model.ConfigSnapshot
 import com.fanjv.netproxy.feature.settings.model.ModuleAutoStartConfig
+import com.fanjv.netproxy.feature.settings.model.ModuleLoggingConfig
 import com.fanjv.netproxy.feature.settings.model.ModuleWifiConfig
 import com.fanjv.netproxy.feature.settings.model.WifiPolicySettings
 import kotlinx.serialization.encodeToString
@@ -53,6 +54,12 @@ internal class ConfigRepository(
         moduleJson.decodeFromJsonElement<ModuleAutoStartConfig>(content).copy(revision = it.revision)
     }
 
+    suspend fun readLogging(): ModuleLoggingConfig = readSnapshot("module/logging").let {
+        val content = moduleJson.parseToJsonElement(it.content).jsonObject
+        content.requireBoolean("logging")
+        moduleJson.decodeFromJsonElement<ModuleLoggingConfig>(content).copy(revision = it.revision)
+    }
+
     private fun JsonObject.requireBoolean(key: String) {
         val value = get(key) ?: return
         // kotlinx.serialization 也接受引号布尔值，必须在类型解码前拒绝它们。
@@ -63,6 +70,10 @@ internal class ConfigRepository(
 
     suspend fun applyWifi(wifi: WifiPolicySettings, revision: String): String =
         apply("module/wifi", moduleJson.encodeToString(ModuleWifiConfig(wifi)), revision)
+
+    /** 保存记录核心日志开关；服务运行时模块会重载核心，立即生效。 */
+    suspend fun applyLogging(enabled: Boolean, revision: String): String =
+        apply("module/logging", moduleJson.encodeToString(ModuleLoggingConfig(enabled)), revision)
 
     suspend fun applyAutoStart(enabled: Boolean, revision: String): String =
         apply("module/auto_start", moduleJson.encodeToString(ModuleAutoStartConfig(enabled)), revision)

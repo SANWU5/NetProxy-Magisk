@@ -3,6 +3,7 @@ package com.fanjv.netproxy.feature.logs.presentation
 import com.fanjv.netproxy.core.api.*
 
 import com.fanjv.netproxy.feature.logs.data.*
+import com.fanjv.netproxy.feature.settings.data.ConfigRepository
 import kotlinx.coroutines.*
 import org.junit.Assert.*
 import org.junit.Rule
@@ -20,7 +21,7 @@ class LogsViewModelTest {
             val client = ModuleApiClient(transport = TestApiTransport { args ->
                 if (args.query["kind"] == "service") error("read failed") else output("")
             })
-            val vm = LogsViewModel(LogRepository(client, folder.root), scope)
+            val vm = LogsViewModel(LogRepository(client, folder.root), ConfigRepository(client), scope)
             vm.refresh(LogType.SERVICE)
             vm.refresh(LogType.KERNEL)
             scope.coroutineContext.job.children.toList().joinAll()
@@ -39,7 +40,7 @@ class LogsViewModelTest {
             val client = ModuleApiClient(transport = TestApiTransport { _ ->
                 if (fail) error("read failed") else output("retained")
             })
-            val vm = LogsViewModel(LogRepository(client, folder.root), scope)
+            val vm = LogsViewModel(LogRepository(client, folder.root), ConfigRepository(client), scope)
             vm.refresh(LogType.KERNEL)
             scope.coroutineContext.job.children.toList().joinAll()
             fail = true
@@ -60,7 +61,7 @@ class LogsViewModelTest {
             val client = ModuleApiClient(transport = TestApiTransport { args ->
                 if (args.method == "DELETE") error("cannot clear") else output("")
             })
-            val vm = LogsViewModel(LogRepository(client, folder.root), scope)
+            val vm = LogsViewModel(LogRepository(client, folder.root), ConfigRepository(client), scope)
             vm.refresh(LogType.KERNEL)
             scope.coroutineContext.job.children.toList().joinAll()
             val result = CompletableDeferred<Boolean>()
@@ -88,7 +89,7 @@ class LogsViewModelTest {
                 }
                 output("obsolete")
             })
-            val vm = LogsViewModel(LogRepository(client, folder.root), scope)
+            val vm = LogsViewModel(LogRepository(client, folder.root), ConfigRepository(client), scope)
             val done = CompletableDeferred<Boolean>()
             vm.clear(LogType.KERNEL) { done.complete(it) }
             clearStarted.await()
@@ -116,7 +117,7 @@ class LogsViewModelTest {
                     output("obsolete")
                 } else output("latest")
             })
-            val vm = LogsViewModel(LogRepository(client, folder.root), scope)
+            val vm = LogsViewModel(LogRepository(client, folder.root), ConfigRepository(client), scope)
             vm.refresh(LogType.KERNEL)
             firstStarted.await()
             vm.refresh(LogType.KERNEL)

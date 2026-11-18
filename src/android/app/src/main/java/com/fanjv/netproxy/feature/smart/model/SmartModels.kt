@@ -22,13 +22,20 @@ internal data class SmartGroup(
     val available: Int = 0,
     /** 地区分组有手动加入或移除的节点；重新智能分组时会保留这些修改。 */
     val edited: Boolean = false,
-    /** 自动选择当前使用的节点，形如「分组/节点」；服务停止时为空。 */
+    /** 分组内手动选择的节点；为空表示分组使用自动选择。从外部选择分组时沿用它。 */
+    val manual: SmartNodeRef? = null,
+    /** 分组当前实际使用的节点，形如「分组/节点」；服务停止时为空。 */
     val selected: String = "",
     val delay: Int = 0,
+    /** 成员最近一次测速的延迟，键为「来源分组 id/节点名」；-1 表示刚才的测速失败或超时。 */
+    val delays: Map<String, Int> = emptyMap(),
 ) {
     val custom: Boolean get() = kind == "custom"
     val selectedNode: String get() = selected.substringAfter('/', selected)
 }
+
+/** 成员在延迟表与选择中的键：「来源分组 id/节点名」。 */
+internal val SmartNodeRef.key: String get() = "$groupId/$node"
 
 @Serializable
 internal data class SmartGroups(

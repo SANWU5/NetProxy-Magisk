@@ -28,6 +28,7 @@ internal class DockHost(private val activity: ComponentActivity) {
     private var bar: CouiDockBar? = null
     private var labels: List<String> = emptyList()
     private var shown = false
+    private var dark: Boolean? = null
 
     val selectedPage: StateFlow<Int> = page.asStateFlow()
 
@@ -47,7 +48,14 @@ internal class DockHost(private val activity: ComponentActivity) {
         val created = CouiDockBar(activity, tabs, page) { requests.tryEmit(it) }
         bar = created
         root?.let { created.attach(it); watchInsets(created) }
+        dark?.let(created::setDark)
         created.setShown(shown)
+    }
+
+    /** 底栏跟随应用的浅色或深色设置。 */
+    fun setDark(value: Boolean) {
+        dark = value
+        bar?.setDark(value)
     }
 
     fun setPage(index: Int) {

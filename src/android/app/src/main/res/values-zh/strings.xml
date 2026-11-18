@@ -231,16 +231,30 @@
 
     <!-- Theme & UI -->
     <string name="settings_theme">主题设置</string>
-    <string name="settings_theme_summary">自定义更多主题选项</string>
+    <string name="settings_theme_summary">浅色与深色、深色风格、主题色与界面缩放</string>
     <string name="settings_theme_mode_system">跟随系统</string>
     <string name="settings_theme_mode_light">浅色</string>
     <string name="settings_theme_mode_dark">深色</string>
-    <string name="settings_smooth_corner">平滑圆角</string>
-    <string name="settings_smooth_corner_summary">为界面启用 Miuix 平滑圆角效果</string>
     <string name="settings_enable_predictive_back">预测性返回手势</string>
-    <string name="settings_enable_predictive_back_summary">启用 Android 14 及以上的预测性返回动画</string>
+    <string name="settings_enable_predictive_back_summary">Android 14 及以上可在返回时预览上一页，重新打开应用后生效</string>
     <string name="settings_page_scale">界面缩放</string>
     <string name="settings_page_scale_summary">调整整个应用的界面缩放比例</string>
+    <string name="settings_theme_appearance">外观</string>
+    <string name="settings_theme_follow_system_summary">开启后随系统设置自动切换浅色与深色</string>
+    <string name="settings_dark_style">深色风格</string>
+    <string name="settings_dark_style_enhanced">增强</string>
+    <string name="settings_dark_style_medium">中等</string>
+    <string name="settings_dark_style_soft">柔和</string>
+    <string name="settings_dark_style_footer">只在深色模式下生效。增强使用纯黑背景，对比最强也更省电；中等与柔和使用逐级变浅的深灰背景，长时间阅读更舒适。</string>
+    <string name="settings_accent">主题色</string>
+    <string name="settings_accent_blue">蓝色</string>
+    <string name="settings_accent_green">绿色</string>
+    <string name="settings_accent_orange">橙色</string>
+    <string name="settings_accent_red">红色</string>
+    <string name="settings_accent_purple">紫色</string>
+    <string name="settings_accent_teal">青色</string>
+    <string name="settings_display">显示</string>
+    <string name="settings_interaction">交互</string>
 
     <!-- Kernel Settings -->
     <string name="kernel_settings">内核配置</string>
@@ -670,10 +684,15 @@
     <string name="subscription_use">设为当前</string>
     <string name="node_delete_confirm">删除节点“%1$s”？此操作无法撤销。</string>
     <string name="logs_clear_confirm">清空当前日志？</string>
+    <string name="logs_record_core">记录核心日志</string>
+    <string name="logs_record_core_summary">关闭后核心不再逐条记录连接，只保留启动失败等致命错误</string>
+    <string name="logs_record_core_footer">切换后服务会自动重载核心并立即生效。服务日志始终记录模块的操作与错误，不受这个开关影响。</string>
+    <string name="logs_record_core_enabled">已开始记录核心日志</string>
+    <string name="logs_record_core_disabled">已停止记录核心日志</string>
     <string name="smart_groups">智能分组</string>
     <string name="smart_load_failed">读取智能分组失败</string>
     <string name="smart_generated">已整理出 %1$d 个地区分组，共 %2$d 个节点（排除 %3$d 个提示信息）</string>
-    <string name="smart_selected">已改用这个分组的自动选择</string>
+    <string name="smart_selected">已改用这个分组</string>
     <string name="smart_regenerate">重新智能分组</string>
     <string name="smart_regenerate_message">按节点名称重新整理地区分组。你对地区分组的增删、改名以及自建分组都会保留。</string>
     <string name="smart_generate_now">开始智能分组</string>
@@ -695,13 +714,13 @@
     <string name="smart_in_use_summary">在分组内自动选择延迟最低的节点</string>
     <string name="smart_intro_title">按地区自动整理节点</string>
     <string name="smart_intro_summary">识别全部订阅和本地节点的地区（国旗、国家与城市名、代码），每个地区一个分组，分组内自动选择延迟最低的节点。</string>
-    <string name="smart_groups_footer">智能分组只在手动触发时更新，订阅更新后可以重新智能分组。点按分组即可使用它的自动选择。</string>
+    <string name="smart_groups_footer">智能分组只在手动触发时更新，订阅更新后可以重新智能分组。点按分组进入组内选择节点；点按右侧圆圈直接使用这个分组，沿用组内的选择，从未选择过时使用自动选择。</string>
     <string name="smart_retry">重试</string>
     <string name="smart_save">保存</string>
     <string name="smart_name">名称</string>
     <string name="smart_name_hint">例如：游戏专用</string>
     <string name="smart_region_edit_footer">地区分组的修改会单独记录，重新智能分组后仍然保留。</string>
-    <string name="smart_custom_edit_footer">勾选的节点组成一个分组，使用时在其中自动选择延迟最低的节点。</string>
+    <string name="smart_custom_edit_footer">勾选的节点组成一个分组。默认自动选择延迟最低的节点，也可以进入分组手动选择。</string>
     <string name="smart_selected_count">已选 %1$d 个节点</string>
     <string name="smart_missing_count">其中 %1$d 个已不在订阅中</string>
     <string name="smart_select_all">全选</string>
@@ -709,6 +728,14 @@
     <string name="smart_search_empty">没有匹配的节点</string>
     <string name="smart_search_nodes">搜索节点</string>
     <string name="smart_entry_summary">按地区自动整理节点，分组内自动选择</string>
+    <string name="smart_auto">自动选择</string>
+    <string name="smart_auto_summary">自动测速，使用延迟最低的节点</string>
+    <string name="smart_mode_auto">自动：%1$s</string>
+    <string name="smart_mode_manual">手动：%1$s</string>
+    <string name="smart_node_unavailable">已不在订阅中</string>
+    <string name="smart_detail_in_use">节点页正在使用这个分组。在分组列表中直接选择这个分组时，也沿用这里的选择。</string>
+    <string name="smart_detail_not_in_use">选择后节点页会改用这个分组。在分组列表中直接选择这个分组时，沿用这里的选择；从未在这里选择过节点时使用自动选择。</string>
+    <string name="smart_group_missing">这个分组已不存在</string>
     <string name="chain_landing_use">设为手动后置</string>
     <string name="chain_front_pick">选择前置</string>
     <string name="chain_front_pick_node">指定一个节点</string>
@@ -722,12 +749,6 @@
     <string name="chain_test_link_summary">分别测试前置节点和整条链路</string>
     <string name="chain_front_delay">前置延迟</string>
     <string name="chain_link_delay">整条链路</string>
-    <string name="chain_verdict_front_failed">前置节点连不上</string>
-    <string name="chain_verdict_front_failed_body">请换一个前置，或在节点页检查这个节点。</string>
-    <string name="chain_verdict_landing_failed">前置正常，但经前置连不上后置</string>
-    <string name="chain_verdict_landing_failed_body">可能是这个前置节点被后置拒绝，或后置的账号密码有误。换一个前置后再测一次。</string>
-    <string name="chain_verdict_failed">链路不通</string>
-    <string name="chain_verdict_ok">链路正常</string>
     <string name="chain_front_unavailable">指定的前置已不可用，暂时跟随节点页</string>
     <string name="chain_front_smart">智能分组 · 自动选择</string>
     <string name="chain_front_group_auto">分组 · 自动选择</string>

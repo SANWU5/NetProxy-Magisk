@@ -1,8 +1,8 @@
 package com.fanjv.netproxy.feature.dashboard.presentation
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -28,9 +28,10 @@ import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -58,6 +60,8 @@ internal fun SpeedChartCard(
     statusSummary: String,
     isRunning: Boolean,
     serviceControlEnabled: Boolean,
+    /** 仪表盘可见时图表按帧连续滚动；不可见时停止，不占用绘制。 */
+    animateChart: Boolean = true,
     onToggleService: () -> Unit = {}
 ) {
     val colors = Coui.colors
@@ -87,7 +91,7 @@ internal fun SpeedChartCard(
                         modifier = Modifier.fillMaxWidth().height(112.dp).padding(horizontal = 16.dp).padding(bottom = 16.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        SpeedChart(trafficSamples, colors.accent, colors.success, colors.divider, Modifier.fillMaxSize())
+                        SpeedChart(trafficSamples, colors.accent, colors.success, colors.divider, animateChart, Modifier.fillMaxSize())
                     }
                 }
             }
@@ -100,45 +104,45 @@ private fun SpeedLabel(icon: ImageVector, value: String, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Image(icon, null, modifier = Modifier.size(14.dp), colorFilter = ColorFilter.tint(color))
         Spacer(Modifier.width(4.dp))
-        BasicText(value, style = Coui.type.rowSummary.copy(color = Coui.colors.labelSecondary))
+        // 等宽数字：速率每秒变化时文字宽度不变，图标不会左右抖动。
+        BasicText(value, style = Coui.type.rowSummary.copy(color = Coui.colors.labelSecondary, fontFeatureSettings = "tnum"))
     }
 }
 
-/** 将最近一段流量采样绘制为双折线。 */
+/**
+ * 将最近一分钟的流量采样绘制为双折线：横轴按时间连续向左滚动，最新的点从右边缘滑入，
+ * 纵轴上限随窗口内的峰值平滑变化，不会在新数据到来时整体跳动或变形。
+ */
 @Composable
 private fun SpeedChart(
     trafficSamples: List<TrafficSample>,
     downloadColor: Color,
     uploadColor: Color,
     gridColor: Color,
+    animate: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val geometry = remember(trafficSamples) { trafficChartGeometry(trafficSamples) }
-    var fromGeometry by remember { mutableStateOf(geometry) }
-    var targetGeometry by remember { mutableStateOf(geometry) }
-    val animationProgress = remember { Animatable(1f) }
-    LaunchedEffect(geometry) {
-        fromGeometry = targetGeometry
-        targetGeometry = geometry
-        animationProgress.snapTo(0f)
-        animationProgress.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing)
-        )
-    }
-    val animatedGeometry = interpolateTrafficChartGeometry(
-        from = fromGeometry,
-        to = targetGeometry,
-        progress = animationProgress.value
+    val peak by animateFloatAsState(
+        targetValue = trafficChartPeak(trafficSamples),
+        animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
+        label = "traffic-peak",
     )
+    val delay = remember(trafficSamples) { trafficDisplayDelay(trafficSamples) }
+    val latest = trafficSamples.lastOrNull()?.timestampMillis ?: 0L
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(animate) {
+        // 只在绘制阶段读取时间，每帧只重画图表，不触发重组。
+        while (animate) withFrameMillis { now = System.currentTimeMillis() }
+    }
     Canvas(modifier = modifier) {
         for (line in 1..3) {
             val y = size.height * line / 4f
             drawLine(color = gridColor, start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = 1.dp.toPx())
         }
+        val end = if (animate) now - delay else latest
 
         fun drawSeries(points: List<Offset>, color: Color, alpha: Float) {
-            if (points.isEmpty()) return
+            if (points.size < 2) return
             val line = Path().apply {
                 val first = points.first()
                 moveTo(first.x * size.width, (1f - first.y) * size.height)
@@ -154,10 +158,8 @@ private fun SpeedChart(
                         (1f - midpointY) * size.height
                     )
                 }
-                if (points.size > 1) {
-                    val last = points.last()
-                    lineTo(last.x * size.width, (1f - last.y) * size.height)
-                }
+                val last = points.last()
+                lineTo(last.x * size.width, (1f - last.y) * size.height)
             }
             val fill = Path().apply {
                 addPath(line)
@@ -165,10 +167,12 @@ private fun SpeedChart(
                 lineTo(points.first().x * size.width, size.height)
                 close()
             }
-            drawPath(path = fill, brush = Brush.verticalGradient(listOf(color.copy(alpha = alpha), Color.Transparent)))
-            drawPath(path = line, color = color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            clipRect {
+                drawPath(path = fill, brush = Brush.verticalGradient(listOf(color.copy(alpha = alpha), Color.Transparent)))
+                drawPath(path = line, color = color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
         }
-        drawSeries(animatedGeometry.download, downloadColor, 0.25f)
-        drawSeries(animatedGeometry.upload, uploadColor, 0.15f)
+        drawSeries(trafficPoints(trafficSamples, end, TRAFFIC_WINDOW_MILLIS, peak) { it.downloadBytesPerSecond }, downloadColor, 0.25f)
+        drawSeries(trafficPoints(trafficSamples, end, TRAFFIC_WINDOW_MILLIS, peak) { it.uploadBytesPerSecond }, uploadColor, 0.15f)
     }
 }

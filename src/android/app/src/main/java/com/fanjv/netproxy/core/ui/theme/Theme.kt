@@ -1,19 +1,14 @@
 package com.fanjv.netproxy.core.ui.theme
 
-import android.content.Context
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import top.yukonga.miuix.kmp.squircle.LocalSquircleEnabled
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeColorSpec
-import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
 import top.yukonga.miuix.kmp.theme.ThemeController as MiuixThemeController
 import top.yukonga.miuix.kmp.theme.darkColorScheme
 import top.yukonga.miuix.kmp.theme.lightColorScheme
@@ -22,7 +17,10 @@ import dev.aiingjie.coui.CouiDarkColors
 import dev.aiingjie.coui.CouiLightColors
 import dev.aiingjie.coui.cardOpaque
 
-/** 主题配色模式：跟随系统、浅色、深色，以及对应的 Monet 动态色与纯黑变体。 */
+/**
+ * 主题配色模式：跟随系统、浅色、深色。
+ * 3–6 是旧版 Monet 动态色与纯黑模式的存储值，升级后按对应的明暗读取。
+ */
 enum class ColorMode(val value: Int) {
     SYSTEM(0),
     LIGHT(1),
@@ -38,97 +36,37 @@ enum class ColorMode(val value: Int) {
 
     val isSystem: Boolean get() = value == SYSTEM.value || value == MONET_SYSTEM.value
     val isDark: Boolean get() = value == DARK.value || value == MONET_DARK.value || value == DARK_AMOLED.value
-    val isMonet: Boolean get() = value in MONET_SYSTEM.value..MONET_DARK.value
 
-    fun toNonMonetMode(): Int = when (this) {
-        MONET_SYSTEM -> SYSTEM.value
-        MONET_LIGHT -> LIGHT.value
-        MONET_DARK, DARK_AMOLED -> DARK.value
-        else -> value
-    }
-
-    fun toMonetMode(): Int = when (this) {
-        SYSTEM -> MONET_SYSTEM.value
-        LIGHT -> MONET_LIGHT.value
-        DARK -> MONET_DARK.value
-        else -> value
-    }
+    /** 主题页对应的选项：跟随系统、浅色或深色。 */
+    val appearance: ColorMode
+        get() = when {
+            isSystem -> SYSTEM
+            isDark -> DARK
+            else -> LIGHT
+        }
 }
 
 object AppThemeDefaults {
-    val colorMode = ColorMode.MONET_SYSTEM
-    const val miuixMonet = true
-    val keyColor = 0xFF00BCD4.toInt()
-    val paletteStyle = ThemePaletteStyle.TonalSpot
-    val colorSpec = ThemeColorSpec.Spec2025
+    val colorMode = ColorMode.SYSTEM
 }
 
-/** 应用主题设置快照（配色、动态色、关键色、圆角、模糊与预测式返回）。 */
+/** 应用主题设置快照（明暗、圆角、模糊与预测式返回）。 */
 data class AppThemeSettings(
     val colorMode: ColorMode,
-    val miuixMonet: Boolean,
-    val keyColor: Int,
-    val paletteStyle: ThemePaletteStyle,
-    val colorSpec: ThemeColorSpec,
     val enableSmoothCorner: Boolean,
     val enableBlur: Boolean,
     val enablePredictiveBack: Boolean,
 )
 
-/** 从 SharedPreferences 读取并组装 [AppThemeSettings]。 */
-object AppThemeController {
-    fun getAppThemeSettings(context: Context): AppThemeSettings {
-        val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        var colorModeValue = prefs.getInt("color_mode", AppThemeDefaults.colorMode.value)
-        val miuixMonet = if (prefs.contains("miuix_monet")) {
-            prefs.getBoolean("miuix_monet", AppThemeDefaults.miuixMonet)
-        } else {
-            colorModeValue in ColorMode.MONET_SYSTEM.value..ColorMode.MONET_DARK.value
-        }
-        val colorMode = ColorMode.fromValue(colorModeValue)
-        colorModeValue = when {
-            miuixMonet && !colorMode.isMonet -> colorMode.toMonetMode()
-            !miuixMonet && colorMode.isMonet -> colorMode.toNonMonetMode()
-            else -> colorModeValue
-        }
-
-        val paletteStyle = runCatching {
-            ThemePaletteStyle.valueOf(
-                prefs.getString("color_style", AppThemeDefaults.paletteStyle.name)
-                    ?: AppThemeDefaults.paletteStyle.name
-            )
-        }.getOrDefault(AppThemeDefaults.paletteStyle)
-        val colorSpec = runCatching {
-            ThemeColorSpec.valueOf(
-                prefs.getString("color_spec", AppThemeDefaults.colorSpec.name)
-                    ?: AppThemeDefaults.colorSpec.name
-            )
-        }.getOrDefault(AppThemeDefaults.colorSpec)
-
-        return AppThemeSettings(
-            colorMode = ColorMode.fromValue(colorModeValue),
-            miuixMonet = miuixMonet,
-            keyColor = prefs.getInt("key_color", AppThemeDefaults.keyColor),
-            paletteStyle = paletteStyle,
-            colorSpec = colorSpec,
-            enableSmoothCorner = prefs.getBoolean("enable_smooth_corner", true),
-            enableBlur = prefs.getBoolean("enable_blur", true),
-            enablePredictiveBack = prefs.getBoolean("enable_predictive_back", false),
-        )
-    }
-}
-
-/** 应用根主题：按 [AppThemeSettings] 配置 Miuix 主题，并通过 CompositionLocal 下发各开关。 */
+/** 应用根主题：以 COUI 配色配置 Miuix 主题，并通过 CompositionLocal 下发各开关。 */
 @Composable
 fun NetProxyTheme(
-    appThemeSettings: AppThemeSettings? = null,
+    appThemeSettings: AppThemeSettings,
     content: @Composable () -> Unit
 ) {
-    val context = LocalContext.current
-    val currentSettings = appThemeSettings ?: AppThemeController.getAppThemeSettings(context)
     val systemDarkTheme = isSystemInDarkTheme()
     val darkTheme =
-        currentSettings.colorMode.isDark || (currentSettings.colorMode.isSystem && systemDarkTheme)
+        appThemeSettings.colorMode.isDark || (appThemeSettings.colorMode.isSystem && systemDarkTheme)
 
     // 界面统一为 COUI 风格：尚未改写的 Miuix 页面也使用 COUI 的页面、卡片、文字与主色，
     // 避免同一应用里出现两套配色。
@@ -143,10 +81,10 @@ fun NetProxyTheme(
         controller = controller,
     ) {
         CompositionLocalProvider(
-            LocalColorMode provides currentSettings.colorMode.value,
-            LocalEnableBlur provides currentSettings.enableBlur,
-            LocalEnablePredictiveBack provides currentSettings.enablePredictiveBack,
-            LocalSquircleEnabled provides currentSettings.enableSmoothCorner,
+            LocalColorMode provides appThemeSettings.colorMode.value,
+            LocalEnableBlur provides appThemeSettings.enableBlur,
+            LocalEnablePredictiveBack provides appThemeSettings.enablePredictiveBack,
+            LocalSquircleEnabled provides appThemeSettings.enableSmoothCorner,
             content = content,
         )
     }
@@ -199,22 +137,3 @@ val LocalColorMode = staticCompositionLocalOf { ColorMode.SYSTEM.value }
 val LocalEnableBlur = staticCompositionLocalOf { true }
 
 val LocalEnablePredictiveBack = staticCompositionLocalOf { false }
-
-/** 主题设置中可选的预设关键色。 */
-val keyColorOptions = listOf(
-    Color(0xFFF44336).toArgb(),
-    Color(0xFFE91E63).toArgb(),
-    Color(0xFF9C27B0).toArgb(),
-    Color(0xFF673AB7).toArgb(),
-    Color(0xFF3F51B5).toArgb(),
-    Color(0xFF2196F3).toArgb(),
-    Color(0xFF00BCD4).toArgb(),
-    Color(0xFF009688).toArgb(),
-    Color(0xFF4FAF50).toArgb(),
-    Color(0xFFFFEB3B).toArgb(),
-    Color(0xFFFFC107).toArgb(),
-    Color(0xFFFF9800).toArgb(),
-    Color(0xFF795548).toArgb(),
-    Color(0xFF607D8F).toArgb(),
-    Color(0xFFFF9CA8).toArgb(),
-)

@@ -51,7 +51,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.fanjv.netproxy.core.ui.component.LocalModuleAvailability
 import com.fanjv.netproxy.core.ui.component.ModulePage
-import com.fanjv.netproxy.core.ui.theme.AppThemeDefaults
 import com.fanjv.netproxy.core.ui.theme.AppThemeSettings
 import com.fanjv.netproxy.core.ui.theme.ColorMode
 import com.fanjv.netproxy.core.ui.theme.NetProxyTheme
@@ -103,8 +102,6 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
-import top.yukonga.miuix.kmp.theme.ThemeColorSpec
-import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
 import dev.aiingjie.coui.CouiDockSpace
 import dev.aiingjie.coui.CouiDockTab
 import dev.aiingjie.coui.CouiOverlayHost
@@ -137,20 +134,12 @@ class MainActivity : ComponentActivity() {
             val themeViewModel: ThemeViewModel = netProxyViewModel()
 
             val themeState by themeViewModel.state.collectAsStateWithLifecycle()
-            val paletteStyle = runCatching { ThemePaletteStyle.valueOf(themeState.colorStyle) }
-                .getOrDefault(AppThemeDefaults.paletteStyle)
-            val colorSpec = runCatching { ThemeColorSpec.valueOf(themeState.colorSpec) }
-                .getOrDefault(AppThemeDefaults.colorSpec)
             val systemDensity = LocalDensity.current
             val density = remember(systemDensity, themeState.pageScale) {
                 Density(systemDensity.density * themeState.pageScale, systemDensity.fontScale)
             }
             val appThemeSettings = AppThemeSettings(
                 colorMode = ColorMode.fromValue(themeState.colorMode),
-                miuixMonet = themeState.miuixMonet,
-                keyColor = themeState.keyColor,
-                paletteStyle = paletteStyle,
-                colorSpec = colorSpec,
                 enableSmoothCorner = themeState.enableSmoothCorner,
                 enableBlur = themeState.enableBlur,
                 enablePredictiveBack = themeState.enablePredictiveBack,

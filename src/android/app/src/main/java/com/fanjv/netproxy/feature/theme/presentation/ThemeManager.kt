@@ -23,10 +23,6 @@ class ThemeManager(prefs: SharedPreferences) {
         _state = MutableStateFlow(
             ThemeUiState(
                 colorMode = p.colorMode,
-                miuixMonet = p.miuixMonet,
-                keyColor = p.keyColor,
-                colorStyle = p.colorStyle,
-                colorSpec = p.colorSpec,
                 enableBlur = p.enableBlur,
                 enablePredictiveBack = p.enablePredictiveBack,
                 enableSmoothCorner = p.enableSmoothCorner,
@@ -37,28 +33,8 @@ class ThemeManager(prefs: SharedPreferences) {
     }
 
     fun setThemeMode(mode: Int) {
-        val effective = store.setThemeMode(mode, _state.value.miuixMonet)
-        _state.update { it.copy(colorMode = effective) }
-    }
-
-    fun setMiuixMonet(enabled: Boolean) {
-        val newMode = store.setMiuixMonet(enabled, _state.value.colorMode)
-        _state.update { it.copy(miuixMonet = enabled, colorMode = newMode) }
-    }
-
-    fun setKeyColor(color: Int) {
-        store.setKeyColor(color)
-        _state.update { it.copy(keyColor = color) }
-    }
-
-    fun setColorStyle(style: String) {
-        store.setColorStyle(style)
-        _state.update { it.copy(colorStyle = style) }
-    }
-
-    fun setColorSpec(spec: String) {
-        store.setColorSpec(spec)
-        _state.update { it.copy(colorSpec = spec) }
+        store.setThemeMode(mode)
+        _state.update { it.copy(colorMode = mode) }
     }
 
     fun setEnableBlur(enabled: Boolean) {

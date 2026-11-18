@@ -1,28 +1,23 @@
 package com.fanjv.netproxy.feature.theme.presentation
 
 import android.content.SharedPreferences
-import com.fanjv.netproxy.core.ui.theme.AppThemeDefaults
 import com.fanjv.netproxy.core.ui.theme.ColorMode
-import com.fanjv.netproxy.core.ui.theme.keyColorOptions
 import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import top.yukonga.miuix.kmp.theme.ThemeColorSpec
-import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
 
 class ThemePreferenceStoreTest {
     @Test
-    fun emptyPreferencesEnableCyanMonetWithSystemAppearance() {
+    fun emptyPreferencesFollowSystemAppearance() {
         val settings = ThemePreferenceStore(preferences()).read()
 
-        assertEquals(ColorMode.MONET_SYSTEM.value, settings.colorMode)
-        assertTrue(settings.miuixMonet)
-        assertEquals(0xFF00BCD4.toInt(), settings.keyColor)
-        assertTrue(settings.keyColor in keyColorOptions)
-        assertEquals(ThemePaletteStyle.TonalSpot.name, settings.colorStyle)
-        assertEquals(ThemeColorSpec.Spec2025.name, settings.colorSpec)
+        assertEquals(ColorMode.SYSTEM.value, settings.colorMode)
+        assertTrue(settings.enableBlur)
+        assertTrue(settings.enableSmoothCorner)
+        assertFalse(settings.enablePredictiveBack)
+        assertEquals(1.0f, settings.pageScale, 0f)
     }
 
     @Test
@@ -31,10 +26,10 @@ class ThemePreferenceStoreTest {
         val state = ThemeUiState()
 
         assertEquals(settings.colorMode, state.colorMode)
-        assertEquals(settings.miuixMonet, state.miuixMonet)
-        assertEquals(settings.keyColor, state.keyColor)
-        assertEquals(settings.colorStyle, state.colorStyle)
-        assertEquals(settings.colorSpec, state.colorSpec)
+        assertEquals(settings.enableBlur, state.enableBlur)
+        assertEquals(settings.enablePredictiveBack, state.enablePredictiveBack)
+        assertEquals(settings.enableSmoothCorner, state.enableSmoothCorner)
+        assertEquals(settings.pageScale, state.pageScale, 0f)
     }
 
     @Test
@@ -42,29 +37,33 @@ class ThemePreferenceStoreTest {
         val settings = ThemePreferenceStore(
             preferences(
                 "color_mode" to ColorMode.DARK.value,
-                "miuix_monet" to false,
-                "key_color" to 0,
-                "color_style" to ThemePaletteStyle.Neutral.name,
-                "color_spec" to ThemeColorSpec.Spec2021.name,
+                "enable_blur" to false,
+                "enable_smooth_corner" to false,
+                "enable_predictive_back" to true,
+                "page_scale" to 0.9f,
             )
         ).read()
 
         assertEquals(ColorMode.DARK.value, settings.colorMode)
-        assertFalse(settings.miuixMonet)
-        assertEquals(0, settings.keyColor)
-        assertEquals(ThemePaletteStyle.Neutral.name, settings.colorStyle)
-        assertEquals(ThemeColorSpec.Spec2021.name, settings.colorSpec)
+        assertFalse(settings.enableBlur)
+        assertFalse(settings.enableSmoothCorner)
+        assertTrue(settings.enablePredictiveBack)
+        assertEquals(0.9f, settings.pageScale, 0f)
     }
 
     @Test
-    fun disabledMonetDoesNotReenableWhenOtherPreferencesAreMissing() {
-        val settings = ThemeManager(
-            preferences("color_mode" to ColorMode.LIGHT.value, "miuix_monet" to false)
-        ).state.value
+    fun legacyMonetAndAmoledModesKeepTheirAppearance() {
+        mapOf(
+            ColorMode.MONET_SYSTEM to ColorMode.SYSTEM,
+            ColorMode.MONET_LIGHT to ColorMode.LIGHT,
+            ColorMode.MONET_DARK to ColorMode.DARK,
+            ColorMode.DARK_AMOLED to ColorMode.DARK,
+        ).forEach { (legacy, appearance) ->
+            val state = ThemeManager(preferences("color_mode" to legacy.value)).state.value
 
-        assertFalse(settings.miuixMonet)
-        assertEquals(ColorMode.LIGHT.value, settings.colorMode)
-        assertEquals(AppThemeDefaults.keyColor, settings.keyColor)
+            assertEquals(legacy.value, state.colorMode)
+            assertEquals(appearance, ColorMode.fromValue(state.colorMode).appearance)
+        }
     }
 
     private fun preferences(vararg values: Pair<String, Any>): SharedPreferences {

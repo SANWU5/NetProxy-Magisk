@@ -44,6 +44,14 @@ export function complete(input: string, knownGroups: string[] = [], knownSubs: s
       cands = knownGroups.filter(c => c.startsWith(cur))
     } else if (cmd === 'node' && NODE_OPS.includes(sub) && n === 2) {
       cands = knownGroups.filter(c => c.startsWith(cur))
+    } else if (cmd === 'chain' && sub === 'front' && n === 2) {
+      cands = ['follow', 'smart', ...knownGroups].filter(c => c.startsWith(cur))
+    } else if (cmd === 'chain' && toks[2] === 'import' && toks[n - 1] === '--type') {
+      cands = ['socks', 'http'].filter(c => c.startsWith(cur))
+    } else if (cmd === 'chain' && toks[2] === 'import' && n === 4) {
+      cands = ['--type'].filter(c => c.startsWith(cur))
+    } else if (cmd === 'smart' && sub === 'select' && n === 3) {
+      cands = ['auto', ...knownGroups].filter(c => c.startsWith(cur))
     } else {
       const valueKey = toks.slice(0, n).join(' ')
       cands = (VALUE_COMPLETIONS[valueKey] || []).filter(c => c.startsWith(cur))

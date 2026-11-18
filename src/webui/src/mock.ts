@@ -26,6 +26,23 @@ const availableModes = ['Proxy', 'RuleAllowAds', 'Rule', 'Direct']
 let outboundMode = 'Rule'
 let runtimePrepared = false
 
+// 链式代理与智能分组的字段名与 internal/module 的 ChainView、SmartGroupsView 保持一致。
+const CHAIN_MODES = ['off', 'manual', 'policy', 'manual_policy']
+const RUNTIME_NODE = '本地配置/demo-node'
+type NodeRef = { group_id: string; node: string }
+type ChainFront = { group_id?: string; node?: string; smart_id?: string }
+type Landing = { tag: string; type: string; server: string; port: number; username?: string; has_password: boolean; tls: boolean }
+const chain = {
+  mode: 'off',
+  manual: '',
+  front: undefined as ChainFront | undefined,
+  landings: [{ tag: '示例后置', type: 'socks', server: 'landing.example.test', port: 1080, username: 'demo', has_password: true, tls: false }] as Landing[],
+  policies: [{ id: 'policy-demo', name: '示例策略', enabled: false, landing: '示例后置', packages: ['com.example.app'] }],
+  delays: {} as Record<string, number>,
+}
+type SmartGroup = { id: string; name: string; kind: string; region?: string; members: NodeRef[]; manual?: NodeRef }
+const smart = { groups: [] as SmartGroup[], generatedAt: '', active: '', delays: {} as Record<string, number> }
+
 const MODULE_CONFIG = {
   auto_start: false,
   logging: false,
@@ -110,13 +127,16 @@ function serviceStatus() {
     configured_outbound_mode: outboundMode,
     available_outbound_modes: availableModes,
     ...backendStatus,
-    selector_mode: 'urltest',
+    selector_mode: activeSmart() ? 'smart' : 'urltest',
     active_group_id: 'default',
     active_group_name: '本地配置',
     active_group_runtime_tag: '本地配置',
     active_group_node_count: 1,
     selected_node_ref: '',
-    runtime_selected: serviceState === 'ready' ? '本地配置/demo-node' : '',
+    runtime_selected: serviceState === 'ready' ? smartSelected(activeSmart()) : '',
+    ...smartSelection(),
+    chain_mode: chain.mode,
+    chain_landing: chain.manual,
     memory_bytes: 0,
     process_cpu_ticks: 0,
     system_cpu_ticks: 0,
@@ -140,10 +160,55 @@ function selection() {
     active_group_name: '本地配置',
     active_group_runtime_tag: '本地配置',
     active_group_node_count: 1,
-    selector_mode: 'urltest',
+    selector_mode: activeSmart() ? 'smart' : 'urltest',
     selected_node_ref: '',
-    selected: 'Auto/本地配置',
-    runtime_selected: serviceState === 'ready' ? '本地配置/demo-node' : '',
+    selected: activeSmart() ? `Smart/${activeSmart()!.name}` : 'Auto/本地配置',
+    runtime_selected: serviceState === 'ready' ? smartSelected(activeSmart()) : '',
+    ...smartSelection(),
+  }
+}
+
+function activeSmart(): SmartGroup | undefined {
+  return smart.groups.find(group => group.id === smart.active)
+}
+
+function smartSelection() {
+  const group = activeSmart()
+  return group ? { smart_group_id: group.id, smart_group_name: group.name } : {}
+}
+
+// 运行时实际节点形如「分组运行时标签/节点」；mock 只有一个本地节点。
+function smartSelected(group?: SmartGroup): string {
+  return group?.manual ? `本地配置/${group.manual.node}` : RUNTIME_NODE
+}
+
+function chainView() {
+  const running = serviceState === 'ready' && chain.landings.length > 0
+  return {
+    mode: chain.mode,
+    manual: chain.manual,
+    ...(chain.front ? { front_setting: chain.front } : {}),
+    landings: chain.landings,
+    policies: chain.policies,
+    running,
+    front: running ? RUNTIME_NODE : '',
+    landing: running ? chain.manual || chain.landings[0].tag : '',
+    delays: chain.delays,
+  }
+}
+
+function smartView() {
+  const running = serviceState === 'ready'
+  return {
+    groups: smart.groups.map(group => ({
+      id: group.id, name: group.name, kind: group.kind, ...(group.region ? { region: group.region } : {}),
+      members: group.members, available: group.members.length, ...(group.manual ? { manual: group.manual } : {}),
+      ...(running ? { selected: smartSelected(group) } : {}),
+      ...(running && smart.delays[group.id] ? { delay: smart.delays[group.id] } : {}),
+    })),
+    ...(smart.generatedAt ? { generated_at: smart.generatedAt } : {}),
+    ...(activeSmart() ? { active: smart.active } : {}),
+    running,
   }
 }
 
@@ -160,6 +225,128 @@ function normalizeArgs(args: string[]): string[] {
     result.push(argument)
   }
   return result
+}
+
+function executeSmart(args: string[]): CtlResult<unknown> {
+  const [action = 'list', id, target] = args
+  if (action === 'list' && args.length <= 1) return response('smart.list', '智能分组', smartView())
+  if (action === 'generate') {
+    const english = args.includes('--english')
+    if (!smart.groups.some(group => group.id === 'smart-other')) {
+      smart.groups.unshift({ id: 'smart-other', name: english ? '🌐 Others' : '🌐 其他', kind: 'region', region: 'other', members: [{ group_id: 'default', node: NODE.tag }] })
+    }
+    smart.generatedAt = '2026-01-01T00:00:00Z'
+    return response('smart.generated', '智能分组已完成', { smart: smartView(), summary: { regions: 1, nodes: 1, unclassified: 1, informational: 0 } })
+  }
+  const group = smart.groups.find(item => item.id === id)
+  if (action === 'test') {
+    if (id && !group) return failure('smart.not_found', '分组不存在')
+    if (serviceState !== 'ready') return failure('smart.service_stopped', '服务未运行，无法测速')
+    for (const item of smart.groups) if (!id || item.id === id) smart.delays[item.id] = 95
+    return response('smart.delay', '分组测速完成', smartView())
+  }
+  if ((action === 'use' || action === 'select') && id && !group) return failure('smart.not_found', '分组不存在')
+  if (group && action === 'select' && target) {
+    if (target === 'auto') delete group.manual
+    else {
+      const [group_id, ...rest] = target.split('/')
+      const node = rest.join('/')
+      if (!group_id || !node) return failure('node.ref_invalid', '节点引用格式应为 <group-id>/<tag>')
+      if (!group.members.some(member => member.group_id === group_id && member.node === node)) {
+        return failure('smart.invalid', `节点 "${node}" 不在分组 "${group.name}" 中`)
+      }
+      group.manual = { group_id, node }
+    }
+  }
+  if (group && (action === 'use' && args.length === 2 || action === 'select' && target)) {
+    smart.active = group.id
+    return response('node.selected', '节点选择已更新', { smart_group_id: group.id, mode: 'smart', selected: `Smart/${group.name}` })
+  }
+  return failure('usage.invalid', '用法: netproxyctl smart list|generate|use|select|test')
+}
+
+function chainInvalid(message: string) {
+  return failure('chain.invalid', message)
+}
+
+function executeLanding(args: string[]): CtlResult<unknown> {
+  const [action = 'list', tag, name] = args
+  if (action === 'list') return response('chain.current', '链式代理设置', chainView())
+  if (action === 'import' && tag) {
+    const typeIndex = args.indexOf('--type')
+    const type = typeIndex > 0 ? args[typeIndex + 1] : 'socks'
+    if (type !== 'socks' && type !== 'http') return failure('usage.invalid', `默认协议只能是 socks 或 http，当前为 "${type ?? ''}"`)
+    const added = `导入后置 ${chain.landings.length + 1}`
+    chain.landings.push({ tag: added, type, server: 'imported.example.test', port: 1080, has_password: false, tls: false })
+    return response('chain.landings_imported', '后置代理已导入', { chain: chainView(), import: { added: [added], skipped: [] } })
+  }
+  if (action === 'test') {
+    if (!chain.landings.length) return failure('command.failed', '还没有后置代理')
+    if (tag && !chain.landings.some(landing => landing.tag === tag)) return failure('command.failed', `后置代理 "${tag}" 不存在`)
+    if (serviceState !== 'ready') return failure('chain.service_stopped', '服务未运行，无法经由前置测试后置代理')
+    chain.landings.forEach((landing, index) => { if (!tag || landing.tag === tag) chain.delays[landing.tag] = 180 + index * 40 })
+    return response('chain.delay', '后置代理测速完成', { ...chainView(), front_delay: 60 })
+  }
+  const landing = chain.landings.find(item => item.tag === tag)
+  if (!landing) return chainInvalid(action === 'use' ? `手动后置 "${tag ?? ''}" 不存在` : `后置代理 "${tag ?? ''}" 不存在`)
+  if (action === 'use') {
+    chain.manual = landing.tag
+    return response('chain.saved', '链式代理设置已保存', chainView())
+  }
+  if (action === 'rename' && name !== undefined) {
+    if (!name.trim()) return chainInvalid('名称不能为空')
+    if (name.trim() !== name) return chainInvalid('名称首尾不能有空白')
+    if (name !== landing.tag && chain.landings.some(item => item.tag === name)) return chainInvalid(`已存在名为 "${name}" 的后置代理`)
+    for (const policy of chain.policies) if (policy.landing === landing.tag) policy.landing = name
+    if (chain.manual === landing.tag) chain.manual = name
+    landing.tag = name
+    return response('chain.landing_renamed', '后置代理已重命名', chainView())
+  }
+  if (action === 'remove') {
+    if (chain.manual === landing.tag && (chain.mode === 'manual' || chain.mode === 'manual_policy')) {
+      return chainInvalid(`后置代理 "${landing.tag}" 正在被手动模式使用，请先切换手动后置或模式`)
+    }
+    const policy = chain.policies.find(item => item.landing === landing.tag)
+    if (policy) return chainInvalid(`后置代理 "${landing.tag}" 正在被策略 "${policy.name}" 使用，请先修改该策略`)
+    if (chain.manual === landing.tag) chain.manual = ''
+    chain.landings.splice(chain.landings.indexOf(landing), 1)
+    delete chain.delays[landing.tag]
+    if (!chain.landings.length) chain.mode = 'off'
+    return response('chain.landing_removed', '后置代理已删除', chainView())
+  }
+  return failure('usage.invalid', '用法: netproxyctl chain landing list|import|use|rename|remove|test')
+}
+
+function executeChain(args: string[]): CtlResult<unknown> {
+  const [action = 'status', target, value] = args
+  if ((action === 'status' && args.length <= 1) || (action === 'policy' && target === 'list')) {
+    return response('chain.current', '链式代理设置', chainView())
+  }
+  if (action === 'mode' && target) {
+    if (!CHAIN_MODES.includes(target)) return chainInvalid(`后置模式只能是 off、manual、policy 或 manual_policy，当前为 "${target}"`)
+    const manual = value ?? chain.manual
+    if (manual && !chain.landings.some(landing => landing.tag === manual)) return chainInvalid(`手动后置 "${manual}" 不存在`)
+    if ((target === 'manual' || target === 'manual_policy') && !manual) return chainInvalid('手动模式需要先选择一个后置代理')
+    if (target !== 'off' && !chain.landings.length) return chainInvalid('开启链式代理前需要先导入至少一个后置代理')
+    chain.mode = target
+    chain.manual = manual
+    return response('chain.saved', '链式代理设置已保存', chainView())
+  }
+  if (action === 'front' && target) {
+    if (target === 'follow') chain.front = undefined
+    else if (target === 'smart') {
+      if (!smart.groups.some(group => group.id === value)) return chainInvalid(`指定的前置不可用: 分组 "${value ?? ''}" 不存在`)
+      chain.front = { smart_id: value }
+    } else {
+      const [group_id, ...rest] = target.split('/')
+      const node = rest.join('/')
+      if (!GROUPS.some(group => group.id === group_id) || (node && node !== NODE.tag)) return chainInvalid(`指定的前置不可用: ${target}`)
+      chain.front = node ? { group_id, node } : { group_id }
+    }
+    return response('chain.front_saved', '前置已保存', chainView())
+  }
+  if (action === 'landing') return executeLanding(args.slice(1))
+  return failure('usage.invalid', '用法: netproxyctl chain status|mode|landing|front|policy')
 }
 
 function execute(args: string[]): CtlResult<unknown> {
@@ -200,8 +387,13 @@ function execute(args: string[]): CtlResult<unknown> {
     if (action === 'show') return response('catalog.show', 'Catalog 分组快照', snapshot())
     if (action === 'snapshot') return response('node.snapshot', '节点快照', { groups: [snapshot()], selection: selection() })
     if (action === 'current') return response('node.current', '当前节点选择', selection())
+    // 选择普通分组或节点时节点页退出智能分组，与 SelectNode 一致。
+    if (action === 'use') smart.active = ''
     return response(`node.${action || 'list'}`, '节点操作完成', {})
   }
+
+  if (command === 'chain') return executeChain(clean.slice(1))
+  if (command === 'smart') return executeSmart(clean.slice(1))
 
   if (command === 'mode') {
     if (!action) return response('mode.current', '当前出站模式', { mode: outboundMode, available: availableModes })

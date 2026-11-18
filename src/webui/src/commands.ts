@@ -66,6 +66,46 @@ configured_backend 是保存的入站；active_backend 仅在 ready 且 PID/API 
   node use <分组>/<tag>            手动选择节点
 `,
   },
+  chain: {
+    overview: 'chain <命令>    链式代理',
+    actions: ['status', 'mode', 'landing', 'front', 'policy'],
+    help: `chain - 链式代理（前置节点 → 后置代理 → 目标）
+
+  chain status                         查看模式、前置、后置与链路延迟
+  chain mode <模式> [后置]             切换后置模式，省略后置时保留当前手动后置
+  chain landing list                   列出后置代理与最近测速
+  chain landing import <文件> [--type socks|http]
+                                       导入后置代理，不带协议头的行默认 socks
+  chain landing use <后置>             选择手动模式使用的后置
+  chain landing rename <后置> <新名称> 重命名后置，同步手动模式与策略引用
+  chain landing remove <后置>          删除后置，仍被使用时拒绝
+  chain landing test [后置]            经由前置测速，省略时测试全部后置
+  chain front follow                   前置跟随节点页的选择
+  chain front <分组>                   前置使用分组的自动选择
+  chain front <分组>/<tag>             前置固定为指定节点
+  chain front smart <智能分组ID>       前置使用智能分组
+  chain policy list                    查看按应用策略（只读）
+
+模式: off（关闭）/ manual（手动）/ policy（按应用策略）/ manual_policy（手动 + 策略）
+延迟 -1 表示最近一次测速失败；服务运行时修改立即生效。
+`,
+  },
+  smart: {
+    overview: 'smart <命令>    智能分组',
+    actions: ['list', 'generate', 'use', 'select', 'test'],
+    help: `smart - 智能分组与自建分组
+
+  smart list                           列出分组、实际节点、手动选择与延迟
+  smart generate [--english]           按地区重新智能分组，保留手动修改与自建分组
+  smart use <分组ID>                   节点页改用该分组，沿用分组内选择
+  smart select <分组ID> <分组>/<tag>   在分组内手动选择节点
+  smart select <分组ID> auto           分组改回自动选择
+  smart test [分组ID]                  重新测速，省略时测试全部分组
+
+selected 是分组实际使用的节点，manual 为空表示使用自动选择。
+使用 node use 选择普通分组时退出智能分组。
+`,
+  },
   sub: {
     overview: 'sub <命令>      订阅管理',
     actions: ['list', 'show', 'add', 'edit', 'update', 'update-all', 'activate', 'remove', 'history', 'cancel'],
@@ -188,6 +228,10 @@ const CONFIG_TARGETS = [
 
 export const VALUE_COMPLETIONS: Record<string, string[]> = {
   'app mode': ['blacklist', 'whitelist'],
+  'chain mode': ['off', 'manual', 'policy', 'manual_policy'],
+  'chain landing': ['list', 'import', 'use', 'rename', 'remove', 'test'],
+  'chain policy': ['list'],
+  'smart generate': ['--english'],
   'ebpf status': ['configured', 'all', 'local', 'shared', '--raw'],
   'logs show': ['service', 'core'],
   'logs clear': ['service', 'core'],

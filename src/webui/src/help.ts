@@ -24,6 +24,8 @@ ${COMMAND_NAMES.map(name => `  ${COMMANDS[name].overview}`).join('\n')}
   mode Proxy
   sub update-all
   node delay auto default
+  chain status
+  smart list
 
 输入 help all 查看完整命令说明。
 `

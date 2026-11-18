@@ -15,7 +15,7 @@ class MainDestinationsTest {
             assertEquals(AppDestination.Settings, AppDestination.Settings.availableIn(destinations))
             assertEquals(if (available) destinations.lastIndex else 1, destinations.indexOf(AppDestination.Settings))
         }
-        for (destination in listOf(AppDestination.Nodes, AppDestination.Policies, AppDestination.Subscriptions)) {
+        for (destination in listOf(AppDestination.Nodes, AppDestination.Chain, AppDestination.Subscriptions)) {
             assertEquals(AppDestination.Dashboard, destination.availableIn(mainDestinations(false)))
         }
     }

@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -64,7 +67,8 @@ import com.fanjv.netproxy.feature.dashboard.presentation.CatalogDashboardScreen
 import com.fanjv.netproxy.feature.kernel.presentation.SingBoxJsonEditScreen
 import com.fanjv.netproxy.feature.kernel.presentation.SingBoxKernelSettingsScreen
 import com.fanjv.netproxy.feature.logs.presentation.LogsScreen
-import com.fanjv.netproxy.feature.policy.presentation.PolicyScreen
+import com.fanjv.netproxy.feature.chain.presentation.ChainPolicyScreen
+import com.fanjv.netproxy.feature.chain.presentation.ChainScreen
 import com.fanjv.netproxy.feature.inbound.presentation.InboundSettingsScreen
 import com.fanjv.netproxy.feature.settings.presentation.NetworkMatchingScreen
 import com.fanjv.netproxy.feature.routing.presentation.RoutingRulesScreen
@@ -72,9 +76,10 @@ import com.fanjv.netproxy.feature.settings.presentation.SettingsScreen
 import com.fanjv.netproxy.feature.theme.presentation.ThemeSettingsScreen
 import com.fanjv.netproxy.feature.theme.presentation.ThemeViewModel
 import com.fanjv.netproxy.navigation.AppDestination
+import com.fanjv.netproxy.navigation.DockHost
+import com.fanjv.netproxy.navigation.LocalDockHost
 import com.fanjv.netproxy.navigation.LocalNavigator
-import com.fanjv.netproxy.navigation.MainBottomBar
-import com.fanjv.netproxy.navigation.MainPagerState
+import com.fanjv.netproxy.navigation.Route.ChainPolicy
 import com.fanjv.netproxy.navigation.Route.About
 import com.fanjv.netproxy.navigation.Route.Apps
 import com.fanjv.netproxy.navigation.Route.JsonEdit
@@ -88,23 +93,28 @@ import com.fanjv.netproxy.navigation.Route.RoutingRules
 import com.fanjv.netproxy.navigation.Route.SubscriptionDetails
 import com.fanjv.netproxy.navigation.Route.SubscriptionEdit
 import com.fanjv.netproxy.navigation.Route.ThemeSettings
-import com.fanjv.netproxy.navigation.rememberMainPagerState
 import com.fanjv.netproxy.navigation.rememberNavigator
 import com.fanjv.netproxy.navigation.mainDestinations
 import com.fanjv.netproxy.navigation.availableIn
-import top.yukonga.miuix.kmp.basic.NavigationItem
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
 import top.yukonga.miuix.kmp.theme.ThemeColorSpec
 import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
+import dev.aiingjie.coui.CouiDockSpace
+import dev.aiingjie.coui.CouiDockTab
+import dev.aiingjie.coui.CouiOverlayHost
+import dev.aiingjie.coui.CouiTabs
+import dev.aiingjie.coui.CouiTheme
+import dev.aiingjie.coui.LocalCouiOverlay
 
 class MainActivity : ComponentActivity() {
+    private val dock by lazy { DockHost(this) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.Theme_NetProxy)
         super.onCreate(savedInstanceState)
@@ -158,12 +168,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            CompositionLocalProvider(LocalDensity provides density) {
+            CompositionLocalProvider(LocalDensity provides density, LocalDockHost provides dock) {
                 NetProxyTheme(appThemeSettings = appThemeSettings) {
-                    NetProxyApp(themeViewModel)
+                    CouiTheme(dark = darkMode) {
+                        CouiOverlayHost {
+                            NetProxyApp(themeViewModel)
+                        }
+                    }
                 }
             }
         }
+        dock.attach(findViewById(android.R.id.content))
     }
 }
 
@@ -253,6 +268,11 @@ internal fun NetProxyApp(themeViewModel: ThemeViewModel) {
                         )
                     }
                 }
+                entry<ChainPolicy> {
+                    ModulePage(R.string.chain, R.string.chain_load_failed, { navigator.pop() }) {
+                        ChainPolicyScreen(id = it.id, onBack = { navigator.pop() })
+                    }
+                }
                 entry<ThemeSettings> { ThemeSettingsScreen(viewModel = themeViewModel) }
                 entry<About> { AboutScreen() }
                 entry<Logs> {
@@ -336,111 +356,76 @@ private fun MainPager(
     onReconnect: () -> Unit,
 ) {
     val themeState by themeViewModel.state.collectAsStateWithLifecycle()
-    val pagerState = rememberPagerState(initialPage = destinations.indexOf(initialDestination),
-        pageCount = { destinations.size })
-    val mainPagerState = rememberMainPagerState(pagerState)
-
-    // 非动画态（如滑动）时与 pager 同步；
-    // 导航动画结束后也重跑一次，否则点击导航可能跳过目的地页的首次按需加载。
-    LaunchedEffect(mainPagerState.pagerState.currentPage, mainPagerState.isNavigating) {
-        mainPagerState.syncPage()
-        onDestinationChanged(destinations[mainPagerState.selectedPage])
-    }
-
-    val navItems = destinations.map {
-        NavigationItem(
-            label = stringResource(it.labelRes),
-            icon = it.icon
-        )
-    }
-
+    var selected by rememberSaveable { mutableIntStateOf(destinations.indexOf(initialDestination)) }
+    val dock = LocalDockHost.current
     val navigator = LocalNavigator.current
+    val overlay = LocalCouiOverlay.current
+
+    val tabs = destinations.map { CouiDockTab(stringResource(it.labelRes), it.selected, it.idle) }
+    SideEffect { dock.setTabs(tabs) }
+    LaunchedEffect(selected) {
+        dock.setPage(selected)
+        onDestinationChanged(destinations[selected])
+    }
+    LaunchedEffect(dock) { dock.pageRequests.collect { selected = it.coerceIn(0, destinations.lastIndex) } }
+    // 底栏只在主分页可见：进入二级页或 COUI 弹出层盖住页面时隐藏，避免挡住内容。
+    val rootVisible = navigator.backStack.size == 1 && !overlay.isCovering
+    SideEffect { dock.setShown(rootVisible) }
+    DisposableEffect(dock) { onDispose { dock.setShown(false) } }
 
     MainScreenBackHandler(
-        mainState = mainPagerState,
+        selected = selected,
         navigator = navigator,
         enablePredictiveBack = themeState.enablePredictiveBack,
+        onBackToFirst = { selected = 0 },
     )
 
-    val blurBackdrop = com.fanjv.netproxy.core.ui.component.rememberBlurBackdrop()
-
-    Scaffold(
-        bottomBar = {
-            MainBottomBar(
-                mainState = mainPagerState,
-                blurBackdrop = blurBackdrop,
-                items = navItems,
-            )
-        }
-    ) { innerPadding ->
-        val bottomPadding = innerPadding.calculateBottomPadding()
-
-        Box(modifier = Modifier) {
-            HorizontalPager(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(
-                        if (blurBackdrop != null) {
-                            Modifier.layerBackdrop(blurBackdrop)
-                        } else {
-                            Modifier
-                        }
-                    ),
-                state = pagerState,
-                key = { destinations[it] },
-                beyondViewportPageCount = 1,
-                userScrollEnabled = destinations.size > 1
-            ) { pageIndex ->
-                when (destinations[pageIndex]) {
-                    AppDestination.Dashboard -> CatalogDashboardScreen(
-                        bottomPadding = bottomPadding,
-                        isActive = mainPagerState.selectedPage == pageIndex,
-                        onReconnect = onReconnect,
-                        onNavigateToNodes = {
-                            val nodesIndex = destinations.indexOf(AppDestination.Nodes)
-                            if (nodesIndex != -1) {
-                                mainPagerState.animateToPage(nodesIndex)
-                            }
-                        }
-                    )
-
-                    AppDestination.Nodes -> CatalogNodesScreen(
-                        bottomPadding = bottomPadding,
-                        isActive = mainPagerState.selectedPage == pageIndex,
-                        viewModel = catalogNodesViewModel
-                    )
-
-                    AppDestination.Policies -> PolicyScreen(
-                        bottomPadding = bottomPadding,
-                        isActive = mainPagerState.selectedPage == pageIndex
-                    )
-
-                    AppDestination.Subscriptions -> SubscriptionsScreen(
-                        bottomPadding = bottomPadding,
-                        isActive = mainPagerState.selectedPage == pageIndex
-                    )
-
-                    AppDestination.Settings -> SettingsScreen(
-                        bottomPadding = bottomPadding,
-                        isActive = mainPagerState.selectedPage == pageIndex
-                    )
+    // 旧样式页面自己处理底部留白，需要让出悬浮底栏与导航栏的高度。
+    val bottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + CouiDockSpace
+    CouiTabs(selected, Modifier.fillMaxSize()) { pageIndex ->
+        when (destinations[pageIndex]) {
+            AppDestination.Dashboard -> CatalogDashboardScreen(
+                isActive = selected == pageIndex,
+                onReconnect = onReconnect,
+                onNavigateToNodes = {
+                    val nodesIndex = destinations.indexOf(AppDestination.Nodes)
+                    if (nodesIndex != -1) selected = nodesIndex
+                },
+                onNavigateToChain = {
+                    val chainIndex = destinations.indexOf(AppDestination.Chain)
+                    if (chainIndex != -1) selected = chainIndex
                 }
-            }
+            )
+
+            AppDestination.Nodes -> CatalogNodesScreen(
+                isActive = selected == pageIndex,
+                viewModel = catalogNodesViewModel
+            )
+
+            AppDestination.Chain -> ChainScreen(isActive = selected == pageIndex)
+
+            AppDestination.Subscriptions -> SubscriptionsScreen(
+                bottomPadding = bottomPadding,
+                isActive = selected == pageIndex
+            )
+
+            AppDestination.Settings -> SettingsScreen(isActive = selected == pageIndex)
         }
     }
 }
 
 @Composable
 private fun MainScreenBackHandler(
-    mainState: MainPagerState,
+    selected: Int,
     navigator: com.fanjv.netproxy.navigation.Navigator,
     enablePredictiveBack: Boolean,
+    onBackToFirst: () -> Unit,
 ) {
-    val isPagerBackHandlerEnabled by remember {
+    val isPagerBackHandlerEnabled by remember(selected) {
         derivedStateOf {
             navigator.backStack.lastOrNull() is Main &&
                     navigator.backStack.size == 1 &&
-                    mainState.selectedPage != 0
+                    selected != 0
         }
     }
 
@@ -449,13 +434,9 @@ private fun MainScreenBackHandler(
         NavigationBackHandler(
             state = navEventState,
             isBackEnabled = isPagerBackHandlerEnabled,
-            onBackCompleted = {
-                mainState.animateToPage(0)
-            }
+            onBackCompleted = onBackToFirst
         )
     } else {
-        BackHandler(enabled = isPagerBackHandlerEnabled) {
-            mainState.animateToPage(0)
-        }
+        BackHandler(enabled = isPagerBackHandlerEnabled, onBack = onBackToFirst)
     }
 }

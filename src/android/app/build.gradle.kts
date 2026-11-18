@@ -133,6 +133,7 @@ dependencies {
     implementation(libs.miuix.blur)
     implementation(libs.miuix.squircle)
     implementation(libs.scripta.editor)
+    implementation(project(":coui"))
     implementation(libs.androidx.navigationevent.compose)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)

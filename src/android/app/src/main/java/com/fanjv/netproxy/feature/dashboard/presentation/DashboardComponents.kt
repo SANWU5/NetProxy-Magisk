@@ -9,27 +9,21 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.AltRoute
-import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Public
-import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.Upload
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,10 +33,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -51,14 +45,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.fanjv.netproxy.R
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
+import dev.aiingjie.coui.Coui
+import dev.aiingjie.coui.CouiGroup
+import dev.aiingjie.coui.CouiSwitchRow
 
-/** 服务状态、实时速率与最近流量趋势。 */
+/** 服务开关、实时速率与最近流量趋势。 */
 @Composable
 internal fun SpeedChartCard(
     downloadSpeed: String,
@@ -67,16 +58,17 @@ internal fun SpeedChartCard(
     statusSummary: String,
     isRunning: Boolean,
     serviceControlEnabled: Boolean,
-    modifier: Modifier = Modifier,
     onToggleService: () -> Unit = {}
 ) {
-    Card(modifier = modifier.fillMaxWidth()) {
+    val colors = Coui.colors
+    CouiGroup(first = true) {
         Column {
-            SwitchPreference(
+            CouiSwitchRow(
                 title = stringResource(R.string.service_status),
-                summary = statusSummary,
                 checked = isRunning,
-                onCheckedChange = { if (serviceControlEnabled) onToggleService() }
+                onCheckedChange = { onToggleService() },
+                summary = statusSummary,
+                enabled = serviceControlEnabled,
             )
             AnimatedVisibility(
                 visible = isRunning,
@@ -85,27 +77,17 @@ internal fun SpeedChartCard(
             ) {
                 Column {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 7.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        SpeedLabel(Icons.Rounded.Download, downloadSpeed, Color(0xFF2196F3))
-                        SpeedLabel(Icons.Rounded.Upload, uploadSpeed, Color(0xFF4CAF50))
+                        SpeedLabel(Icons.Rounded.Download, downloadSpeed, colors.accent)
+                        SpeedLabel(Icons.Rounded.Upload, uploadSpeed, colors.success)
                     }
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(112.dp)
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 15.dp),
+                        modifier = Modifier.fillMaxWidth().height(112.dp).padding(horizontal = 16.dp).padding(bottom = 16.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        SpeedChart(
-                            trafficSamples = trafficSamples,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        SpeedChart(trafficSamples, colors.accent, colors.success, colors.divider, Modifier.fillMaxSize())
                     }
                 }
             }
@@ -116,13 +98,9 @@ internal fun SpeedChartCard(
 @Composable
 private fun SpeedLabel(icon: ImageVector, value: String, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, modifier = Modifier.size(14.dp), tint = color)
+        Image(icon, null, modifier = Modifier.size(14.dp), colorFilter = ColorFilter.tint(color))
         Spacer(Modifier.width(4.dp))
-        Text(
-            text = value,
-            style = MiuixTheme.textStyles.body2,
-            color = colorScheme.onSurfaceVariantActions
-        )
+        BasicText(value, style = Coui.type.rowSummary.copy(color = Coui.colors.labelSecondary))
     }
 }
 
@@ -130,10 +108,11 @@ private fun SpeedLabel(icon: ImageVector, value: String, color: Color) {
 @Composable
 private fun SpeedChart(
     trafficSamples: List<TrafficSample>,
+    downloadColor: Color,
+    uploadColor: Color,
+    gridColor: Color,
     modifier: Modifier = Modifier
 ) {
-    val downloadColor = Color(0xFF2196F3)
-    val uploadColor = Color(0xFF4CAF50)
     val geometry = remember(trafficSamples) { trafficChartGeometry(trafficSamples) }
     var fromGeometry by remember { mutableStateOf(geometry) }
     var targetGeometry by remember { mutableStateOf(geometry) }
@@ -152,16 +131,10 @@ private fun SpeedChart(
         to = targetGeometry,
         progress = animationProgress.value
     )
-    val gridColor = colorScheme.onSurfaceVariantActions.copy(alpha = 0.12f)
     Canvas(modifier = modifier) {
         for (line in 1..3) {
             val y = size.height * line / 4f
-            drawLine(
-                color = gridColor,
-                start = Offset(0f, y),
-                end = Offset(size.width, y),
-                strokeWidth = 1.dp.toPx()
-            )
+            drawLine(color = gridColor, start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = 1.dp.toPx())
         }
 
         fun drawSeries(points: List<Offset>, color: Color, alpha: Float) {
@@ -192,121 +165,10 @@ private fun SpeedChart(
                 lineTo(points.first().x * size.width, size.height)
                 close()
             }
-            drawPath(
-                path = fill,
-                brush = Brush.verticalGradient(listOf(color.copy(alpha = alpha), Color.Transparent))
-            )
-            drawPath(
-                path = line,
-                color = color,
-                style = Stroke(
-                    width = 2.dp.toPx(),
-                    cap = StrokeCap.Round,
-                    join = StrokeJoin.Round
-                )
-            )
+            drawPath(path = fill, brush = Brush.verticalGradient(listOf(color.copy(alpha = alpha), Color.Transparent)))
+            drawPath(path = line, color = color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
         drawSeries(animatedGeometry.download, downloadColor, 0.25f)
         drawSeries(animatedGeometry.upload, uploadColor, 0.15f)
-    }
-}
-
-/** 仪表盘中的单行摘要。 */
-@Composable
-internal fun InfoRow(title: String, content: String, icon: ImageVector) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, modifier = Modifier.size(20.dp), tint = colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
-            Text(title, style = MiuixTheme.textStyles.body1)
-        }
-        Text(
-            content,
-            style = MiuixTheme.textStyles.body2,
-            color = colorScheme.onSurfaceVariantActions
-        )
-    }
-}
-
-/** 出站模式：以图标网格代替下拉，模式含义可扫读。 */
-@Composable
-internal fun DashboardModeGrid(
-    modes: List<String>,
-    selectedMode: String,
-    enabled: Boolean,
-    onSelect: (String) -> Unit,
-) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Rounded.AltRoute,
-                contentDescription = null,
-                tint = colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(Modifier.width(12.dp))
-            Text(
-                text = stringResource(R.string.dashboard_outbound_mode),
-                style = MiuixTheme.textStyles.body1
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        val chunked = modes.chunked(2)
-        chunked.forEachIndexed { rowIndex, rowModes ->
-            if (rowIndex > 0) Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                rowModes.forEach { mode ->
-                    val selected = mode == selectedMode
-                    val (icon, label) = when (mode) {
-                        "Rule" -> Icons.AutoMirrored.Rounded.AltRoute to
-                            stringResource(R.string.dashboard_mode_rule)
-                        "Proxy" -> Icons.Rounded.Shuffle to
-                            stringResource(R.string.dashboard_mode_proxy)
-                        "Direct" -> Icons.Rounded.Block to
-                            stringResource(R.string.dashboard_mode_direct)
-                        "RuleAllowAds" -> Icons.Rounded.Public to
-                            stringResource(R.string.dashboard_mode_rule_allow_ads)
-                        else -> Icons.Rounded.Public to mode
-                    }
-                    val background = if (selected) colorScheme.primary.copy(alpha = 0.16f)
-                        else colorScheme.surfaceContainer
-                    val borderColor = if (selected) colorScheme.primary
-                        else colorScheme.outline.copy(alpha = 0.35f)
-                    val contentColor = if (selected) colorScheme.primary
-                        else colorScheme.onSurfaceVariantActions
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(background)
-                            .border(1.dp, borderColor, RoundedCornerShape(14.dp))
-                            .clickable(enabled = enabled) { onSelect(mode) }
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = contentColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = label,
-                            style = MiuixTheme.textStyles.body2,
-                            color = contentColor,
-                            maxLines = 1
-                        )
-                    }
-                }
-                if (rowModes.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
     }
 }

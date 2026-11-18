@@ -52,6 +52,8 @@ internal class DashboardSnapshotReducer(
             availableOutboundModes = service.availableOutboundModes.toList(),
             activeGroupId = service.activeGroupId,
             currentNode = dashboardNodeName(service),
+            chainMode = service.chainMode,
+            chainLanding = service.chainLanding,
             downloadTotal = traffic.first,
             uploadTotal = traffic.second,
             cpuUsage = cpuUsage,

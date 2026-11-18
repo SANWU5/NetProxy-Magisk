@@ -1,92 +1,18 @@
 package com.fanjv.netproxy.navigation
 
-import androidx.compose.animation.core.EaseInOut
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.animateScrollBy
-import androidx.compose.foundation.pager.PagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CloudSync
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Router
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SpaceDashboard
 import androidx.compose.material.icons.rounded.CloudSync
-import androidx.compose.material.icons.rounded.Dashboard
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Router
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.rounded.SpaceDashboard
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.fanjv.netproxy.R
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.job
-import kotlinx.coroutines.launch
-import kotlin.math.abs
-
-@Composable
-internal fun rememberMainPagerState(
-    pagerState: PagerState,
-    coroutineScope: CoroutineScope = rememberCoroutineScope()
-): MainPagerState = remember(
-    pagerState,
-    coroutineScope,
-) {
-    MainPagerState(pagerState, coroutineScope)
-}
-
-internal class MainPagerState(
-    val pagerState: PagerState,
-    private val coroutineScope: CoroutineScope
-) {
-    var selectedPage by mutableIntStateOf(pagerState.currentPage)
-        internal set
-
-    var isNavigating by mutableStateOf(false)
-        private set
-
-    private var navigationJob: Job? = null
-
-    fun animateToPage(targetIndex: Int) {
-        if (targetIndex == selectedPage) return
-
-        navigationJob?.cancel()
-        selectedPage = targetIndex
-        isNavigating = true
-
-        val distance = abs(targetIndex - pagerState.currentPage).coerceAtLeast(2)
-        val duration = 100 * distance + 100
-        val layoutInfo = pagerState.layoutInfo
-        val pageSize = layoutInfo.pageSize + layoutInfo.pageSpacing
-        val currentDistanceInPages =
-            targetIndex - pagerState.currentPage - pagerState.currentPageOffsetFraction
-        val scrollPixels = currentDistanceInPages * pageSize
-
-        navigationJob = coroutineScope.launch {
-            val currentJob = coroutineContext.job
-            try {
-                pagerState.animateScrollBy(
-                    value = scrollPixels,
-                    animationSpec = tween(easing = EaseInOut, durationMillis = duration)
-                )
-            } finally {
-                if (navigationJob == currentJob) {
-                    isNavigating = false
-                    if (pagerState.currentPage != targetIndex) {
-                        selectedPage = pagerState.currentPage
-                    }
-                }
-            }
-        }
-    }
-
-    fun syncPage() {
-        if (!isNavigating && selectedPage != pagerState.currentPage) {
-            selectedPage = pagerState.currentPage
-        }
-    }
-}
 
 internal fun mainDestinations(moduleAvailable: Boolean): List<AppDestination> =
     if (moduleAvailable) AppDestination.entries
@@ -95,13 +21,15 @@ internal fun mainDestinations(moduleAvailable: Boolean): List<AppDestination> =
 internal fun AppDestination.availableIn(destinations: List<AppDestination>): AppDestination =
     takeIf { it in destinations } ?: AppDestination.Dashboard
 
+/** 底栏的五个主分页；selected/idle 分别是悬浮底栏选中与未选中的图标。 */
 internal enum class AppDestination(
     val labelRes: Int,
-    val icon: ImageVector,
+    val selected: ImageVector,
+    val idle: ImageVector,
 ) {
-    Dashboard(R.string.dashboard, Icons.Rounded.Dashboard),
-    Nodes(R.string.nodes, Icons.Rounded.Router),
-    Policies(R.string.policies, Icons.Rounded.Tune),
-    Subscriptions(R.string.subscriptions, Icons.Rounded.CloudSync),
-    Settings(R.string.settings, Icons.Rounded.Settings),
+    Dashboard(R.string.dashboard, Icons.Rounded.SpaceDashboard, Icons.Outlined.SpaceDashboard),
+    Nodes(R.string.nodes, Icons.Rounded.Router, Icons.Outlined.Router),
+    Chain(R.string.chain, Icons.Rounded.Link, Icons.Outlined.Link),
+    Subscriptions(R.string.subscriptions, Icons.Rounded.CloudSync, Icons.Outlined.CloudSync),
+    Settings(R.string.settings, Icons.Rounded.Settings, Icons.Outlined.Settings),
 }

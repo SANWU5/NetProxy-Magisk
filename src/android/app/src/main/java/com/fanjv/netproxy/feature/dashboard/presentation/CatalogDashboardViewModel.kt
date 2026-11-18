@@ -40,6 +40,9 @@ internal data class CatalogDashboardUiState(
     val availableOutboundModes: List<String> = emptyList(),
     val activeGroupId: String = "",
     val currentNode: String = "",
+    /** 链式代理后置模式与手动后置，来自服务状态。 */
+    val chainMode: String = "off",
+    val chainLanding: String = "",
     val downloadBytesPerSecond: Long = 0,
     val uploadBytesPerSecond: Long = 0,
     val downloadTotal: Long = 0,

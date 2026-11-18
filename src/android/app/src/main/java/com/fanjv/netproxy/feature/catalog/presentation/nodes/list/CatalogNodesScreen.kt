@@ -5,30 +5,14 @@ import android.content.ClipboardManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.add
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.FileOpen
-import androidx.compose.material.icons.rounded.Link
-import androidx.compose.material.icons.rounded.NetworkPing
-import androidx.compose.material.icons.rounded.Share
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,60 +20,47 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fanjv.netproxy.R
 import com.fanjv.netproxy.core.di.netProxyViewModel
-import com.fanjv.netproxy.core.ui.component.AppSnackbarHost
-import com.fanjv.netproxy.core.ui.component.BlurredBar
-import com.fanjv.netproxy.core.ui.component.ContentStatus
-import com.fanjv.netproxy.core.ui.component.SnackbarNoticeEffect
-import com.fanjv.netproxy.core.ui.component.TopBarMenuAction
-import com.fanjv.netproxy.core.ui.component.TopBarMoreMenu
-import com.fanjv.netproxy.core.ui.component.rememberAppSnackbarHostState
-import com.fanjv.netproxy.core.ui.component.rememberBlurBackdrop
 import com.fanjv.netproxy.core.ui.UiText
 import com.fanjv.netproxy.core.ui.resolve
 import com.fanjv.netproxy.feature.catalog.model.CatalogNode
 import com.fanjv.netproxy.feature.catalog.model.CatalogNodeGroup
 import com.fanjv.netproxy.feature.catalog.presentation.nodes.CatalogNodesViewModel
 import com.fanjv.netproxy.feature.catalog.presentation.nodes.selectedAutoNodeTag
-import com.fanjv.netproxy.feature.catalog.presentation.nodes.list.components.CatalogGroupList
-import com.fanjv.netproxy.feature.catalog.presentation.nodes.list.components.CatalogNodeGrid
-import com.fanjv.netproxy.feature.catalog.presentation.nodes.list.components.FilterBar
+import com.fanjv.netproxy.feature.chain.presentation.TextArea
 import com.fanjv.netproxy.navigation.LocalNavigator
 import com.fanjv.netproxy.navigation.Route.NodeEdit
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.PullToRefresh
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Add
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
+import dev.aiingjie.coui.Coui
+import dev.aiingjie.coui.CouiBarButton
+import dev.aiingjie.coui.CouiButton
+import dev.aiingjie.coui.CouiDialogButton
+import dev.aiingjie.coui.CouiDockSpace
+import dev.aiingjie.coui.CouiGlyph
+import dev.aiingjie.coui.CouiGroup
+import dev.aiingjie.coui.CouiIcon
+import dev.aiingjie.coui.CouiLargeTitlePage
+import dev.aiingjie.coui.CouiLoading
+import dev.aiingjie.coui.CouiMenuRow
+import dev.aiingjie.coui.CouiRadio
+import dev.aiingjie.coui.CouiRadioRow
+import dev.aiingjie.coui.CouiRow
+import dev.aiingjie.coui.LocalCouiOverlay
+import dev.aiingjie.coui.couiCardItems
+import dev.aiingjie.coui.couiPressable
 
 /** Catalog 节点页：离线读取分组，运行时仅负责选择与测速。 */
 @Composable
 internal fun CatalogNodesScreen(
-    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     isActive: Boolean = true,
     viewModel: CatalogNodesViewModel = netProxyViewModel()
 ) {
@@ -101,78 +72,27 @@ internal fun CatalogNodesScreen(
     }
     val navigator = LocalNavigator.current
     val context = LocalContext.current
-    val scrollBehavior = MiuixScrollBehavior()
-    val dynamicTopPadding = remember(scrollBehavior) {
-        { 12.dp * (1f - scrollBehavior.state.collapsedFraction) }
-    }
-    val backdrop = rememberBlurBackdrop()
-    val barColor = if (backdrop != null) Color.Transparent else colorScheme.surface
-    var showAddSheet by remember { mutableStateOf(false) }
-    var showLinkDialog by remember { mutableStateOf(false) }
-    var showDisplaySettings by remember { mutableStateOf(false) }
-    var showMoreMenu by remember { mutableStateOf(false) }
-    var nodeLink by remember { mutableStateOf("") }
-    var actionNode by remember { mutableStateOf<Pair<CatalogNodeGroup, CatalogNode>?>(null) }
+    val overlay = LocalCouiOverlay.current
     val displayPreferences = remember(context) {
         context.getSharedPreferences("node_display", android.content.Context.MODE_PRIVATE)
     }
-    var layoutStyle by remember {
-        mutableIntStateOf(displayPreferences.getInt("layout_style", 0).coerceIn(0, 1))
-    }
-    var layoutDensity by remember {
-        mutableIntStateOf(
-            displayPreferences.getInt(
-                "density",
-                displayPreferences.getInt("columns", 2) - 1
-            ).coerceIn(0, 2)
-        )
-    }
-    var itemSize by remember {
-        mutableIntStateOf(displayPreferences.getInt("item_size", 0).coerceIn(0, 2))
-    }
-    var sortMode by remember {
-        mutableIntStateOf(displayPreferences.getInt("sort", 0).coerceIn(0, 3))
-    }
-    var expandedGroups by remember {
-        mutableStateOf(
-            displayPreferences.getStringSet("expanded_groups", emptySet()).orEmpty()
-        )
-    }
-    LaunchedEffect(state.focusGroupRevision) {
-        val groupId = state.focusGroupId
-        if (groupId.isBlank()) return@LaunchedEffect
-        expandedGroups = expandedGroups + groupId
-        displayPreferences.edit {
-            putStringSet("expanded_groups", expandedGroups)
-        }
-    }
-    val pullToRefreshState = rememberPullToRefreshState()
-    val snackbarHostState = rememberAppSnackbarHostState()
-    val refreshTexts = listOf(
-        stringResource(R.string.refresh_pulling),
-        stringResource(R.string.refresh_release),
-        stringResource(R.string.refresh_refresh),
-        stringResource(R.string.refresh_complete),
-    )
+    var sortMode by remember { mutableIntStateOf(displayPreferences.getInt("sort", 0).coerceIn(0, 3)) }
 
     LifecycleResumeEffect(isActive) {
         viewModel.setVisible(isActive)
         onPauseOrDispose { if (isActive) viewModel.setVisible(false) }
     }
 
-    val fileLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-            uri?.let { viewModel.importFile(it) }
-        }
+    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        uri?.let { viewModel.importFile(it) }
+    }
 
-    val noticeText = if (state.error !is UiText.Empty) state.error else state.notice
-    SnackbarNoticeEffect(
-        eventId = state.noticeId,
-        message = noticeText.resolve(),
-        isError = state.error !is UiText.Empty,
-        hostState = snackbarHostState,
-        onConsumed = viewModel::clearNotice
-    )
+    val noticeText = (if (state.error !is UiText.Empty) state.error else state.notice).resolve()
+    LaunchedEffect(state.noticeId) {
+        if (noticeText.isBlank()) return@LaunchedEffect
+        viewModel.clearNotice()
+        overlay.showSnack(noticeText)
+    }
 
     LaunchedEffect(state.exportedNodeLinkId) {
         val link = state.exportedNodeLink
@@ -182,350 +102,184 @@ internal fun CatalogNodesScreen(
         viewModel.nodeLinkCopied()
     }
 
-    val selectedIndex = state.groups.indexOfFirst { it.group.id == state.selectedGroupId }
-        .coerceAtLeast(0)
+    val selectedIndex = state.groups.indexOfFirst { it.group.id == state.selectedGroupId }.coerceAtLeast(0)
     val selectedGroup = state.groups.getOrNull(selectedIndex)
-    Scaffold(
-        snackbarHost = {
-            AppSnackbarHost(snackbarHostState, Modifier.padding(bottom = bottomPadding))
-        },
-        topBar = {
-            BlurredBar(backdrop) {
-                TopAppBar(
-                    color = barColor,
-                    title = stringResource(R.string.nodes),
-                    scrollBehavior = scrollBehavior,
-                    actions = {
-                        IconButton(onClick = { showAddSheet = true }) {
-                            Icon(
-                                imageVector = MiuixIcons.Add,
-                                contentDescription = stringResource(R.string.node_add),
-                                tint = colorScheme.onSurface
-                            )
-                        }
-                        TopBarMoreMenu(
-                            expanded = showMoreMenu,
-                            onExpandedChange = { showMoreMenu = it },
-                            actions = listOf(
-                                TopBarMenuAction(
-                                    text = stringResource(R.string.node_test_current_group),
-                                    enabled = selectedGroup?.nodes?.isNotEmpty() == true &&
-                                            state.operation.isEmpty(),
-                                    onClick = {
-                                        selectedGroup?.group?.id?.let(viewModel::testGroupDelay)
-                                    }
-                                ),
-                                TopBarMenuAction(
-                                    text = stringResource(R.string.node_display_settings),
-                                    onClick = { showDisplaySettings = true }
-                                )
-                            ),
-                            contentDescription = stringResource(R.string.more_actions)
-                        )
-                    },
-                    bottomContent = {
-                        if (layoutStyle == 0) {
-                            FilterBar(
-                                groups = state.groups,
-                                selectedIndex = selectedIndex,
-                                onSelected = { index ->
-                                    state.groups.getOrNull(index)?.group?.id?.let(viewModel::selectGroup)
-                                },
-                                topPadding = dynamicTopPadding,
-                                backgroundColor = barColor
-                            )
-                        }
-                    }
-                )
+    val busy = state.operation.isNotEmpty()
+
+    val addTitle = stringResource(R.string.node_add_single)
+    val linkLabel = stringResource(R.string.node_link_label)
+    val addText = stringResource(R.string.common_add)
+    val moreText = stringResource(R.string.more_actions)
+    val singleLinkText = stringResource(R.string.node_single_link)
+    val localFileText = stringResource(R.string.node_local_file)
+    val testGroupText = stringResource(R.string.node_test_current_group)
+    val sortText = stringResource(R.string.node_sort)
+    val cancelText = stringResource(R.string.common_cancel)
+    val sortOptions = listOf(
+        stringResource(R.string.node_sort_default), stringResource(R.string.node_sort_name),
+        stringResource(R.string.node_sort_protocol), stringResource(R.string.node_sort_latency),
+    )
+    val testText = stringResource(R.string.node_test_delay)
+    val editText = stringResource(R.string.node_edit)
+    val exportText = stringResource(R.string.node_export)
+    val deleteText = stringResource(R.string.node_delete)
+
+    fun showAddLink() = overlay.showPanel(addTitle) {
+        var link by remember { mutableStateOf("") }
+        CouiGroup(first = true) { TextArea(link, { link = it }, linkLabel) }
+        CouiButton(
+            text = addText,
+            onClick = { viewModel.addNode(link); overlay.dismissPanel() },
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+            enabled = link.isNotBlank(),
+        )
+    }
+
+    fun showSort() = overlay.showPanel(sortText) {
+        CouiGroup(first = true) {
+            sortOptions.forEachIndexed { index, label ->
+                CouiRadioRow(label, sortMode == index, {
+                    sortMode = index
+                    displayPreferences.edit { putInt("sort", index) }
+                    overlay.dismissPanel()
+                })
             }
-        },
-        contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout)
-            .only(WindowInsetsSides.Horizontal)
-    ) { innerPadding ->
-        val layoutDirection = LocalLayoutDirection.current
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
-        ) {
-            when {
-                !isActive && state.groups.isEmpty() -> Unit
+        }
+    }
 
-                selectedGroup == null -> ContentStatus(
-                    padding = PaddingValues(top = innerPadding.calculateTopPadding(),
-                        bottom = innerPadding.calculateBottomPadding() + bottomPadding),
-                    text = stringResource(if (state.loadFailed) R.string.nodes_read_failed else R.string.node_empty),
-                    loading = state.loading,
-                )
+    fun showMore() = overlay.showDialog(
+        title = null,
+        buttons = listOf(
+            CouiDialogButton(singleLinkText) { showAddLink() },
+            CouiDialogButton(localFileText) { fileLauncher.launch(arrayOf("*/*")) },
+            CouiDialogButton(testGroupText) { selectedGroup?.group?.id?.let(viewModel::testGroupDelay) },
+            CouiDialogButton(sortText) { showSort() },
+            CouiDialogButton(cancelText),
+        ),
+    )
 
-                else -> PullToRefresh(
-                    isRefreshing = state.loading,
-                    onRefresh = { viewModel.refresh() },
-                    pullToRefreshState = pullToRefreshState,
-                    topAppBarScrollBehavior = scrollBehavior,
-                    refreshTexts = refreshTexts,
-                    contentPadding = PaddingValues(
-                        top = innerPadding.calculateTopPadding() +
-                            if (layoutStyle == 0) 6.dp else 0.dp,
-                        start = innerPadding.calculateStartPadding(layoutDirection),
-                        end = innerPadding.calculateEndPadding(layoutDirection)
+    fun showNodeActions(group: CatalogNodeGroup, node: CatalogNode) = overlay.showDialog(
+        title = node.tag,
+        message = node.serverLabel(),
+        buttons = listOf(
+            CouiDialogButton(testText, CouiDialogButton.Kind.Primary) { viewModel.testDelay("${group.group.id}/${node.tag}") },
+            CouiDialogButton(editText) { navigator.push(NodeEdit("${group.group.id}/${node.tag}")) },
+            CouiDialogButton(exportText) { viewModel.exportNode(group.group.id, node.tag) },
+            CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) { viewModel.removeNode(group.group.id, node.tag) },
+            CouiDialogButton(cancelText),
+        ),
+    )
+
+    val groupTitle = stringResource(R.string.node_count, selectedGroup?.nodes?.size ?: 0)
+    val nodes = remember(selectedGroup, sortMode, state.latencies) {
+        selectedGroup?.let { sortCatalogNodes(it.nodes, sortMode, it.group.id, state.latencies) }.orEmpty()
+    }
+
+    CouiLargeTitlePage(
+        title = stringResource(R.string.nodes),
+        bottomSpace = CouiDockSpace,
+        actions = { CouiBarButton(CouiGlyph.More, moreText, onClick = ::showMore) },
+    ) {
+        if (selectedGroup == null) {
+            item {
+                CouiGroup(first = true) {
+                    when {
+                        state.loading -> CouiRow(stringResource(R.string.loading), leading = { CouiLoading() })
+                        else -> CouiRow(stringResource(if (state.loadFailed) R.string.nodes_read_failed else R.string.node_empty))
+                    }
+                    CouiRow(singleLinkText, onClick = ::showAddLink)
+                    CouiRow(localFileText, onClick = { fileLauncher.launch(arrayOf("*/*")) })
+                }
+            }
+            return@CouiLargeTitlePage
+        }
+        val groupId = selectedGroup.group.id
+        val autoSelected = state.selection.selectorMode == "urltest" && state.selection.activeGroupId == groupId
+        item {
+            CouiGroup(first = true) {
+                if (state.groups.size > 1) {
+                    CouiMenuRow(
+                        title = stringResource(R.string.node_group),
+                        options = state.groups.map { it.group.name },
+                        selected = selectedIndex,
+                        onSelect = { index -> state.groups.getOrNull(index)?.group?.id?.let(viewModel::selectGroup) },
                     )
+                }
+                CouiRow(
+                    title = stringResource(R.string.node_auto_fastest),
+                    summary = selectedAutoNode.takeIf { autoSelected && it.isNotBlank() },
+                    enabled = !busy && selectedGroup.nodes.isNotEmpty(),
+                    role = Role.RadioButton,
+                    onClick = { viewModel.useAuto(groupId) },
                 ) {
-                    val contentPadding = PaddingValues(
-                        start = innerPadding.calculateStartPadding(layoutDirection) + 12.dp,
-                        top = innerPadding.calculateTopPadding() +
-                            if (layoutStyle == 0) 6.dp else 12.dp,
-                        end = innerPadding.calculateEndPadding(layoutDirection) + 12.dp,
-                        bottom = innerPadding.calculateBottomPadding() + bottomPadding + 84.dp
-                    )
-                    if (layoutStyle == 0) {
-                        CatalogNodeGrid(
-                            group = selectedGroup,
-                            activeGroupId = state.selection.activeGroupId,
-                            selectedRef = state.selection.selected,
-                            selectorMode = state.selection.selectorMode,
-                            runtimeSelectedNode = selectedAutoNode,
-                            latencies = state.latencies,
-                            busy = state.operation.isNotEmpty(),
-                            columns = layoutDensity + 1,
-                            itemSize = itemSize,
-                            sortMode = sortMode,
-                            onAuto = { viewModel.useAuto(selectedGroup.group.id) },
-                            onNode = { viewModel.useNode(selectedGroup.group.id, it.tag) },
-                            onNodeAction = { actionNode = selectedGroup to it },
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = contentPadding,
-                            nestedScrollConnection = scrollBehavior.nestedScrollConnection
-                        )
-                    } else {
-                        CatalogGroupList(
-                            groups = state.groups,
-                            activeGroupId = state.selection.activeGroupId,
-                            selectedRef = state.selection.selected,
-                            selectorMode = state.selection.selectorMode,
-                            runtimeSelectedNode = selectedAutoNode,
-                            latencies = state.latencies,
-                            busy = state.operation.isNotEmpty(),
-                            columns = layoutDensity + 1,
-                            itemSize = itemSize,
-                            sortMode = sortMode,
-                            expandedGroups = expandedGroups,
-                            onToggleGroup = { groupId ->
-                                expandedGroups = if (groupId in expandedGroups) {
-                                    expandedGroups - groupId
-                                } else {
-                                    expandedGroups + groupId
-                                }
-                                displayPreferences.edit {
-                                    putStringSet("expanded_groups", expandedGroups)
-                                }
-                            },
-                            onAuto = viewModel::useAuto,
-                            onNode = { group, node -> viewModel.useNode(group.group.id, node.tag) },
-                            onNodeAction = { group, node -> actionNode = group to node },
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = contentPadding,
-                            nestedScrollConnection = scrollBehavior.nestedScrollConnection
-                        )
-                    }
+                    LatencyText(state.latencies["Auto/$groupId"])
+                    Spacer(Modifier.width(12.dp))
+                    CouiRadio(selected = autoSelected)
                 }
             }
         }
-    }
-
-    OverlayDialog(
-        show = showDisplaySettings,
-        title = stringResource(R.string.node_display_settings),
-        onDismissRequest = { showDisplaySettings = false }
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Card {
-                OverlayDropdownPreference(
-                    title = stringResource(R.string.node_layout_style),
-                    items = listOf(
-                        stringResource(R.string.node_layout_tabs),
-                        stringResource(R.string.node_layout_list)
-                    ),
-                    selectedIndex = layoutStyle,
-                    onSelectedIndexChange = { index ->
-                        layoutStyle = index
-                        displayPreferences.edit { putInt("layout_style", index) }
-                    }
-                )
-                OverlayDropdownPreference(
-                    title = stringResource(R.string.node_sort),
-                    items = listOf(
-                        stringResource(R.string.node_sort_default),
-                        stringResource(R.string.node_sort_name),
-                        stringResource(R.string.node_sort_protocol),
-                        stringResource(R.string.node_sort_latency)
-                    ),
-                    selectedIndex = sortMode,
-                    onSelectedIndexChange = { index ->
-                        sortMode = index
-                        displayPreferences.edit { putInt("sort", sortMode) }
-                    }
-                )
-                OverlayDropdownPreference(
-                    title = stringResource(R.string.node_density),
-                    items = listOf(
-                        stringResource(R.string.node_density_spacious),
-                        stringResource(R.string.node_density_standard),
-                        stringResource(R.string.node_density_compact)
-                    ),
-                    selectedIndex = layoutDensity,
-                    onSelectedIndexChange = { index ->
-                        layoutDensity = index
-                        displayPreferences.edit { putInt("density", index) }
-                    }
-                )
-                OverlayDropdownPreference(
-                    title = stringResource(R.string.node_card_size),
-                    items = listOf(
-                        stringResource(R.string.node_card_size_standard),
-                        stringResource(R.string.node_card_size_compact),
-                        stringResource(R.string.node_card_size_minimal)
-                    ),
-                    selectedIndex = itemSize,
-                    onSelectedIndexChange = { index ->
-                        itemSize = index
-                        displayPreferences.edit { putInt("item_size", index) }
-                    }
-                )
-            }
-            TextButton(
-                text = stringResource(R.string.common_done),
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.textButtonColorsPrimary(),
-                onClick = { showDisplaySettings = false }
-            )
-        }
-    }
-
-    OverlayBottomSheet(
-        show = showAddSheet,
-        title = stringResource(R.string.node_add),
-        onDismissRequest = { showAddSheet = false }
-    ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-        ) {
-            BasicComponent(
-                title = stringResource(R.string.node_single_link),
-                summary = stringResource(R.string.node_single_link_summary),
-                startAction = { SheetIcon(Icons.Rounded.Link) },
-                onClick = {
-                    showAddSheet = false
-                    showLinkDialog = true
+        if (nodes.isEmpty()) {
+            item { CouiGroup(title = groupTitle) { CouiRow(stringResource(R.string.node_group_empty)) } }
+        } else {
+            couiCardItems(nodes, key = { it.tag }, title = groupTitle) { node ->
+                val ref = "$groupId/${node.tag}"
+                val manualSelected = state.selection.selectorMode == "manual" && state.selection.selected == ref
+                CouiRow(
+                    title = node.tag,
+                    summary = node.serverLabel(),
+                    enabled = !busy,
+                    role = Role.RadioButton,
+                    onClick = { viewModel.useNode(groupId, node.tag) },
+                ) {
+                    LatencyText(state.latencies[ref])
+                    Box(
+                        Modifier.padding(start = 4.dp).size(36.dp)
+                            .couiPressable(shape = CircleShape, role = Role.Button) { showNodeActions(selectedGroup, node) },
+                        contentAlignment = Alignment.Center,
+                    ) { CouiIcon(CouiGlyph.More, Coui.colors.labelTertiary) }
+                    CouiRadio(selected = manualSelected)
                 }
-            )
-            BasicComponent(
-                title = stringResource(R.string.node_local_file),
-                summary = stringResource(R.string.node_local_file_summary),
-                startAction = { SheetIcon(Icons.Rounded.FileOpen) },
-                onClick = {
-                    showAddSheet = false
-                    fileLauncher.launch(arrayOf("*/*"))
-                }
-            )
-        }
-    }
-
-    OverlayDialog(
-        show = showLinkDialog,
-        title = stringResource(R.string.node_add_single),
-        onDismissRequest = { showLinkDialog = false }
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextField(
-                value = nodeLink,
-                onValueChange = { nodeLink = it },
-                label = stringResource(R.string.node_link_label),
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-                maxLines = 6
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(
-                    text = stringResource(R.string.common_cancel),
-                    modifier = Modifier.weight(1f),
-                    onClick = { showLinkDialog = false }
-                )
-                TextButton(
-                    text = stringResource(R.string.common_add),
-                    modifier = Modifier.weight(1f),
-                    enabled = nodeLink.isNotBlank(),
-                    colors = ButtonDefaults.textButtonColorsPrimary(),
-                    onClick = {
-                        viewModel.addNode(nodeLink)
-                        nodeLink = ""
-                        showLinkDialog = false
-                    }
-                )
-            }
-        }
-    }
-
-    val selectedAction = actionNode
-    OverlayBottomSheet(
-        show = selectedAction != null,
-        title = selectedAction?.second?.tag.orEmpty(),
-        onDismissRequest = { actionNode = null }
-    ) {
-        if (selectedAction != null) {
-            val (group, node) = selectedAction
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-            ) {
-                BasicComponent(
-                    title = stringResource(R.string.node_test_delay),
-                    startAction = { SheetIcon(Icons.Rounded.NetworkPing) },
-                    onClick = {
-                        viewModel.testDelay("${group.group.id}/${node.tag}")
-                        actionNode = null
-                    }
-                )
-                BasicComponent(
-                    title = stringResource(R.string.node_edit),
-                    startAction = { SheetIcon(Icons.Rounded.Edit) },
-                    onClick = {
-                        navigator.push(NodeEdit("${group.group.id}/${node.tag}"))
-                        actionNode = null
-                    }
-                )
-                BasicComponent(
-                    title = stringResource(R.string.node_export),
-                    startAction = { SheetIcon(Icons.Rounded.Share) },
-                    onClick = {
-                        viewModel.exportNode(group.group.id, node.tag)
-                        actionNode = null
-                    }
-                )
-                BasicComponent(
-                    title = stringResource(R.string.node_delete),
-                    startAction = { SheetIcon(Icons.Rounded.Delete) },
-                    onClick = {
-                        viewModel.removeNode(group.group.id, node.tag)
-                        actionNode = null
-                    }
-                )
             }
         }
     }
 }
 
 @Composable
-private fun SheetIcon(vector: androidx.compose.ui.graphics.vector.ImageVector) {
-    Icon(
-        imageVector = vector,
-        contentDescription = null,
-        modifier = Modifier
-            .padding(end = 12.dp)
-            .size(24.dp),
-        tint = colorScheme.onSurface
-    )
+private fun LatencyText(value: String?) {
+    if (value == null) return
+    val colors = Coui.colors
+    val text = when (value) {
+        "failed" -> stringResource(R.string.latency_failed)
+        "timeout" -> stringResource(R.string.latency_timeout)
+        "testing" -> stringResource(R.string.latency_testing)
+        else -> "$value ms"
+    }
+    val color = when (value) {
+        "failed", "timeout" -> colors.error
+        "testing" -> colors.labelSecondary
+        else -> when (value.toIntOrNull() ?: Int.MAX_VALUE) {
+            in 0..300 -> colors.success
+            in 301..800 -> colors.warning
+            else -> colors.error
+        }
+    }
+    BasicText(text, Modifier.padding(start = 12.dp), style = Coui.type.rowValue.copy(color = color))
+}
+
+private fun CatalogNode.serverLabel(): String = buildString {
+    if (protocol.isNotBlank()) append(protocol.uppercase()).append(" · ")
+    append(server.ifBlank { "--" })
+    if (port > 0) append(':').append(port)
+}
+
+private fun sortCatalogNodes(
+    nodes: List<CatalogNode>,
+    sortMode: Int,
+    groupId: String,
+    latencies: Map<String, String>
+): List<CatalogNode> = when (sortMode) {
+    1 -> nodes.sortedBy { it.tag.lowercase() }
+    2 -> nodes.sortedWith(compareBy<CatalogNode> { it.protocol }.thenBy { it.tag })
+    3 -> nodes.sortedBy { latencies["$groupId/${it.tag}"]?.toIntOrNull() ?: Int.MAX_VALUE }
+    else -> nodes
 }

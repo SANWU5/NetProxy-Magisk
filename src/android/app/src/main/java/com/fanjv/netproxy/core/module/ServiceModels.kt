@@ -24,6 +24,8 @@ internal data class ServiceStatusSnapshot(
     @SerialName("active_group_node_count") val activeGroupNodeCount: Int = 0,
     @SerialName("selected_node_ref") val selectedNodeRef: String = "",
     @SerialName("runtime_selected") val runtimeSelected: String = "",
+    @SerialName("chain_mode") val chainMode: String = "off",
+    @SerialName("chain_landing") val chainLanding: String = "",
     @SerialName("memory_bytes") val memoryBytes: Long = 0,
     @SerialName("process_cpu_ticks") val processCpuTicks: Long = 0,
     @SerialName("system_cpu_ticks") val systemCpuTicks: Long = 0,

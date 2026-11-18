@@ -1,290 +1,157 @@
 package com.fanjv.netproxy.feature.dashboard.presentation
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.AltRoute
-import androidx.compose.material.icons.rounded.DataUsage
-import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.Memory
-import androidx.compose.material.icons.rounded.Router
-import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fanjv.netproxy.R
 import com.fanjv.netproxy.core.di.netProxyViewModel
 import com.fanjv.netproxy.core.module.ModuleConnectionState
-import com.fanjv.netproxy.core.ui.component.AppSnackbarHost
-import com.fanjv.netproxy.core.ui.component.BlurredBar
 import com.fanjv.netproxy.core.ui.component.LocalModuleAvailability
-import com.fanjv.netproxy.core.ui.component.SnackbarNoticeEffect
-import com.fanjv.netproxy.core.ui.component.WarningCard
-import com.fanjv.netproxy.core.ui.component.rememberAppSnackbarHostState
-import com.fanjv.netproxy.core.ui.component.rememberBlurBackdrop
 import com.fanjv.netproxy.core.ui.resolve
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Link
-import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import dev.aiingjie.coui.CouiDockSpace
+import dev.aiingjie.coui.CouiGroup
+import dev.aiingjie.coui.CouiInfoRow
+import dev.aiingjie.coui.CouiJumpRow
+import dev.aiingjie.coui.CouiLargeTitlePage
+import dev.aiingjie.coui.CouiRadioRow
+import dev.aiingjie.coui.CouiStatus
+import dev.aiingjie.coui.CouiTipsAction
+import dev.aiingjie.coui.CouiTopTips
+import dev.aiingjie.coui.LocalCouiOverlay
 import kotlin.math.roundToInt
 
-/** 新仪表盘：完整就绪时间以模块状态机为准，运行数据来自本机控制接口。 */
+/** 仪表盘：完整就绪时间以模块状态机为准，运行数据来自本机控制接口。 */
 @Composable
 internal fun CatalogDashboardScreen(
-    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     isActive: Boolean = true,
     onNavigateToNodes: () -> Unit = {},
+    onNavigateToChain: () -> Unit = {},
     onReconnect: () -> Unit = {},
     viewModel: CatalogDashboardViewModel = netProxyViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val availability = LocalModuleAvailability.current
+    val overlay = LocalCouiOverlay.current
     LaunchedEffect(availability) { viewModel.setAvailability(availability) }
-    val snackbarHostState = rememberAppSnackbarHostState()
-    val scrollBehavior = MiuixScrollBehavior()
-    val backdrop = rememberBlurBackdrop()
-    val barColor = if (backdrop != null) Color.Transparent else colorScheme.surface
     val noModuleMessage =
         if (availability?.state == ModuleConnectionState.UNTRUSTED) stringResource(R.string.module_identity_failed)
-        else "${stringResource(R.string.no_module_title)}\n${stringResource(R.string.no_module_summary)}"
+        else stringResource(R.string.no_module_summary)
 
     LifecycleResumeEffect(isActive) {
         viewModel.setVisible(isActive)
         onPauseOrDispose { if (isActive) viewModel.setVisible(false) }
     }
 
-    SnackbarNoticeEffect(
-        eventId = state.noticeId,
-        message = state.notice.resolve(),
-        isError = false,
-        hostState = snackbarHostState,
-        onConsumed = viewModel::clearNotice
-    )
+    val notice = state.notice.resolve()
+    LaunchedEffect(state.noticeId) {
+        if (notice.isBlank()) return@LaunchedEffect
+        viewModel.clearNotice()
+        overlay.showSnack(notice)
+    }
 
-    Scaffold(
-        snackbarHost = {
-            AppSnackbarHost(snackbarHostState, Modifier.padding(bottom = bottomPadding))
-        },
-        topBar = {
-            BlurredBar(backdrop) {
-                TopAppBar(
-                    color = barColor,
-                    title = stringResource(R.string.dashboard),
-                    scrollBehavior = scrollBehavior
+    val reconnectText = stringResource(R.string.module_reconnect)
+    CouiLargeTitlePage(title = stringResource(R.string.dashboard), bottomSpace = CouiDockSpace) {
+        if (state.connection != null && !state.connected) {
+            item {
+                CouiTopTips(
+                    CouiStatus.Error, stringResource(R.string.no_module_title), Modifier.padding(horizontal = 16.dp),
+                    body = noModuleMessage,
+                    actions = listOf(CouiTipsAction(reconnectText, onClick = onReconnect)),
                 )
             }
-        },
-        contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)
-    ) { innerPadding ->
-        Box(modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .scrollEndHaptic()
-                    .overScrollVertical()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    .padding(horizontal = 12.dp),
-                contentPadding = innerPadding,
-                overscrollEffect = null
-            ) {
-                if (state.connection != null && !state.connected) {
-                    item {
-                        DashboardWarning(noModuleMessage, onReconnect)
-                    }
-                } else if (state.serviceState == "failed" && state.serviceError.isNotBlank()) {
-                    item { DashboardWarning(state.serviceError) }
-                }
+        } else if (state.serviceState == "failed" && state.serviceError.isNotBlank()) {
+            item {
+                CouiTopTips(CouiStatus.Error, stringResource(R.string.service_status), Modifier.padding(horizontal = 16.dp),
+                    body = state.serviceError)
+            }
+        }
 
-                item {
-                    val serviceSummary = when {
-                        state.isStarting -> stringResource(R.string.service_starting)
-                        state.isStopping -> stringResource(R.string.service_stopping)
-                        state.isReady -> stringResource(
-                            R.string.dashboard_service_up,
-                            formatUptime(state.uptimeSeconds)
-                        )
-                        else -> stringResource(R.string.service_stopped)
-                    }
-                    SpeedChartCard(
-                        downloadSpeed = formatRate(state.downloadBytesPerSecond),
-                        uploadSpeed = formatRate(state.uploadBytesPerSecond),
-                        trafficSamples = state.trafficSamples,
-                        statusSummary = serviceSummary,
-                        isRunning = state.isReady,
-                        serviceControlEnabled = availability?.available == true && state.connected &&
-                            !state.loading &&
-                            !state.isServiceControlBusy,
-                        modifier = Modifier.padding(top = 12.dp),
-                        onToggleService = viewModel::toggleService
+        item {
+            val serviceSummary = when {
+                state.isStarting -> stringResource(R.string.service_starting)
+                state.isStopping -> stringResource(R.string.service_stopping)
+                state.isReady -> stringResource(R.string.dashboard_service_up, formatUptime(state.uptimeSeconds))
+                else -> stringResource(R.string.service_stopped)
+            }
+            SpeedChartCard(
+                downloadSpeed = formatRate(state.downloadBytesPerSecond),
+                uploadSpeed = formatRate(state.uploadBytesPerSecond),
+                trafficSamples = state.trafficSamples,
+                statusSummary = serviceSummary,
+                isRunning = state.isReady,
+                serviceControlEnabled = availability?.available == true && state.connected &&
+                    !state.loading && !state.isServiceControlBusy,
+                onToggleService = viewModel::toggleService
+            )
+        }
+
+        item {
+            CouiGroup(title = stringResource(R.string.dashboard_current_node)) {
+                CouiJumpRow(
+                    title = stringResource(R.string.dashboard_current_node),
+                    value = state.currentNode.ifBlank { stringResource(R.string.dashboard_not_selected) },
+                    enabled = availability?.available == true,
+                    onClick = onNavigateToNodes,
+                )
+                if (state.chainMode != "off") {
+                    CouiJumpRow(
+                        title = stringResource(R.string.chain),
+                        value = chainSummary(state.chainMode, state.chainLanding),
+                        enabled = availability?.available == true,
+                        onClick = onNavigateToChain,
                     )
                 }
+            }
+        }
 
-                item { Spacer(Modifier.height(12.dp)) }
-                item {
-                    SystemStatsSection(
-                        cpuUsage = state.cpuUsage,
-                        memoryUsage = state.memoryUsage
+        item {
+            CouiGroup(title = stringResource(R.string.dashboard_outbound_mode)) {
+                state.availableOutboundModes.forEach { mode ->
+                    CouiRadioRow(
+                        title = modeLabel(mode),
+                        selected = mode == state.outboundMode,
+                        onClick = { if (mode != state.outboundMode) viewModel.setMode(mode) },
+                        enabled = availability?.available == true && !state.loading,
                     )
                 }
+            }
+        }
 
-                item { Spacer(Modifier.height(12.dp)) }
-                item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        InfoRow(
-                            title = stringResource(R.string.dashboard_lan_ip),
-                            content = state.internalIp,
-                            icon = Icons.Rounded.Router
-                        )
-                        InfoRow(
-                            title = stringResource(R.string.dashboard_total_traffic),
-                            content = stringResource(
-                                R.string.dashboard_traffic,
-                                formatBytes(state.uploadTotal),
-                                formatBytes(state.downloadTotal)
-                            ),
-                            icon = Icons.Rounded.DataUsage
-                        )
-                    }
-                }
-
-                item { Spacer(Modifier.height(12.dp)) }
-                item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        val modeValues = state.availableOutboundModes
-                        DashboardModeGrid(
-                            modes = modeValues,
-                            selectedMode = state.outboundMode,
-                            enabled = availability?.available == true && !state.loading,
-                            onSelect = viewModel::setMode
-                        )
-                        ArrowPreference(
-                            title = stringResource(R.string.dashboard_current_node),
-                            enabled = availability?.available == true,
-                            summary = state.currentNode.ifBlank {
-                                stringResource(R.string.dashboard_not_selected)
-                            },
-                            startAction = {
-                                Icon(
-                                    imageVector = MiuixIcons.Link,
-                                    contentDescription = null,
-                                    tint = colorScheme.primary
-                                )
-                            },
-                            onClick = onNavigateToNodes
-                        )
-                    }
-                }
-                item { Spacer(Modifier.height(80.dp + bottomPadding)) }
+        item {
+            CouiGroup(title = stringResource(R.string.dashboard_overview)) {
+                CouiInfoRow(stringResource(R.string.cpu_usage), "%.1f%%".format(state.cpuUsage))
+                CouiInfoRow(stringResource(R.string.mem_usage), "%.1f%%".format(state.memoryUsage))
+                CouiInfoRow(stringResource(R.string.dashboard_lan_ip), state.internalIp)
+                CouiInfoRow(
+                    stringResource(R.string.dashboard_total_traffic),
+                    stringResource(R.string.dashboard_traffic, formatBytes(state.uploadTotal), formatBytes(state.downloadTotal)),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun SystemStatsSection(cpuUsage: Float, memoryUsage: Float) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        ResourceUsageCard(
-            modifier = Modifier.weight(1f),
-            title = stringResource(R.string.cpu_usage),
-            value = "%.1f%%".format(cpuUsage),
-            icon = Icons.Rounded.Memory
-        )
-        ResourceUsageCard(
-            modifier = Modifier.weight(1f),
-            title = stringResource(R.string.mem_usage),
-            value = "%.1f%%".format(memoryUsage),
-            icon = Icons.Rounded.Storage
-        )
-    }
+private fun modeLabel(mode: String): String = when (mode) {
+    "Rule" -> stringResource(R.string.dashboard_mode_rule)
+    "Proxy" -> stringResource(R.string.dashboard_mode_proxy)
+    "Direct" -> stringResource(R.string.dashboard_mode_direct)
+    "RuleAllowAds" -> stringResource(R.string.dashboard_mode_rule_allow_ads)
+    else -> mode
 }
 
 @Composable
-private fun ResourceUsageCard(
-    modifier: Modifier,
-    title: String,
-    value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
-) {
-    Card(
-        modifier = modifier,
-        insideMargin = PaddingValues(16.dp)
-    ) {
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = colorScheme.primary
-            )
-            Text(
-                text = title,
-                modifier = Modifier.weight(1f).padding(start = 8.dp),
-                style = MiuixTheme.textStyles.body2,
-                color = colorScheme.onSurfaceVariantSummary
-            )
-        }
-        Text(
-            text = value,
-            modifier = Modifier.padding(top = 8.dp),
-            style = MiuixTheme.textStyles.headline1
-        )
-    }
-}
-
-@Composable
-private fun DashboardWarning(message: String, onClick: (() -> Unit)? = null) {
-    WarningCard(
-        message = message,
-        onClick = onClick,
-        modifier = Modifier
-            .padding(top = 12.dp)
-            .fillMaxWidth(),
-        action = {
-            Icon(
-                Icons.Rounded.ErrorOutline,
-                contentDescription = null,
-                modifier = Modifier.padding(start = 16.dp),
-                tint = if (MiuixTheme.isDynamicColor) {
-                    colorScheme.onErrorContainer
-                } else {
-                    Color(0xFFF72727)
-                }
-            )
-        }
-    )
+private fun chainSummary(mode: String, landing: String): String = when (mode) {
+    "manual" -> landing
+    "policy" -> stringResource(R.string.chain_landing_by_policy)
+    "manual_policy" -> stringResource(R.string.chain_landing_manual_policy, landing)
+    else -> stringResource(R.string.chain_mode_off)
 }
 
 private fun formatUptime(seconds: Long): String {

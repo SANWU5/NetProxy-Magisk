@@ -37,3 +37,5 @@ file("local.properties").takeIf(File::isFile)?.copyTo(
 includeBuild(scriptaDirectory)
 include(":app")
 include(":platform")
+include(":coui")
+project(":coui").projectDir = file("third_party/coui")

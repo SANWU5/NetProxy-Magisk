@@ -67,6 +67,11 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data class JsonEdit(val documentId: String) : Route
 
+    /** 链式代理的按应用策略编辑页；id 为空表示新建。 */
+    @Parcelize
+    @Serializable
+    data class ChainPolicy(val id: String) : Route
+
 }
 
 /**

@@ -67,6 +67,8 @@ jobs:
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     with:
       verify-android: ${{ needs.changes.outputs.android == 'true' }}
+      # Fork 没有上游的 PostHog 上报凭据，开发包构建无遥测变体（与本地 8.6.5-chain 构建一致）
+      no-telemetry: true
 
   publish:
     name: 发布已验证的开发包

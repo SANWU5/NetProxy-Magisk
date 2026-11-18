@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -130,6 +131,7 @@ internal fun ThemeSettingsScreen(viewModel: ThemeViewModel) {
                             label = styleLabels.getValue(style),
                             colors = remember(style, accent) { appCouiColors(true, style, accent) },
                             selected = style == darkStyle,
+                            modifier = Modifier.weight(1f),
                         ) { viewModel.setDarkStyle(style.value) }
                     }
                 }
@@ -259,22 +261,23 @@ private fun Line(color: Color, width: Dp, height: Dp) {
     Box(Modifier.size(width, height).clip(CircleShape).background(color))
 }
 
-/** 深色风格：小块深色页面色样，选中时描主色边。 */
+/** 深色风格：小块深色页面色样，选中时描主色边；三项按宽度均分，窄屏放大界面时也不会超出卡片。 */
 @Composable
-private fun DarkStyleOption(label: String, colors: CouiColors, selected: Boolean, onClick: () -> Unit) {
+private fun DarkStyleOption(label: String, colors: CouiColors, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val ui = Coui.colors
     val border by animateColorAsState(if (selected) ui.accent else ui.divider, tween(CouiMotion.VERY_FAST), label = "dark-style")
     val labelColor by animateColorAsState(if (selected) ui.accentText else ui.labelSecondary, tween(CouiMotion.VERY_FAST), label = "dark-style-label")
     Column(
-        Modifier
+        modifier
+            .padding(horizontal = 4.dp)
             .clip(RoundedCornerShape(16.dp))
             .couiPressable(role = Role.RadioButton, onClick = onClick)
             .semantics(mergeDescendants = true) { this.selected = selected; contentDescription = label }
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Column(
-            Modifier.size(width = 76.dp, height = 52.dp).border(if (selected) 2.dp else 1.dp, border, CouiSmoothShape(14.dp)).padding(3.dp)
+            Modifier.fillMaxWidth().widthIn(max = 84.dp).height(52.dp).border(if (selected) 2.dp else 1.dp, border, CouiSmoothShape(14.dp)).padding(3.dp)
                 .clip(CouiSmoothShape(11.dp)).background(colors.page).padding(6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {

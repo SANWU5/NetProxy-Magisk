@@ -291,8 +291,8 @@ copy_catalog_state() {
 # 返回: 0=输出保留清单，1=安装模式无效。
 persistent_entries() {
   case "$INSTALL_MODE" in
-    preserve) printf '%s\n' config data/catalog data/policies.json logs ;;
-    nodes) printf '%s\n' data/catalog data/policies.json logs ;;
+    preserve) printf '%s\n' config data/catalog data/chain logs ;;
+    nodes) printf '%s\n' data/catalog data/chain logs ;;
     fresh) ;;
     *) return 1 ;;
   esac
@@ -342,15 +342,6 @@ copy_user_data_locked() {
   snapshot="$(mktemp -d "$MODPATH/.install-state.XXXXXX")" || return 1
   : > "$snapshot/applied" || return 1
   for entry in $entries; do
-    if [ "$entry" = data/policies.json ] && [ ! -e "$LIVE_DIR/$entry" ]; then
-      # 8.6.4 之前策略保存在 /dev/netproxy（重启即失）；热更新时迁移到持久化目录。
-      if [ -f /dev/netproxy/policies.json ]; then
-        mkdir -p "$snapshot/current/data" || { failed=true; break; }
-        cp -p /dev/netproxy/policies.json "$snapshot/current/data/policies.json" \
-          || { failed=true; break; }
-      fi
-      continue
-    fi
     [ -e "$LIVE_DIR/$entry" ] || continue
     mkdir -p "$snapshot/current/$(dirname "$entry")" || { failed=true; break; }
     if [ "$entry" = data/catalog ]; then

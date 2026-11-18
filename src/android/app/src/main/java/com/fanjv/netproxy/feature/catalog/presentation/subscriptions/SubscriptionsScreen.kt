@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.NetworkPing
 import androidx.compose.material.icons.rounded.Share
@@ -37,7 +36,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -49,7 +47,6 @@ import com.fanjv.netproxy.core.ui.resolve
 import com.fanjv.netproxy.core.ui.component.AppSnackbarHost
 import com.fanjv.netproxy.core.ui.component.BackIconButton
 import com.fanjv.netproxy.core.ui.component.BlurredBar
-import com.fanjv.netproxy.core.ui.component.ContentStatus
 import com.fanjv.netproxy.core.ui.component.SnackbarNoticeEffect
 import com.fanjv.netproxy.core.ui.component.StatusTag
 import com.fanjv.netproxy.core.ui.component.rememberAppSnackbarHostState
@@ -62,7 +59,6 @@ import com.fanjv.netproxy.navigation.Route
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
@@ -75,22 +71,22 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.MoreCircle
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.squircle.squircleBackground
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.ui.semantics.Role
 import dev.aiingjie.coui.Coui
+import dev.aiingjie.coui.CouiButton
+import dev.aiingjie.coui.CouiInputRow
+import dev.aiingjie.coui.CouiMenuRow
+import dev.aiingjie.coui.CouiSubPage
+import dev.aiingjie.coui.CouiSwitchRow
+import com.fanjv.netproxy.feature.chain.presentation.TextArea
 import dev.aiingjie.coui.CouiActionRow
 import dev.aiingjie.coui.CouiBarButton
 import dev.aiingjie.coui.CouiDialogButton
@@ -533,250 +529,109 @@ internal fun SubscriptionEditorScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val draft = state.draft
-    val snackbarHostState = rememberAppSnackbarHostState()
-    val backdrop = rememberBlurBackdrop()
-    val scrollBehavior = MiuixScrollBehavior()
-    val barColor = if (backdrop != null) Color.Transparent else colorScheme.surface
+    val overlay = LocalCouiOverlay.current
 
     LaunchedEffect(id) { viewModel.load(id) }
     LaunchedEffect(state.saved) {
         if (state.saved) onBack()
     }
-    SnackbarNoticeEffect(
-        eventId = state.noticeId,
-        message = state.error.resolve(),
-        isError = state.error !is UiText.Empty,
-        hostState = snackbarHostState,
-        onConsumed = viewModel::clearError
+    val errorText = state.error.resolve()
+    LaunchedEffect(state.noticeId) {
+        if (errorText.isBlank()) return@LaunchedEffect
+        viewModel.clearError()
+        overlay.showSnack(errorText)
+    }
+
+    val intervals = subscriptionIntervalOptions(draft.updateIntervalSeconds)
+    val intervalLabels = listOf(
+        stringResource(R.string.subscription_duration_minutes, 15),
+        stringResource(R.string.subscription_duration_hours, 1),
+        stringResource(R.string.subscription_duration_hours, 6),
+        stringResource(R.string.subscription_duration_hours, 12),
+        stringResource(R.string.subscription_duration_hours, 24),
+        stringResource(R.string.subscription_duration_days, 3),
+        stringResource(R.string.subscription_duration_days, 7)
+    ) + if (intervals.size > 7) {
+        listOf(stringResource(R.string.subscription_interval_custom_seconds, draft.updateIntervalSeconds))
+    } else emptyList()
+    val viaValues = listOf("auto", "always", "never")
+    val viaLabels = listOf(
+        stringResource(R.string.subscription_editor_network_auto),
+        stringResource(R.string.subscription_editor_network_proxy),
+        stringResource(R.string.subscription_editor_network_direct)
     )
 
-    Scaffold(
-        snackbarHost = { AppSnackbarHost(snackbarHostState) },
-        topBar = {
-            BlurredBar(backdrop) {
-                TopAppBar(
-                    color = barColor,
-                    title = stringResource(
-                        if (state.id.isBlank()) R.string.subscription_editor_add_title
-                        else R.string.subscription_editor_edit_title
-                    ),
-                    scrollBehavior = scrollBehavior,
-                    navigationIcon = { BackIconButton(onClick = onBack) },
-                    actions = {
-                        IconButton(
-                            enabled = !state.saving && !state.loading,
-                            onClick = viewModel::save
-                        ) {
-                            if (state.saving) {
-                                InfiniteProgressIndicator(modifier = Modifier.size(20.dp))
-                            } else {
-                                Icon(
-                                    Icons.Rounded.Check,
-                                    contentDescription = stringResource(R.string.save_text)
-                                )
-                            }
-                        }
-                    }
+    CouiSubPage(
+        title = stringResource(
+            if (state.id.isBlank()) R.string.subscription_editor_add_title else R.string.subscription_editor_edit_title
+        ),
+        onBack = onBack,
+    ) {
+        if (state.loading) {
+            item { CouiGroup(first = true) { CouiRow(stringResource(R.string.loading), leading = { CouiLoading() }) } }
+            return@CouiSubPage
+        }
+        item {
+            CouiGroup(title = stringResource(R.string.subscription_editor_basic_section), first = true) {
+                CouiInputRow(
+                    stringResource(if (state.id.isBlank()) R.string.subscription_editor_name_auto else R.string.subscription_editor_name),
+                    draft.name, { value -> viewModel.update { it.copy(name = value) } },
+                )
+                TextArea(draft.url, { value -> viewModel.update { it.copy(url = value) } }, stringResource(R.string.subscription_editor_url))
+            }
+        }
+        item {
+            CouiGroup {
+                CouiMenuRow(
+                    title = stringResource(R.string.subscription_editor_update_interval),
+                    options = intervalLabels,
+                    selected = intervals.indexOf(draft.updateIntervalSeconds),
+                    onSelect = { index -> viewModel.update { it.copy(updateIntervalSeconds = intervals[index]) } },
+                )
+                CouiSwitchRow(
+                    stringResource(R.string.subscription_editor_auto_update), draft.autoUpdate,
+                    { enabled -> viewModel.update { it.copy(autoUpdate = enabled) } },
+                )
+                CouiMenuRow(
+                    title = stringResource(R.string.subscription_editor_update_network),
+                    options = viaLabels,
+                    selected = viaValues.indexOf(draft.updateViaProxy).coerceAtLeast(0),
+                    onSelect = { index -> viewModel.update { it.copy(updateViaProxy = viaValues[index]) } },
                 )
             }
-        },
-        contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)
-    ) { innerPadding ->
-        if (state.loading) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding), contentAlignment = Alignment.Center
-            ) {
-                InfiniteProgressIndicator()
+        }
+        item {
+            CouiGroup(title = stringResource(R.string.subscription_editor_filter_section)) {
+                CouiInputRow(stringResource(R.string.subscription_editor_include), draft.include,
+                    { value -> viewModel.update { it.copy(include = value) } })
+                CouiInputRow(stringResource(R.string.subscription_editor_exclude), draft.exclude,
+                    { value -> viewModel.update { it.copy(exclude = value) } })
+                CouiSwitchRow(
+                    stringResource(R.string.subscription_editor_allow_insecure), draft.allowInsecure,
+                    { enabled -> viewModel.update { it.copy(allowInsecure = enabled) } },
+                    summary = stringResource(R.string.subscription_editor_allow_insecure_summary),
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
-                    .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    .scrollEndHaptic()
-                    .overScrollVertical()
-                    .padding(horizontal = 12.dp),
-                contentPadding = PaddingValues(
-                    top = innerPadding.calculateTopPadding() + 12.dp,
-                    bottom = innerPadding.calculateBottomPadding() + 24.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                overscrollEffect = null
-            ) {
-                item { SectionLabel(stringResource(R.string.subscription_editor_basic_section)) }
-                item {
-                    TextField(
-                        value = draft.name,
-                        onValueChange = { value ->
-                            viewModel.update { it.copy(name = value) }
-                        },
-                        label = stringResource(
-                            if (state.id.isBlank()) R.string.subscription_editor_name_auto
-                            else R.string.subscription_editor_name
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-                item {
-                    TextField(
-                        value = draft.url,
-                        onValueChange = { value ->
-                            viewModel.update { it.copy(url = value) }
-                        },
-                        label = stringResource(R.string.subscription_editor_url),
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                        maxLines = 4
-                    )
-                }
-                item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        val intervals = subscriptionIntervalOptions(draft.updateIntervalSeconds)
-                        val intervalLabels = listOf(
-                            stringResource(R.string.subscription_duration_minutes, 15),
-                            stringResource(R.string.subscription_duration_hours, 1),
-                            stringResource(R.string.subscription_duration_hours, 6),
-                            stringResource(R.string.subscription_duration_hours, 12),
-                            stringResource(R.string.subscription_duration_hours, 24),
-                            stringResource(R.string.subscription_duration_days, 3),
-                            stringResource(R.string.subscription_duration_days, 7)
-                        ) + if (intervals.size > 7) {
-                            listOf(stringResource(R.string.subscription_interval_custom_seconds, draft.updateIntervalSeconds))
-                        } else emptyList()
-                        OverlayDropdownPreference(
-                            title = stringResource(R.string.subscription_editor_update_interval),
-                            items = intervalLabels,
-                            selectedIndex = intervals.indexOf(draft.updateIntervalSeconds),
-                            onSelectedIndexChange = { index ->
-                                viewModel.update {
-                                    it.copy(updateIntervalSeconds = intervals[index])
-                                }
-                            }
-                        )
-                        SwitchPreference(
-                            title = stringResource(R.string.subscription_editor_auto_update),
-                            checked = draft.autoUpdate,
-                            onCheckedChange = { enabled ->
-                                viewModel.update { it.copy(autoUpdate = enabled) }
-                            }
-                        )
-                        val viaValues = listOf("auto", "always", "never")
-                        OverlayDropdownPreference(
-                            title = stringResource(R.string.subscription_editor_update_network),
-                            items = listOf(
-                                stringResource(R.string.subscription_editor_network_auto),
-                                stringResource(R.string.subscription_editor_network_proxy),
-                                stringResource(R.string.subscription_editor_network_direct)
-                            ),
-                            selectedIndex = viaValues.indexOf(draft.updateViaProxy)
-                                .coerceAtLeast(0),
-                            onSelectedIndexChange = { index ->
-                                viewModel.update {
-                                    it.copy(updateViaProxy = viaValues[index])
-                                }
-                            }
-                        )
-                    }
-                }
-                item { SectionLabel(stringResource(R.string.subscription_editor_filter_section)) }
-                item {
-                    TextField(
-                        value = draft.include,
-                        onValueChange = { value ->
-                            viewModel.update { it.copy(include = value) }
-                        },
-                        label = stringResource(R.string.subscription_editor_include),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-                item {
-                    TextField(
-                        value = draft.exclude,
-                        onValueChange = { value ->
-                            viewModel.update { it.copy(exclude = value) }
-                        },
-                        label = stringResource(R.string.subscription_editor_exclude),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-                item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        SwitchPreference(
-                            title = stringResource(R.string.subscription_editor_allow_insecure),
-                            summary = stringResource(R.string.subscription_editor_allow_insecure_summary),
-                            checked = draft.allowInsecure,
-                            onCheckedChange = { enabled ->
-                                viewModel.update { it.copy(allowInsecure = enabled) }
-                            }
-                        )
-                    }
-                }
-                item { SectionLabel(stringResource(R.string.subscription_editor_advanced_section)) }
-                item {
-                    TextField(
-                        value = draft.userAgent,
-                        onValueChange = { value ->
-                            viewModel.update { it.copy(userAgent = value) }
-                        },
-                        label = stringResource(R.string.subscription_editor_user_agent),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-                item {
-                    TextField(
-                        value = draft.hwid,
-                        onValueChange = { value ->
-                            viewModel.update { it.copy(hwid = value) }
-                        },
-                        label = stringResource(R.string.subscription_editor_hwid),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-                item {
-                    TextField(
-                        value = state.headersText,
-                        onValueChange = viewModel::updateHeaders,
-                        label = stringResource(R.string.subscription_editor_headers),
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        maxLines = 8
-                    )
-                }
-                item {
-                    TextField(
-                        value = draft.timeoutSeconds.toString(),
-                        onValueChange = { value ->
-                            value.toIntOrNull()?.let { seconds ->
-                                viewModel.update { it.copy(timeoutSeconds = seconds) }
-                            }
-                        },
-                        label = stringResource(R.string.subscription_editor_timeout),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-                item {
-                    TextButton(
-                        text = if (state.saving) {
-                            stringResource(R.string.subscription_editor_validating_save)
-                        } else {
-                            stringResource(R.string.save_text)
-                        },
-                        enabled = !state.saving,
-                        colors = ButtonDefaults.textButtonColorsPrimary(),
-                        onClick = viewModel::save,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+        }
+        item {
+            CouiGroup(title = stringResource(R.string.subscription_editor_advanced_section)) {
+                CouiInputRow(stringResource(R.string.subscription_editor_user_agent), draft.userAgent,
+                    { value -> viewModel.update { it.copy(userAgent = value) } })
+                CouiInputRow(stringResource(R.string.subscription_editor_hwid), draft.hwid,
+                    { value -> viewModel.update { it.copy(hwid = value) } })
+                CouiInputRow(stringResource(R.string.subscription_editor_timeout), draft.timeoutSeconds.toString(),
+                    { value -> value.toIntOrNull()?.let { seconds -> viewModel.update { it.copy(timeoutSeconds = seconds) } } },
+                    numeric = true)
+                TextArea(state.headersText, viewModel::updateHeaders, stringResource(R.string.subscription_editor_headers))
             }
+        }
+        item {
+            CouiButton(
+                text = stringResource(if (state.saving) R.string.subscription_editor_validating_save else R.string.save_text),
+                onClick = viewModel::save,
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 24.dp),
+                enabled = !state.saving,
+            )
         }
     }
 }

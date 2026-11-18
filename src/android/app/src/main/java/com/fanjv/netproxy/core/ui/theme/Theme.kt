@@ -15,6 +15,12 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeColorSpec
 import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
 import top.yukonga.miuix.kmp.theme.ThemeController as MiuixThemeController
+import top.yukonga.miuix.kmp.theme.darkColorScheme
+import top.yukonga.miuix.kmp.theme.lightColorScheme
+import dev.aiingjie.coui.CouiColors
+import dev.aiingjie.coui.CouiDarkColors
+import dev.aiingjie.coui.CouiLightColors
+import dev.aiingjie.coui.cardOpaque
 
 /** 主题配色模式：跟随系统、浅色、深色，以及对应的 Monet 动态色与纯黑变体。 */
 enum class ColorMode(val value: Int) {
@@ -124,19 +130,13 @@ fun NetProxyTheme(
     val darkTheme =
         currentSettings.colorMode.isDark || (currentSettings.colorMode.isSystem && systemDarkTheme)
 
+    // 界面统一为 COUI 风格：尚未改写的 Miuix 页面也使用 COUI 的页面、卡片、文字与主色，
+    // 避免同一应用里出现两套配色。
     val controller = MiuixThemeController(
-        when (currentSettings.colorMode) {
-            ColorMode.SYSTEM -> ColorSchemeMode.System
-            ColorMode.LIGHT -> ColorSchemeMode.Light
-            ColorMode.DARK -> ColorSchemeMode.Dark
-            ColorMode.MONET_SYSTEM -> ColorSchemeMode.MonetSystem
-            ColorMode.MONET_LIGHT -> ColorSchemeMode.MonetLight
-            ColorMode.MONET_DARK, ColorMode.DARK_AMOLED -> ColorSchemeMode.MonetDark
-        },
-        keyColor = if (currentSettings.keyColor == 0) null else Color(currentSettings.keyColor),
+        if (darkTheme) ColorSchemeMode.Dark else ColorSchemeMode.Light,
+        lightColors = couiMiuixColors(CouiLightColors),
+        darkColors = couiMiuixColors(CouiDarkColors),
         isDark = darkTheme,
-        paletteStyle = currentSettings.paletteStyle,
-        colorSpec = currentSettings.colorSpec,
     )
 
     MiuixTheme(
@@ -150,6 +150,37 @@ fun NetProxyTheme(
             content = content,
         )
     }
+}
+
+/** 把 COUI 配色映射到 Miuix 的颜色角色。 */
+private fun couiMiuixColors(coui: CouiColors) = if (coui.isDark) {
+    darkColorScheme(
+        primary = coui.accent, onPrimary = Color.White,
+        primaryContainer = coui.accentSecondary, onPrimaryContainer = coui.accentText,
+        secondaryContainer = coui.container8, onSecondaryContainer = coui.label,
+        error = coui.error,
+        background = coui.page, onBackground = coui.label,
+        surface = coui.page, onSurface = coui.label,
+        onSurfaceSecondary = coui.labelSecondary, onSurfaceVariantSummary = coui.labelSecondary,
+        onSurfaceVariantActions = coui.labelSecondary,
+        surfaceContainer = coui.cardOpaque, onSurfaceContainer = coui.label,
+        surfaceContainerHigh = coui.surface, surfaceContainerHighest = coui.surfaceTop,
+        dividerLine = coui.divider, outline = coui.divider,
+    )
+} else {
+    lightColorScheme(
+        primary = coui.accent, onPrimary = Color.White,
+        primaryContainer = coui.accentSecondary, onPrimaryContainer = coui.accentText,
+        secondaryContainer = coui.container8, onSecondaryContainer = coui.label,
+        error = coui.error,
+        background = coui.page, onBackground = coui.label,
+        surface = coui.page, onSurface = coui.label,
+        onSurfaceSecondary = coui.labelSecondary, onSurfaceVariantSummary = coui.labelSecondary,
+        onSurfaceVariantActions = coui.labelSecondary,
+        surfaceContainer = coui.cardOpaque, onSurfaceContainer = coui.label,
+        surfaceContainerHigh = coui.surface, surfaceContainerHighest = coui.surfaceTop,
+        dividerLine = coui.divider, outline = coui.divider,
+    )
 }
 
 /** 当前是否处于深色主题（供 Composable 只读读取）。 */

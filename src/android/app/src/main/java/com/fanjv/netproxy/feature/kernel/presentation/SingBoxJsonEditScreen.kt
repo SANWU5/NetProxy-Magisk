@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -45,7 +43,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,13 +50,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fanjv.netproxy.R
-import com.fanjv.netproxy.core.ui.component.AppSnackbarHost
-import com.fanjv.netproxy.core.ui.component.BackIconButton
-import com.fanjv.netproxy.core.ui.component.BlurredBar
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.text.BasicText
+import dev.aiingjie.coui.Coui
+import dev.aiingjie.coui.CouiBarButton
+import dev.aiingjie.coui.CouiDimens
+import dev.aiingjie.coui.CouiGlyph
+import dev.aiingjie.coui.CouiLoading
+import dev.aiingjie.coui.LocalCouiOverlay
 import com.fanjv.netproxy.core.ui.component.JsonSyntaxHighlighter
-import com.fanjv.netproxy.core.ui.component.rememberAppSnackbarHostState
-import com.fanjv.netproxy.core.ui.component.rememberBlurBackdrop
-import com.fanjv.netproxy.core.ui.theme.LocalEnableBlur
 import com.fanjv.netproxy.core.ui.theme.isInDarkTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -69,15 +70,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonObject
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.scripta.editor.CodeEditor
@@ -100,7 +94,7 @@ internal fun SingBoxJsonEditScreen(
     val controller = rememberSaveableCodeEditorController()
     val highlighter = remember { JsonSyntaxHighlighter() }
     val context = LocalContext.current
-    val snackbarHostState = rememberAppSnackbarHostState()
+    val overlay = LocalCouiOverlay.current
     val resources = LocalResources.current
     val languageTags = LocalConfiguration.current.locales.toLanguageTags()
     val schemaContext = remember(context, languageTags) {
@@ -274,9 +268,7 @@ internal fun SingBoxJsonEditScreen(
             } else if (result.success) {
                 documentRevision = result.revision
                 controller.markSaved(version)
-                coroutineScope.launch {
-                    snackbarHostState.showSnackbar(savedMessage)
-                }
+                overlay.showSnack(savedMessage)
             } else {
                 saveErrorText = if (result.errorCode == "config.conflict") {
                     resources.getString(R.string.inbound_conflict)
@@ -372,49 +364,34 @@ internal fun SingBoxJsonEditScreen(
         onBack = ::requestBack,
     )
 
-    val enableBlur = LocalEnableBlur.current
-    val backdrop = rememberBlurBackdrop(enableBlur)
-    val barColor = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface
-    val layoutDirection = LocalLayoutDirection.current
-
-    Scaffold(
-        snackbarHost = { AppSnackbarHost(snackbarHostState) },
-        topBar = {
-            BlurredBar(backdrop) {
-                SmallTopAppBar(
-                    title = displayFilename,
-                    color = barColor,
-                    navigationIcon = { BackIconButton(onClick = ::requestBack) },
-                    actions = {
-                        IconButton(enabled = canSave, onClick = ::saveDocument) {
-                            if (isSaving) {
-                                CircularProgressIndicator(size = 20.dp, strokeWidth = 2.dp)
-                            } else {
-                                Icon(
-                                    imageVector = MiuixIcons.Ok,
-                                    contentDescription = stringResource(R.string.save_text),
-                                    tint = if (canSave) MiuixTheme.colorScheme.onSurface
-                                    else MiuixTheme.colorScheme.disabledOnSecondaryVariant,
-                                )
-                            }
-                        }
-                    },
-                )
-            }
-        },
-        contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout)
-            .only(WindowInsetsSides.Horizontal),
-    ) { innerPadding ->
-        Column(
+    val colors = Coui.colors
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.page)
+            .windowInsetsPadding(WindowInsets.systemBars.add(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal)),
+    ) {
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
-                .padding(
-                    start = innerPadding.calculateStartPadding(layoutDirection),
-                    top = innerPadding.calculateTopPadding(),
-                    end = innerPadding.calculateEndPadding(layoutDirection),
-                ),
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .height(CouiDimens.barHeight)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            CouiBarButton(CouiGlyph.Back, stringResource(R.string.back), ::requestBack)
+            BasicText(
+                displayFilename,
+                Modifier.weight(1f).padding(start = 4.dp),
+                style = Coui.type.barTitle.copy(color = colors.label),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (isSaving) CouiLoading()
+            else CouiBarButton(CouiGlyph.Check, stringResource(R.string.save_text), ::saveDocument, enabled = canSave)
+        }
+        Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
             val statusText = when {
                 configState.documentLoadError -> stringResource(R.string.json_load_failed)
                 !hasLoaded -> stringResource(R.string.collecting_data)
@@ -441,9 +418,9 @@ internal fun SingBoxJsonEditScreen(
                     saveErrorText.isNotEmpty() ||
                     configState.documentLoadError
                 ) {
-                    MiuixTheme.colorScheme.error
+                    colors.error
                 } else {
-                    MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    colors.labelSecondary
                 }
                 val contextPath = contextHelp?.path
                     ?.takeIf { schemaIssues.isEmpty() && it.isNotBlank() }
@@ -466,20 +443,18 @@ internal fun SingBoxJsonEditScreen(
                         .padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = summaryText,
-                        color = statusColor,
-                        fontSize = 13.sp,
+                    BasicText(
+                        summaryText,
+                        Modifier.weight(1f),
+                        style = Coui.type.rowSummary.copy(color = statusColor),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
                     )
                     if (schemaIssues.isNotEmpty()) {
-                        Text(
-                            text = stringResource(R.string.json_view_issues),
-                            color = statusColor,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(start = 12.dp),
+                        BasicText(
+                            stringResource(R.string.json_view_issues),
+                            Modifier.padding(start = 12.dp),
+                            style = Coui.type.rowSummary.copy(color = statusColor),
                         )
                     }
                 }

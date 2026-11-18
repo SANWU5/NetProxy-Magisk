@@ -187,8 +187,9 @@ internal fun CatalogNodesScreen(
                         state.loading -> CouiRow(stringResource(R.string.loading), leading = { CouiLoading() })
                         else -> CouiRow(stringResource(if (state.loadFailed) R.string.nodes_read_failed else R.string.node_empty))
                     }
-                    CouiRow(singleLinkText, onClick = ::showAddLink)
-                    CouiRow(localFileText, onClick = { fileLauncher.launch(arrayOf("*/*")) })
+                    CouiRow(singleLinkText, summary = stringResource(R.string.node_single_link_summary), onClick = ::showAddLink)
+                    CouiRow(localFileText, summary = stringResource(R.string.node_local_file_summary),
+                        onClick = { fileLauncher.launch(arrayOf("*/*")) })
                 }
             }
             return@CouiLargeTitlePage
@@ -198,16 +199,18 @@ internal fun CatalogNodesScreen(
         item {
             CouiGroup(first = true) {
                 if (state.groups.size > 1) {
+                    val localName = stringResource(R.string.node_local_config)
                     CouiMenuRow(
                         title = stringResource(R.string.node_group),
-                        options = state.groups.map { it.group.name },
+                        // 内置的本地配置组名称写在模块数据里，按界面语言显示。
+                        options = state.groups.map { if (it.group.id == "default") localName else it.group.name },
                         selected = selectedIndex,
                         onSelect = { index -> state.groups.getOrNull(index)?.group?.id?.let(viewModel::selectGroup) },
                     )
                 }
                 CouiRow(
                     title = stringResource(R.string.node_auto_fastest),
-                    summary = selectedAutoNode.takeIf { autoSelected && it.isNotBlank() },
+                    summary = selectedAutoNode.takeIf { autoSelected && it.isNotBlank() } ?: stringResource(R.string.node_auto_test),
                     enabled = !busy && selectedGroup.nodes.isNotEmpty(),
                     role = Role.RadioButton,
                     onClick = { viewModel.useAuto(groupId) },

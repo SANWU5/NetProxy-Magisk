@@ -98,3 +98,44 @@ func TestUpdatePersistsAndLoadRoundTrips(t *testing.T) {
 		t.Fatal("invalid update accepted")
 	}
 }
+
+func TestManualSelectionFollowsMembership(t *testing.T) {
+	hk1, hk2 := ref("sub", "HK01"), ref("sub", "HK02")
+	group := Group{ID: "custom-pick", Name: "自选", Kind: KindCustom, Members: []NodeRef{hk1, hk2}, Manual: &hk2}
+	doc := Document{Groups: []Group{group}}
+	if err := doc.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	clone := doc.Clone()
+	clone.Groups[0].Manual.Node = "changed"
+	if doc.Groups[0].Manual.Node != "HK02" {
+		t.Fatal("Clone 必须深拷贝手动选择")
+	}
+	group.SetMembers([]NodeRef{hk2, hk1})
+	if group.Manual == nil || *group.Manual != hk2 {
+		t.Fatalf("节点仍在分组中时必须保留手动选择: %+v", group.Manual)
+	}
+	group.SetMembers([]NodeRef{hk1})
+	if group.Manual != nil {
+		t.Fatal("手动选择的节点移出分组后必须回到自动选择")
+	}
+	invalid := Document{Groups: []Group{{ID: "custom-bad", Name: "无效", Kind: KindCustom, Members: []NodeRef{hk1}, Manual: &hk2}}}
+	if invalid.Validate() == nil {
+		t.Fatal("手动选择必须是分组成员")
+	}
+
+	// 重新智能分组：节点仍属于这个地区时保留手动选择，不再属于时回到自动选择。
+	generated, _ := Generate(Document{}, []Source{{GroupID: "sub", Tags: []string{"HK01", "HK02"}}}, false, now)
+	generated.Groups[generated.Find("smart-hk")].Manual = &hk2
+	kept, _ := Generate(generated, []Source{{GroupID: "sub", Tags: []string{"HK01", "HK02", "JP01"}}}, false, now)
+	if manual := kept.Groups[kept.Find("smart-hk")].Manual; manual == nil || *manual != hk2 {
+		t.Fatalf("重新分组后节点仍在地区内，手动选择必须保留: %+v", manual)
+	}
+	dropped, _ := Generate(generated, []Source{{GroupID: "sub", Tags: []string{"HK01"}}}, false, now)
+	if dropped.Groups[dropped.Find("smart-hk")].Manual != nil || dropped.Validate() != nil {
+		t.Fatal("重新分组后节点不在地区内，必须回到自动选择")
+	}
+	if group.AutoTag() != "SmartAuto/自选" || group.RuntimeTag() != "Smart/自选" {
+		t.Fatalf("运行时标签错误: %s %s", group.RuntimeTag(), group.AutoTag())
+	}
+}

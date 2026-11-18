@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -30,9 +31,13 @@ type SmartGroupView struct {
 	Available int `json:"available"`
 	// Edited 表示地区分组有手动加入或移除的节点，重新智能分组时会保留这些修改。
 	Edited bool `json:"edited,omitzero"`
-	// Selected 是自动选择当前使用的节点（运行时出站标签），Delay 是它最近一次测速的延迟。
+	// Manual 是分组内手动选择且仍然存在的节点；为空表示分组使用自动选择。
+	Manual *smartgroup.NodeRef `json:"manual,omitzero"`
+	// Selected 是分组当前实际使用的节点（运行时出站标签），Delay 是它最近一次测速的延迟。
 	Selected string `json:"selected,omitzero"`
 	Delay    int32  `json:"delay,omitzero"`
+	// Delays 是成员最近一次测速的延迟，键为「来源分组 id/节点名」；-1 表示刚才的测速失败或超时。
+	Delays map[string]int32 `json:"delays,omitzero"`
 }
 
 // SmartGroupsView 是智能分组页面的完整快照。
@@ -47,7 +52,7 @@ type SmartGroupsView struct {
 func smartRuntime(document smartgroup.Document) []catalog.SmartGroup {
 	groups := make([]catalog.SmartGroup, 0, len(document.Groups))
 	for _, group := range document.Groups {
-		definition := catalog.SmartGroup{ID: group.ID, Tag: group.RuntimeTag()}
+		definition := catalog.SmartGroup{ID: group.ID, Tag: group.RuntimeTag(), AutoTag: group.AutoTag()}
 		for _, member := range group.Effective() {
 			definition.Members = append(definition.Members, catalog.SmartMember{GroupID: member.GroupID, Node: member.Node})
 		}
@@ -56,19 +61,19 @@ func smartRuntime(document smartgroup.Document) []catalog.SmartGroup {
 	return groups
 }
 
-// catalogNodes 返回全部节点分组的节点，作为智能分组的来源与成员可用性依据。
-func catalogNodes(ctx context.Context, options Options) ([]smartgroup.Source, map[smartgroup.NodeRef]struct{}, error) {
+// catalogNodes 返回全部节点分组的节点，作为智能分组的来源；present 把仍然存在的节点映射到它的运行时出站标签。
+func catalogNodes(ctx context.Context, options Options) ([]smartgroup.Source, map[smartgroup.NodeRef]string, error) {
 	groups, err := catalog.Scan(ctx, catalog.ScanOptions{Root: options.CatalogRoot, WithNodes: true})
 	if err != nil {
 		return nil, nil, err
 	}
 	sources := make([]smartgroup.Source, 0, len(groups))
-	present := make(map[smartgroup.NodeRef]struct{})
+	present := make(map[smartgroup.NodeRef]string)
 	for _, group := range groups {
 		source := smartgroup.Source{GroupID: group.Group.ID}
 		for _, node := range group.Nodes {
 			source.Tags = append(source.Tags, node.Tag)
-			present[smartgroup.NodeRef{GroupID: group.Group.ID, Node: node.Tag}] = struct{}{}
+			present[smartgroup.NodeRef{GroupID: group.Group.ID, Node: node.Tag}] = group.Group.RuntimeTag + "/" + node.Tag
 		}
 		sources = append(sources, source)
 	}
@@ -81,10 +86,11 @@ func ReadSmartGroups(ctx context.Context, options Options) (SmartGroupsView, err
 	if err != nil {
 		return SmartGroupsView{}, err
 	}
-	return smartView(ctx, options, document)
+	return smartView(ctx, options, document, nil)
 }
 
-func smartView(ctx context.Context, options Options, document smartgroup.Document) (SmartGroupsView, error) {
+// smartView 合并持久分组与运行时选择；tested 是刚完成的测速结果（运行时出站标签到延迟），覆盖测速记录。
+func smartView(ctx context.Context, options Options, document smartgroup.Document, tested map[string]int32) (SmartGroupsView, error) {
 	_, present, err := catalogNodes(ctx, options)
 	if err != nil {
 		return SmartGroupsView{}, err
@@ -105,10 +111,18 @@ func smartView(ctx context.Context, options Options, document smartgroup.Documen
 				available++
 			}
 		}
-		view.Groups = append(view.Groups, SmartGroupView{
+		item := SmartGroupView{
 			ID: group.ID, Name: group.Name, Kind: group.Kind, Region: group.Region, Members: members,
 			Available: available, Edited: len(group.Added)+len(group.Removed) > 0,
-		})
+		}
+		// 手动选择的节点被订阅移除后，运行时由选择同步改用自动选择，页面也按自动选择显示。
+		if group.Manual != nil {
+			if _, ok := present[*group.Manual]; ok {
+				manual := *group.Manual
+				item.Manual = &manual
+			}
+		}
+		view.Groups = append(view.Groups, item)
 	}
 	if !service.ProcessRunning(options.SingBoxPath) {
 		return view, nil
@@ -126,20 +140,34 @@ func smartView(ctx context.Context, options Options, document smartgroup.Documen
 		// 运行时信息只用于展示自动选择的结果，读取失败时仍返回持久分组。
 		return view, nil
 	}
-	runtime := make(map[string]serviceapi.Group, len(groups))
+	delays := make(map[string]int32)
 	for _, group := range groups {
-		runtime[group.Tag] = group
-	}
-	for index := range view.Groups {
-		group, ok := runtime[smartgroup.TagPrefix+view.Groups[index].Name]
-		if !ok {
-			continue
-		}
-		view.Groups[index].Selected = group.Selected
 		for _, item := range group.Items {
-			if item.Tag == group.Selected && item.URLTestTime > 0 {
-				view.Groups[index].Delay = item.URLTestDelay
+			if item.URLTestTime > 0 {
+				delays[item.Tag] = item.URLTestDelay
 			}
+		}
+	}
+	maps.Copy(delays, tested)
+	for index, group := range document.Groups {
+		item := &view.Groups[index]
+		item.Selected = serviceapi.ResolveSelected(groups, group.RuntimeTag())
+		if delay, ok := delays[item.Selected]; ok {
+			item.Delay = delay
+		}
+		for _, member := range item.Members {
+			tag, ok := present[member]
+			if !ok {
+				continue
+			}
+			delay, ok := delays[tag]
+			if !ok {
+				continue
+			}
+			if item.Delays == nil {
+				item.Delays = make(map[string]int32)
+			}
+			item.Delays[member.GroupID+"/"+member.Node] = delay
 		}
 	}
 	return view, nil
@@ -229,7 +257,7 @@ func updateSmart(ctx context.Context, options Options, code, message string, mut
 			}, restoreErr)
 		}
 	}
-	return smartView(ctx, options, after)
+	return smartView(ctx, options, after, nil)
 }
 
 // clearSmartReferences 把引用已删除分组的节点页选择与链式前置改回普通选择。
@@ -259,8 +287,17 @@ func clearSmartReferences(ctx context.Context, options Options, document smartgr
 	return err
 }
 
-// SelectSmartGroup 让节点页使用智能分组的自动选择，并在服务运行时同步选择器。
-func SelectSmartGroup(ctx context.Context, options Options, id string) (data map[string]string, err error) {
+// SelectSmartGroup 从外部选择分组：节点页改用这个分组，沿用分组内手动选择的节点，从未手动选择过时使用自动选择。
+func SelectSmartGroup(ctx context.Context, options Options, id string) (map[string]string, error) {
+	return selectSmart(ctx, options, id, nil, false)
+}
+
+// SelectSmartNode 在分组内选择节点（manual 为空表示改用分组的自动选择），并让节点页使用这个分组。
+func SelectSmartNode(ctx context.Context, options Options, id string, manual *smartgroup.NodeRef) (map[string]string, error) {
+	return selectSmart(ctx, options, id, manual, true)
+}
+
+func selectSmart(ctx context.Context, options Options, id string, manual *smartgroup.NodeRef, setManual bool) (data map[string]string, err error) {
 	persisted := false
 	defer func() { logOperation(options, "node", "node.select", "节点选择", persisted, err) }()
 	if err := options.validate(); err != nil {
@@ -299,6 +336,34 @@ func SelectSmartGroup(ctx context.Context, options Options, id string) (data map
 	if !slices.ContainsFunc(group.Effective(), func(ref smartgroup.NodeRef) bool { _, ok := present[ref]; return ok }) {
 		return nil, &service.Error{Code: "smart.empty", Message: "这个分组目前没有可用节点，请编辑分组或重新智能分组"}
 	}
+	if setManual {
+		if manual != nil {
+			if !slices.Contains(group.Effective(), *manual) {
+				return nil, &smartgroup.InvalidError{Err: fmt.Errorf("节点 %q 不在分组 %q 中", manual.Node, group.Name)}
+			}
+			if _, ok := present[*manual]; !ok {
+				return nil, &service.Error{Code: "smart.node_unavailable", Message: fmt.Sprintf("节点 %q 已不存在，请刷新后重新选择", manual.Node)}
+			}
+		}
+		if !sameNodeRef(group.Manual, manual) {
+			_, _, err := smartgroup.Update(ctx, options.smartDir(), func(document *smartgroup.Document) error {
+				index := document.Find(id)
+				if index < 0 {
+					return ErrSmartGroupNotFound
+				}
+				document.Groups[index].Manual = nil
+				if manual != nil {
+					value := *manual
+					document.Groups[index].Manual = &value
+				}
+				return nil
+			})
+			if err != nil {
+				return nil, err
+			}
+			persisted = true
+		}
+	}
 	selection := module.Selection
 	selection.SmartGroupID = id
 	if selection != module.Selection {
@@ -323,7 +388,12 @@ func SelectSmartGroup(ctx context.Context, options Options, id string) (data map
 	return data, nil
 }
 
-// TestSmartGroups 让分组的自动选择重新测速；id 为空时测试全部分组。
+func sameNodeRef(left, right *smartgroup.NodeRef) bool {
+	return left == right || (left != nil && right != nil && *left == *right)
+}
+
+// TestSmartGroups 让分组的自动选择重新测试全部成员；id 为空时测试全部分组。
+// 成员结果按测速记录判断：记录更新为成功，记录被删除或超时仍未更新为失败（-1）。
 func TestSmartGroups(ctx context.Context, options Options, id string) (SmartGroupsView, error) {
 	document, err := smartgroup.Load(ctx, options.smartDir())
 	if err != nil {
@@ -340,7 +410,7 @@ func TestSmartGroups(ctx context.Context, options Options, id string) (SmartGrou
 		return SmartGroupsView{}, err
 	}
 	defer client.Close()
-	testContext, cancel := context.WithTimeout(ctx, 20*time.Second)
+	testContext, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 	groups, err := client.Groups(testContext)
 	if err != nil {
@@ -348,7 +418,7 @@ func TestSmartGroups(ctx context.Context, options Options, id string) (SmartGrou
 	}
 	members := make(map[string][]string)
 	for _, group := range groups {
-		if strings.HasPrefix(group.Tag, smartgroup.TagPrefix) {
+		if strings.HasPrefix(group.Tag, smartgroup.AutoTagPrefix) {
 			for _, item := range group.Items {
 				members[group.Tag] = append(members[group.Tag], item.Tag)
 			}
@@ -358,37 +428,18 @@ func TestSmartGroups(ctx context.Context, options Options, id string) (SmartGrou
 	if err != nil {
 		return SmartGroupsView{}, err
 	}
-	var tested [][]string
+	var targets []string
 	for _, group := range document.Groups {
-		tag := group.RuntimeTag()
+		tag := group.AutoTag()
 		if (id != "" && group.ID != id) || len(members[tag]) == 0 {
 			continue
 		}
 		if err := client.URLTest(testContext, tag); err != nil {
 			return SmartGroupsView{}, err
 		}
-		tested = append(tested, members[tag])
+		targets = append(targets, members[tag]...)
 	}
-	// 自动选择会测试全部成员；每个分组至少有一个成员出结果后，自动选择就已经更新。
-	poll := time.NewTicker(400 * time.Millisecond)
-	defer poll.Stop()
-	deadline := time.NewTimer(10 * time.Second)
-	defer deadline.Stop()
-	for waiting := len(tested) > 0; waiting; {
-		select {
-		case <-testContext.Done():
-			waiting = false
-		case <-deadline.C:
-			waiting = false
-		case <-poll.C:
-			current, err := urlTestTimes(testContext, client)
-			if err != nil {
-				continue
-			}
-			waiting = slices.ContainsFunc(tested, func(tags []string) bool {
-				return !slices.ContainsFunc(tags, func(tag string) bool { return current[tag] > before[tag] })
-			})
-		}
-	}
-	return smartView(ctx, options, document)
+	slices.Sort(targets)
+	results := waitURLTests(testContext, client, slices.Compact(targets), before, 15*time.Second)
+	return smartView(ctx, options, document, results)
 }

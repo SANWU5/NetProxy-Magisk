@@ -92,6 +92,30 @@ type Group struct {
 	Items      []GroupItem `json:"items"`
 }
 
+// ResolveSelected 从分组 group 出发沿选择链找到实际使用的节点，例如 Proxy → 智能分组 → 自动选择 → 节点。
+// 分组不存在、尚未选择或链条过深时返回空。
+func ResolveSelected(groups []Group, group string) string {
+	selected := make(map[string]string, len(groups))
+	for _, item := range groups {
+		selected[item.Tag] = item.Selected
+	}
+	if _, isGroup := selected[group]; !isGroup {
+		return ""
+	}
+	current := group
+	for range 8 {
+		next, isGroup := selected[current]
+		if !isGroup {
+			return current
+		}
+		if next == "" {
+			return ""
+		}
+		current = next
+	}
+	return ""
+}
+
 type emptyMessage struct{}
 type versionResponse Version
 type startedAtResponse struct{ UnixMilli int64 }

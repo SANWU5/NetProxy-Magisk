@@ -658,13 +658,9 @@ func SelectionFromRuntimeGroups(module moduleconfig.ModuleConfig, groups []catal
 	group := smart.Groups[index]
 	selection.SelectorMode = "smart"
 	selection.SmartGroupID, selection.SmartGroupName = group.ID, group.Name
-	selection.Selected, selection.RuntimeSelected = group.RuntimeTag(), ""
-	for _, runtimeGroup := range runtimeGroups {
-		if runtimeGroup.Tag == group.RuntimeTag() {
-			selection.RuntimeSelected = runtimeGroup.Selected
-			break
-		}
-	}
+	// 智能分组是选择器，自动选择时再经过分组内置的 URLTest，沿选择链找到实际节点。
+	selection.Selected = group.RuntimeTag()
+	selection.RuntimeSelected = serviceapi.ResolveSelected(runtimeGroups, group.RuntimeTag())
 	return selection
 }
 
@@ -851,8 +847,8 @@ func mergeRuntimeStatus(ctx context.Context, options Options, status *Status, ac
 		if group.Tag != runtimeGroup {
 			continue
 		}
-		status.RuntimeSelected = group.Selected
-		if status.RuntimeSelected == "" && len(active.Nodes) == 1 {
+		status.RuntimeSelected = serviceapi.ResolveSelected(groups, runtimeGroup)
+		if status.RuntimeSelected == "" && status.smartTag == "" && len(active.Nodes) == 1 {
 			status.RuntimeSelected = active.Group.RuntimeTag + "/" + active.Nodes[0].Tag
 		}
 		break

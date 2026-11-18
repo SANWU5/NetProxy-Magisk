@@ -281,6 +281,23 @@ func TestResourcesSmartGroupsAndChainFront(t *testing.T) {
 	if selection.SelectorMode != "smart" || selection.SmartGroupName != "🇭🇰 香港" || selection.Selected != "Smart/🇭🇰 香港" {
 		t.Fatalf("智能分组未成为节点选择: %+v", selection)
 	}
+	// 分组内手动选择节点并记住；省略 manual 时回到分组的自动选择。
+	resourceAssertSuccess(t, server, "PUT", "/api/v1/smart-groups/smart-hk/selection", `{"manual":{"group_id":"default","node":"🇭🇰香港 01"}}`, "node.selected", nil)
+	view = module.SmartGroupsView{}
+	resourceAssertSuccess(t, server, "GET", "/api/v1/smart-groups", "", "smart.list", &view)
+	if hk := view.Groups[0]; view.Active != "smart-hk" || hk.Manual == nil || *hk.Manual != (smartgroup.NodeRef{GroupID: "default", Node: "🇭🇰香港 01"}) {
+		t.Fatalf("分组内的手动选择未保存: %+v", view)
+	}
+	response, result := resourceRequest(t, server, "PUT", "/api/v1/smart-groups/smart-hk/selection", `{"manual":{"group_id":"default","node":"不在分组"}}`)
+	if response.Code != http.StatusUnprocessableEntity || result.Code != "smart.invalid" {
+		t.Fatalf("不在分组中的节点应被拒绝: %s", response.Body.String())
+	}
+	resourceAssertSuccess(t, server, "PUT", "/api/v1/smart-groups/smart-hk/selection", `{}`, "node.selected", nil)
+	view = module.SmartGroupsView{}
+	resourceAssertSuccess(t, server, "GET", "/api/v1/smart-groups", "", "smart.list", &view)
+	if view.Groups[0].Manual != nil {
+		t.Fatalf("改回自动选择后不应保留手动节点: %+v", view.Groups[0])
+	}
 	var saved struct {
 		Smart module.SmartGroupsView `json:"smart"`
 		ID    string                 `json:"id"`
@@ -294,7 +311,7 @@ func TestResourcesSmartGroupsAndChainFront(t *testing.T) {
 	if chainView.FrontSetting == nil || chainView.FrontSetting.SmartID != saved.ID {
 		t.Fatalf("前置未保存: %+v", chainView)
 	}
-	response, result := resourceRequest(t, server, "PUT", "/api/v1/chain/front", `{"group_id":"default","node":"不存在"}`)
+	response, result = resourceRequest(t, server, "PUT", "/api/v1/chain/front", `{"group_id":"default","node":"不存在"}`)
 	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(result.Message, "前置") {
 		t.Fatalf("不存在的前置节点应被拒绝: %s", response.Body.String())
 	}

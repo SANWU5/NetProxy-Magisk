@@ -425,3 +425,29 @@ func TestSubscribeClashModeCancellationAndConsumerError(t *testing.T) {
 		t.Fatal("未传播消费方退出", err)
 	}
 }
+
+func TestResolveSelectedFollowsNestedGroups(t *testing.T) {
+	groups := []Group{
+		{Tag: "Proxy", Selected: "Smart/香港"},
+		{Tag: "Smart/香港", Selected: "SmartAuto/香港"},
+		{Tag: "SmartAuto/香港", Selected: "机场/香港 01"},
+		{Tag: "Smart/日本", Selected: "机场/日本 02"},
+		{Tag: "SmartAuto/空", Selected: ""},
+	}
+	for _, test := range []struct{ group, want string }{
+		{"Proxy", "机场/香港 01"},
+		{"Smart/香港", "机场/香港 01"},
+		{"Smart/日本", "机场/日本 02"},
+		{"SmartAuto/空", ""},
+		{"机场/香港 01", ""},
+		{"不存在", ""},
+	} {
+		if got := ResolveSelected(groups, test.group); got != test.want {
+			t.Fatalf("ResolveSelected(%q) = %q, want %q", test.group, got, test.want)
+		}
+	}
+	loop := []Group{{Tag: "A", Selected: "B"}, {Tag: "B", Selected: "A"}}
+	if got := ResolveSelected(loop, "A"); got != "" {
+		t.Fatalf("循环选择必须返回空: %q", got)
+	}
+}

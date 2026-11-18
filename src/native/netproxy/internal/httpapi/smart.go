@@ -77,6 +77,18 @@ func (s *Server) deleteSmartGroup(ctx context.Context, r *http.Request) (contrac
 	return contract.Success("smart.deleted", "分组已删除", view), smartError(err)
 }
 
+// selectSmartGroupNode 在分组内选择节点；省略 manual 表示改用分组的自动选择。节点页随之改用这个分组。
+func (s *Server) selectSmartGroupNode(ctx context.Context, r *http.Request) (contract.Result, error) {
+	var input struct {
+		Manual *smartgroup.NodeRef `json:"manual"`
+	}
+	if err := resourceDecode(r, &input); err != nil {
+		return contract.Result{}, err
+	}
+	data, err := module.SelectSmartNode(ctx, s.options, r.PathValue("id"), input.Manual)
+	return contract.Success("node.selected", "节点选择已更新", data), smartError(err)
+}
+
 func (s *Server) testSmartGroups(ctx context.Context, r *http.Request) (contract.Result, error) {
 	var input struct {
 		ID string `json:"id"`

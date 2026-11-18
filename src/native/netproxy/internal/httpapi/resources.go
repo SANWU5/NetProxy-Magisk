@@ -63,6 +63,7 @@ func (s *Server) registerResources() {
 	s.route("POST /api/v1/smart-groups/generate", resourceWriteTimeout, true, s.generateSmartGroups)
 	s.route("POST /api/v1/smart-groups/delay", resourceWriteTimeout, true, s.testSmartGroups)
 	s.route("PUT /api/v1/smart-groups/{id}", resourceWriteTimeout, true, s.saveSmartGroup)
+	s.route("PUT /api/v1/smart-groups/{id}/selection", resourceWriteTimeout, true, s.selectSmartGroupNode)
 	s.route("DELETE /api/v1/smart-groups/{id}", resourceWriteTimeout, true, s.deleteSmartGroup)
 	s.route("POST /api/v1/chain/policies", resourceWriteTimeout, true, s.addChainPolicy)
 	s.route("PUT /api/v1/chain/policies/{id}", resourceWriteTimeout, true, s.saveChainPolicy)
@@ -277,7 +278,7 @@ func (s *Server) saveSelection(ctx context.Context, r *http.Request) (contract.R
 	var input struct {
 		GroupID string `json:"group_id"`
 		NodeTag string `json:"node_tag"`
-		// SmartGroupID 不为空时选择智能分组的自动选择，忽略 group_id 与 node_tag。
+		// SmartGroupID 不为空时选择智能分组（沿用分组内的手动或自动选择），忽略 group_id 与 node_tag。
 		SmartGroupID string `json:"smart_group_id"`
 	}
 	if err := resourceDecode(r, &input); err != nil {

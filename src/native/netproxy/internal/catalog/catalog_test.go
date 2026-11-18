@@ -393,11 +393,11 @@ func TestBuildRuntimeSmartGroups(t *testing.T) {
 		OutboundsOutput: filepath.Join(runtimeDir, "outbounds.json"),
 		Selection:       moduleconfig.Selection{ActiveGroupID: "default", SmartGroupID: "custom-asia"},
 		Smart: []SmartGroup{
-			{ID: "custom-asia", Tag: "Smart/亚洲", Members: []SmartMember{
+			{ID: "custom-asia", Tag: "Smart/亚洲", AutoTag: "SmartAuto/亚洲", Members: []SmartMember{
 				{GroupID: "default", Node: "香港 01"}, {GroupID: "local", Node: "日本"},
 				{GroupID: "default", Node: "已删除"}, {GroupID: "missing", Node: "x"},
 			}},
-			{ID: "custom-empty", Tag: "Smart/空", Members: []SmartMember{{GroupID: "default", Node: "已删除"}}},
+			{ID: "custom-empty", Tag: "Smart/空", AutoTag: "SmartAuto/空", Members: []SmartMember{{GroupID: "default", Node: "已删除"}}},
 		},
 		Chain: &ChainOutbounds{
 			FrontTag: "链式前置", SelectorTag: "链式代理",
@@ -425,16 +425,24 @@ func TestBuildRuntimeSmartGroups(t *testing.T) {
 	for index, outbound := range document.Outbounds {
 		byTag[outbound.Tag] = index
 	}
-	if _, exists := byTag["Smart/空"]; exists {
-		t.Fatal("没有可用成员的分组不能生成出站")
+	for _, tag := range []string{"Smart/空", "SmartAuto/空"} {
+		if _, exists := byTag[tag]; exists {
+			t.Fatalf("没有可用成员的分组不能生成出站: %s", tag)
+		}
+	}
+	// 分组本身是选择器：第一个选项是内置的自动选择并默认使用它，其余选项是精确匹配的成员。
+	auto := document.Outbounds[byTag["SmartAuto/亚洲"]]
+	if auto.Type != "urltest" || strings.Join(auto.Providers, ",") != "机场,本地" || auto.Include != `^(?:机场/香港 01|本地/日本)$` {
+		t.Fatalf("智能分组的自动选择错误: %#v", auto)
 	}
 	smart := document.Outbounds[byTag["Smart/亚洲"]]
-	if smart.Type != "urltest" || strings.Join(smart.Providers, ",") != "机场,本地" || smart.Include != `^(?:机场/香港 01|本地/日本)$` {
-		t.Fatalf("智能分组出站错误: %#v", smart)
+	if smart.Type != "selector" || strings.Join(smart.Outbounds, ",") != "SmartAuto/亚洲" || smart.Default != "SmartAuto/亚洲" ||
+		strings.Join(smart.Providers, ",") != "机场,本地" || smart.Include != auto.Include {
+		t.Fatalf("智能分组选择器错误: %#v", smart)
 	}
 	proxy := document.Outbounds[byTag["Proxy"]]
-	if proxy.Default != "Smart/亚洲" || !slices.Contains(proxy.Outbounds, "Smart/亚洲") {
-		t.Fatalf("选中的智能分组必须是 Proxy 的默认选择: %#v", proxy)
+	if proxy.Default != "Smart/亚洲" || !slices.Contains(proxy.Outbounds, "Smart/亚洲") || slices.Contains(proxy.Outbounds, "SmartAuto/亚洲") {
+		t.Fatalf("选中的智能分组必须是 Proxy 的默认选择，内置自动选择不单独列出: %#v", proxy)
 	}
 	front := document.Outbounds[byTag["链式前置"]]
 	if !front.UseAllProviders || front.Default != "Smart/亚洲" || !slices.Contains(front.Outbounds, "Smart/亚洲") {

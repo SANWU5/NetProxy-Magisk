@@ -83,14 +83,16 @@ type RuntimeOptions struct {
 	Selection       moduleconfig.Selection
 	AllowEmpty      bool
 	Chain           *ChainOutbounds
-	// Smart 是智能分组与自建分组；每个至少有一个可用成员的分组生成一个自动选择出站。
+	// Smart 是智能分组与自建分组；每个至少有一个可用成员的分组生成一个选择器与它内置的自动选择。
 	Smart []SmartGroup
 }
 
 // SmartGroup 是智能分组或自建分组的运行时定义，由 smartgroup 包提供。
 type SmartGroup struct {
-	ID      string
+	ID string
+	// Tag 是分组选择器的标签，AutoTag 是分组内置自动选择的标签；选择器默认使用自动选择。
 	Tag     string
+	AutoTag string
 	Members []SmartMember
 }
 
@@ -446,7 +448,7 @@ func BuildRuntime(ctx context.Context, options RuntimeOptions) (RuntimeResult, e
 	if err := writeRuntimeProviders(options.ProvidersOutput, groups); err != nil {
 		return RuntimeResult{}, err
 	}
-	smart, smartTags, err := buildSmartOutbounds(ctx, groups, options.Smart)
+	smart, smartOptions, smartTags, err := buildSmartOutbounds(ctx, groups, options.Smart)
 	if err != nil {
 		return RuntimeResult{}, err
 	}
@@ -454,7 +456,7 @@ func BuildRuntime(ctx context.Context, options RuntimeOptions) (RuntimeResult, e
 	if tag, ok := smartTags[selection.SmartGroupID]; ok {
 		mainTag = tag
 	}
-	if err := writeRuntimeOutbounds(options.OutboundsOutput, groups, mainTag, smart, options.Chain); err != nil {
+	if err := writeRuntimeOutbounds(options.OutboundsOutput, groups, mainTag, smart, smartOptions, options.Chain); err != nil {
 		return RuntimeResult{}, err
 	}
 
@@ -572,11 +574,13 @@ func writeRuntimeProviders(path string, groups []*loadedGroup) error {
 	}{Providers: items})
 }
 
-// buildSmartOutbounds 为每个至少有一个可用成员的智能分组生成自动选择出站，返回分组 id 到运行时标签的映射。
+// buildSmartOutbounds 为每个至少有一个可用成员的智能分组生成一个自动选择（URLTest）和一个选择器：
+// 选择器的第一个选项是自动选择并默认使用它，其余选项是分组成员，用户在分组内手动选择节点时由选择同步切换。
 // 成员按来源 Provider 与精确的节点出站标签过滤；已被订阅移除的节点直接忽略。
-func buildSmartOutbounds(ctx context.Context, groups []*loadedGroup, smart []SmartGroup) ([]option.Outbound, map[string]string, error) {
+// 返回全部出站、可供 Proxy 与链式前置选择的分组选择器标签，以及分组 id 到选择器标签的映射。
+func buildSmartOutbounds(ctx context.Context, groups []*loadedGroup, smart []SmartGroup) ([]option.Outbound, []string, map[string]string, error) {
 	if len(smart) == 0 {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	byID := make(map[string]*loadedGroup, len(groups))
 	for _, group := range groups {
@@ -599,6 +603,7 @@ func buildSmartOutbounds(ctx context.Context, groups []*loadedGroup, smart []Sma
 		return tags, nil
 	}
 	var outbounds []option.Outbound
+	var selectable []string
 	emitted := make(map[string]string, len(smart))
 	for _, definition := range smart {
 		var providers, patterns []string
@@ -609,7 +614,7 @@ func buildSmartOutbounds(ctx context.Context, groups []*loadedGroup, smart []Sma
 			}
 			tags, err := nodeTags(group)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			if _, ok := tags[member.Node]; !ok {
 				continue
@@ -623,28 +628,41 @@ func buildSmartOutbounds(ctx context.Context, groups []*loadedGroup, smart []Sma
 			continue
 		}
 		include := (*badoption.Regexp)(regexp.MustCompile("^(?:" + strings.Join(patterns, "|") + ")$"))
-		outbounds = append(outbounds, option.Outbound{
-			Type: C.TypeURLTest,
-			Tag:  definition.Tag,
-			Options: &option.URLTestOutboundOptions{
-				GroupCommonOption:         option.GroupCommonOption{Providers: providers, Include: include},
-				URL:                       "https://www.gstatic.com/generate_204",
-				Interval:                  badoption.Duration(3 * time.Minute),
-				Tolerance:                 50,
-				InterruptExistConnections: true,
+		outbounds = append(outbounds,
+			option.Outbound{
+				Type: C.TypeURLTest,
+				Tag:  definition.AutoTag,
+				Options: &option.URLTestOutboundOptions{
+					GroupCommonOption:         option.GroupCommonOption{Providers: providers, Include: include},
+					URL:                       "https://www.gstatic.com/generate_204",
+					Interval:                  badoption.Duration(3 * time.Minute),
+					Tolerance:                 50,
+					InterruptExistConnections: true,
+				},
 			},
-		})
+			// include 只过滤 Provider 节点，直接列出的自动选择始终保留为第一个选项。
+			option.Outbound{
+				Type: C.TypeSelector,
+				Tag:  definition.Tag,
+				Options: &option.SelectorOutboundOptions{
+					GroupCommonOption:         option.GroupCommonOption{Outbounds: []string{definition.AutoTag}, Providers: providers, Include: include},
+					Default:                   definition.AutoTag,
+					InterruptExistConnections: true,
+				},
+			},
+		)
+		selectable = append(selectable, definition.Tag)
 		emitted[definition.ID] = definition.Tag
 	}
-	return outbounds, emitted, nil
+	return outbounds, selectable, emitted, nil
 }
 
-func writeRuntimeOutbounds(path string, groups []*loadedGroup, defaultTag string, smart []option.Outbound, chain *ChainOutbounds) error {
+func writeRuntimeOutbounds(path string, groups []*loadedGroup, defaultTag string, smart []option.Outbound, smartOptions []string, chain *ChainOutbounds) error {
 	outbounds := []option.Outbound{
 		{Type: C.TypeDirect, Tag: "direct", Options: new(option.DirectOutboundOptions)},
 		{Type: C.TypeBlock, Tag: "block", Options: new(option.StubOptions)},
 	}
-	options := make([]string, 0, len(groups)*2+len(smart))
+	options := make([]string, 0, len(groups)*2+len(smartOptions))
 	for _, group := range groups {
 		autoTag := "Auto/" + group.RuntimeTag
 		selectTag := "Select/" + group.RuntimeTag
@@ -671,10 +689,8 @@ func writeRuntimeOutbounds(path string, groups []*loadedGroup, defaultTag string
 		)
 		options = append(options, autoTag, selectTag)
 	}
-	for _, outbound := range smart {
-		outbounds = append(outbounds, outbound)
-		options = append(options, outbound.Tag)
-	}
+	outbounds = append(outbounds, smart...)
+	options = append(options, smartOptions...)
 	proxyOptions, proxyDefault := options, defaultTag
 	var landings []map[string]jsontext.Value
 	if chain != nil && len(chain.LandingTags) > 0 {

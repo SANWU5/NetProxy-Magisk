@@ -1,9 +1,9 @@
 // Package smartgroup 管理智能分组与自建分组。
 //
 // 智能分组只在用户手动触发时计算：按节点名称识别地区，把全部订阅与本地配置中的节点整理成地区分组。
-// 自建分组由用户自己挑选节点组成。每个分组在运行时生成一个自动选择（URLTest）出站，成员按
-// 「来源分组 + 节点名」引用，节点被订阅移除后只会减少成员，不会让核心启动失败。
-// 地区分组的手动加入、移除与改名单独保存，重新智能分组时保留。
+// 自建分组由用户自己挑选节点组成。每个分组在运行时是一个选择器，默认使用分组内置的自动选择（URLTest），
+// 用户在分组内手动选择的节点按分组保存，从外部选择这个分组时沿用。成员按「来源分组 + 节点名」引用，
+// 节点被订阅移除后只会减少成员，不会让核心启动失败。地区分组的手动加入、移除与改名单独保存，重新智能分组时保留。
 package smartgroup
 
 import (
@@ -34,8 +34,11 @@ const (
 	KindCustom = "custom"
 )
 
-// TagPrefix 是分组在运行时出站图中的标签前缀；选择同步与客户端展示依赖这个名称。
+// TagPrefix 是分组（选择器）在运行时出站图中的标签前缀；选择同步与客户端展示依赖这个名称。
 const TagPrefix = "Smart/"
+
+// AutoTagPrefix 是分组内置自动选择（URLTest）的标签前缀；与 TagPrefix 不同，避免与任何分组名冲突。
+const AutoTagPrefix = "SmartAuto/"
 
 const (
 	regionIDPrefix = "smart-"
@@ -68,6 +71,8 @@ type Group struct {
 	// Added 与 Removed 是地区分组相对智能分组结果的手动修改。
 	Added   []NodeRef `json:"added,omitzero"`
 	Removed []NodeRef `json:"removed,omitzero"`
+	// Manual 是用户在分组内手动选择的节点；为空表示使用分组的自动选择。从外部选择这个分组时沿用它。
+	Manual *NodeRef `json:"manual,omitzero"`
 }
 
 // Document 是 groups.json 的持久结构。
@@ -96,8 +101,11 @@ type InvalidError struct{ Err error }
 func (e *InvalidError) Error() string { return e.Err.Error() }
 func (e *InvalidError) Unwrap() error { return e.Err }
 
-// RuntimeTag 返回分组在运行时出站图中的标签。
+// RuntimeTag 返回分组（选择器）在运行时出站图中的标签。
 func (g Group) RuntimeTag() string { return TagPrefix + g.Name }
+
+// AutoTag 返回分组内置自动选择在运行时出站图中的标签。
+func (g Group) AutoTag() string { return AutoTagPrefix + g.Name }
 
 // Effective 返回分组当前的成员：地区分组在智能分组结果上应用手动修改。
 func (g Group) Effective() []NodeRef {
@@ -117,6 +125,7 @@ func (g Group) Effective() []NodeRef {
 // SetMembers 把分组成员设为 members。地区分组只记录相对智能分组结果的差异，便于重新分组时保留。
 func (g *Group) SetMembers(members []NodeRef) {
 	members = unique(members)
+	defer g.keepManual()
 	if g.Kind != KindRegion {
 		g.Members, g.Added, g.Removed = members, nil, nil
 		return
@@ -135,6 +144,13 @@ func (g *Group) SetMembers(members []NodeRef) {
 	}
 }
 
+// keepManual 在成员变化后清除已不在分组中的手动选择，分组回到自动选择。
+func (g *Group) keepManual() {
+	if g.Manual != nil && !slices.Contains(g.Effective(), *g.Manual) {
+		g.Manual = nil
+	}
+}
+
 // Find 返回指定 id 的分组下标，不存在时返回 -1。
 func (doc Document) Find(id string) int {
 	return slices.IndexFunc(doc.Groups, func(group Group) bool { return group.ID == id })
@@ -147,6 +163,10 @@ func (doc Document) Clone() Document {
 		group.Members = slices.Clone(group.Members)
 		group.Added = slices.Clone(group.Added)
 		group.Removed = slices.Clone(group.Removed)
+		if group.Manual != nil {
+			manual := *group.Manual
+			group.Manual = &manual
+		}
 		clone.Groups[index] = group
 	}
 	return clone
@@ -196,6 +216,7 @@ func Generate(doc Document, sources []Source, english bool, now time.Time) (Docu
 			group = Group{ID: id, Kind: KindRegion, Region: key, Name: uniqueName(regionLabel(key, english), names)}
 		}
 		group.Members = unique(buckets[key])
+		group.keepManual()
 		names[group.Name] = struct{}{}
 		next.Groups = append(next.Groups, group)
 		summary.Regions++
@@ -204,6 +225,7 @@ func Generate(doc Document, sources []Source, english bool, now time.Time) (Docu
 	for _, group := range previous {
 		if len(group.Added) > 0 {
 			group.Members = []NodeRef{}
+			group.keepManual()
 			kept = append(kept, group)
 		}
 	}
@@ -252,6 +274,9 @@ func (doc Document) Validate() error {
 					return fmt.Errorf("分组 %q 包含无效节点引用", group.Name)
 				}
 			}
+		}
+		if group.Manual != nil && !slices.Contains(group.Effective(), *group.Manual) {
+			return fmt.Errorf("分组 %q 手动选择的节点不在分组中", group.Name)
 		}
 	}
 	return nil
@@ -334,6 +359,7 @@ func Update(ctx context.Context, dir string, mutate func(*Document) error) (befo
 }
 
 // SameRuntime 判断两份分组生成的运行时出站是否相同（名称与有效成员）。
+// 手动选择不改变出站图，由选择同步通过 Service API 切换。
 func SameRuntime(left, right Document) bool {
 	return slices.EqualFunc(left.Groups, right.Groups, func(a, b Group) bool {
 		return a.ID == b.ID && a.Name == b.Name && slices.Equal(a.Effective(), b.Effective())

@@ -39,9 +39,11 @@ type ChainView struct {
 
 // selectionTargets 描述一次选择同步需要设置的全部选择器。
 type selectionTargets struct {
-	// main 是节点页的主选择：智能分组的自动选择，或普通分组的选择器；fallback 是普通分组的选择器。
+	// main 是节点页的主选择：智能分组的选择器，或普通分组的选择器；fallback 是普通分组的选择器。
 	main     string
 	fallback string
+	// smart 是节点页与链式前置使用的智能分组的内部选择，在设置 Proxy 与前置之前先设置。
+	smart []smartChoice
 	// chain 表示已导入后置代理，运行时存在链式前置与链式代理两个选择器。
 	chain   bool
 	front   string
@@ -49,22 +51,53 @@ type selectionTargets struct {
 	proxy   string
 }
 
+// smartChoice 是一个智能分组选择器的候选项：分组内手动选择的节点在前，分组的自动选择兜底。
+type smartChoice struct {
+	group      string
+	candidates []string
+}
+
 func loadSelectionTargets(ctx context.Context, options Options, selection moduleconfig.Selection, active string) (selectionTargets, error) {
 	targets := selectionTargets{main: active, fallback: active}
-	if selection.SmartGroupID != "" {
-		document, err := smartgroup.Load(ctx, options.smartDir())
-		if err != nil {
-			return selectionTargets{}, err
-		}
-		if index := document.Find(selection.SmartGroupID); index >= 0 {
-			targets.main = document.Groups[index].RuntimeTag()
-		}
-	}
-	targets.front, targets.proxy = targets.main, targets.main
 	state, err := chain.Load(ctx, options.chainDir())
 	if err != nil {
 		return selectionTargets{}, err
 	}
+	frontSmart := ""
+	if len(state.Landings.Outbounds) > 0 && state.Front != nil {
+		frontSmart = state.Front.SmartID
+	}
+	if selection.SmartGroupID != "" || frontSmart != "" {
+		document, err := smartgroup.Load(ctx, options.smartDir())
+		if err != nil {
+			return selectionTargets{}, err
+		}
+		var present map[smartgroup.NodeRef]string
+		for _, id := range slices.Compact([]string{selection.SmartGroupID, frontSmart}) {
+			index := document.Find(id)
+			if index < 0 {
+				continue
+			}
+			group := document.Groups[index]
+			if id == selection.SmartGroupID {
+				targets.main = group.RuntimeTag()
+			}
+			choice := smartChoice{group: group.RuntimeTag(), candidates: []string{group.AutoTag()}}
+			if group.Manual != nil {
+				if present == nil {
+					if _, present, err = catalogNodes(ctx, options); err != nil {
+						return selectionTargets{}, err
+					}
+				}
+				// 手动选择的节点被订阅移除后改用自动选择；节点在运行时不存在时 selectFirst 同样回退。
+				if tag, ok := present[*group.Manual]; ok {
+					choice.candidates = []string{tag, group.AutoTag()}
+				}
+			}
+			targets.smart = append(targets.smart, choice)
+		}
+	}
+	targets.front, targets.proxy = targets.main, targets.main
 	if len(state.Landings.Outbounds) == 0 {
 		return targets, nil
 	}
@@ -84,11 +117,17 @@ func loadSelectionTargets(ctx context.Context, options Options, selection module
 	return targets, nil
 }
 
-// applyRuntimeSelection 依次设置分组内节点、链式前置、链式代理与顶层 Proxy。
+// applyRuntimeSelection 依次设置分组内节点、智能分组的内部选择、链式前置、链式代理与顶层 Proxy。
 // 智能分组或指定前置在运行时不存在（没有可用节点）时，依次回退到节点页的主选择与普通分组。
 func applyRuntimeSelection(ctx context.Context, client *serviceapi.Client, active, inner string, targets selectionTargets) error {
 	if inner != "" {
 		if err := client.Select(ctx, active, inner); err != nil {
+			return err
+		}
+	}
+	for _, choice := range targets.smart {
+		// 只有分组在运行时不存在时全部候选都会被拒绝；随后的 Proxy 与前置选择会回退到普通分组。
+		if err := selectFirst(ctx, client, choice.group, choice.candidates...); serviceapi.IsRetryable(err) {
 			return err
 		}
 	}
@@ -200,30 +239,22 @@ func chainView(state chain.State) ChainView {
 
 // mergeChainRuntime 合并后置测速记录与前置实际节点，返回「链式前置」选择器的直接选择。
 func mergeChainRuntime(view *ChainView, groups []serviceapi.Group) string {
-	selected := make(map[string]string, len(groups))
+	direct := ""
 	for _, group := range groups {
-		selected[group.Tag] = group.Selected
-		if group.Tag != chain.SelectorTag {
-			continue
-		}
-		view.Landing = strings.TrimPrefix(group.Selected, chain.LandingTagPrefix)
-		for _, item := range group.Items {
-			if item.URLTestTime > 0 {
-				view.Delays[strings.TrimPrefix(item.Tag, chain.LandingTagPrefix)] = item.URLTestDelay
+		switch group.Tag {
+		case chain.FrontTag:
+			direct = group.Selected
+		case chain.SelectorTag:
+			view.Landing = strings.TrimPrefix(group.Selected, chain.LandingTagPrefix)
+			for _, item := range group.Items {
+				if item.URLTestTime > 0 {
+					view.Delays[strings.TrimPrefix(item.Tag, chain.LandingTagPrefix)] = item.URLTestDelay
+				}
 			}
 		}
 	}
 	// 前置可能选择的是分组（Auto/Select/智能分组），沿选择链找到实际节点。
-	direct := selected[chain.FrontTag]
-	current := direct
-	for depth := 0; depth < 4 && current != ""; depth++ {
-		next, isGroup := selected[current]
-		if !isGroup || next == "" {
-			break
-		}
-		current = next
-	}
-	view.Front = current
+	view.Front = serviceapi.ResolveSelected(groups, chain.FrontTag)
 	return direct
 }
 

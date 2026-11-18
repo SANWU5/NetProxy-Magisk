@@ -380,8 +380,6 @@ private fun MainPager(
         onBackToFirst = { selected = 0 },
     )
 
-    // 旧样式页面自己处理底部留白，需要让出悬浮底栏与导航栏的高度。
-    val bottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + CouiDockSpace
     CouiTabs(selected, Modifier.fillMaxSize()) { pageIndex ->
         when (destinations[pageIndex]) {
             AppDestination.Dashboard -> CatalogDashboardScreen(
@@ -404,10 +402,7 @@ private fun MainPager(
 
             AppDestination.Chain -> ChainScreen(isActive = selected == pageIndex)
 
-            AppDestination.Subscriptions -> SubscriptionsScreen(
-                bottomPadding = bottomPadding,
-                isActive = selected == pageIndex
-            )
+            AppDestination.Subscriptions -> SubscriptionsScreen(isActive = selected == pageIndex)
 
             AppDestination.Settings -> SettingsScreen(isActive = selected == pageIndex)
         }

@@ -709,4 +709,5 @@
     <string name="dashboard_overview">概览</string>
     <string name="loading">正在加载…</string>
     <string name="node_group">分组</string>
+    <string name="subscription_use">设为当前</string>
 </resources>

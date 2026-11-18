@@ -88,6 +88,21 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.ui.semantics.Role
+import dev.aiingjie.coui.Coui
+import dev.aiingjie.coui.CouiActionRow
+import dev.aiingjie.coui.CouiBarButton
+import dev.aiingjie.coui.CouiDialogButton
+import dev.aiingjie.coui.CouiDockSpace
+import dev.aiingjie.coui.CouiGlyph
+import dev.aiingjie.coui.CouiGroup
+import dev.aiingjie.coui.CouiLargeTitlePage
+import dev.aiingjie.coui.CouiLoading
+import dev.aiingjie.coui.CouiRadio
+import dev.aiingjie.coui.CouiRow
+import dev.aiingjie.coui.LocalCouiOverlay
+import dev.aiingjie.coui.couiCardItems
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -96,293 +111,138 @@ import kotlin.math.roundToInt
 /** 订阅页：URL 订阅管理、流量状态与更新计划。 */
 @Composable
 internal fun SubscriptionsScreen(
-    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     isActive: Boolean = true,
     viewModel: SubscriptionsViewModel = netProxyViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
-    val snackbarHostState = rememberAppSnackbarHostState()
-    val scrollBehavior = MiuixScrollBehavior()
-    val backdrop = rememberBlurBackdrop()
-    val barColor = if (backdrop != null) Color.Transparent else colorScheme.surface
+    val overlay = LocalCouiOverlay.current
 
     LifecycleResumeEffect(isActive) {
         viewModel.setVisible(isActive)
         onPauseOrDispose { if (isActive) viewModel.setVisible(false) }
     }
 
-    val noticeText = if (state.error !is UiText.Empty) state.error else state.notice
-    SnackbarNoticeEffect(
-        eventId = state.noticeId,
-        message = noticeText.resolve(),
-        isError = state.error !is UiText.Empty,
-        hostState = snackbarHostState,
-        onConsumed = viewModel::clearNotice
+    val noticeText = (if (state.error !is UiText.Empty) state.error else state.notice).resolve()
+    LaunchedEffect(state.noticeId) {
+        if (noticeText.isBlank()) return@LaunchedEffect
+        viewModel.clearNotice()
+        overlay.showSnack(noticeText)
+    }
+
+    val busy = state.operation.isNotEmpty()
+    val hasSubscriptions = state.groups.any { it.type == "subscription" }
+    val addText = stringResource(R.string.subscription_add_url)
+    val updateAllText = stringResource(R.string.subscription_update_all)
+    val cancelText = stringResource(R.string.common_cancel)
+    val moreText = stringResource(R.string.more_actions)
+    val useText = stringResource(R.string.subscription_use)
+    val updateText = stringResource(R.string.common_update)
+    val deleteText = stringResource(R.string.common_delete)
+    val deleteTitle = stringResource(R.string.subscription_delete_title)
+    val deleteMessage = stringResource(R.string.subscription_delete_message)
+    val subscriptionDetailsText = stringResource(R.string.subscription_details)
+    val localDetailsText = stringResource(R.string.local_config_details)
+
+    fun showActions() = overlay.showDialog(
+        title = null,
+        buttons = buildList {
+            add(CouiDialogButton(addText, CouiDialogButton.Kind.Primary) { navigator.push(Route.SubscriptionEdit("")) })
+            if (hasSubscriptions && !busy) add(CouiDialogButton(updateAllText) { viewModel.updateAll() })
+            add(CouiDialogButton(cancelText))
+        },
     )
 
-    Scaffold(
-        snackbarHost = {
-            AppSnackbarHost(snackbarHostState, Modifier.padding(bottom = bottomPadding))
-        },
-        topBar = {
-            BlurredBar(backdrop) {
-                TopAppBar(
-                    color = barColor,
-                    title = stringResource(R.string.subscriptions),
-                    scrollBehavior = scrollBehavior,
-                    actions = {
-                        if (state.groups.any { it.type == "subscription" }) {
-                            IconButton(
-                                enabled = state.operation.isEmpty(),
-                                onClick = viewModel::updateAll
-                            ) {
-                                Icon(
-                                    imageVector = MiuixIcons.Refresh,
-                                    contentDescription = stringResource(R.string.subscription_update_all),
-                                    tint = colorScheme.onSurface
-                                )
-                            }
-                        }
-                        IconButton(
-                            onClick = { navigator.push(Route.SubscriptionEdit("")) }
-                        ) {
-                            Icon(
-                                imageVector = MiuixIcons.Add,
-                                contentDescription = stringResource(R.string.subscription_add_url),
-                                tint = colorScheme.onSurface
-                            )
-                        }
-                    }
-                )
-            }
-        },
-        contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
-        ) {
-            when {
-                state.groups.isEmpty() -> ContentStatus(
-                    padding = PaddingValues(top = innerPadding.calculateTopPadding(),
-                        bottom = innerPadding.calculateBottomPadding() + bottomPadding),
-                    text = stringResource(if (state.loadFailed) R.string.subscriptions_read_failed else R.string.subscription_empty),
-                    loading = state.loading,
-                )
+    fun showGroupActions(group: CatalogGroupSummary) {
+        val isSubscription = group.type == "subscription"
+        overlay.showDialog(
+            title = group.name,
+            buttons = buildList {
+                if (!group.active) add(CouiDialogButton(useText, CouiDialogButton.Kind.Primary) { viewModel.activate(group.id) })
+                if (isSubscription && !busy) add(CouiDialogButton(updateText) { viewModel.updateSubscription(group.id) })
+                add(CouiDialogButton(if (isSubscription) subscriptionDetailsText else localDetailsText) {
+                    navigator.push(Route.SubscriptionDetails(group.id))
+                })
+                if (isSubscription && !busy) add(CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) {
+                    overlay.showDialog(deleteTitle, String.format(deleteMessage, group.name), listOf(
+                        CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) { viewModel.remove(group.id) },
+                        CouiDialogButton(cancelText),
+                    ))
+                })
+                add(CouiDialogButton(cancelText))
+            },
+        )
+    }
 
-                else -> LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .scrollEndHaptic()
-                        .overScrollVertical()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(
-                        start = 12.dp,
-                        top = innerPadding.calculateTopPadding() + 12.dp,
-                        end = 12.dp,
-                        bottom = innerPadding.calculateBottomPadding() + bottomPadding + 84.dp
-                    ),
-                    overscrollEffect = null
+    val updating = state.operation == "update" || state.operation == "update-all"
+    val updatingText = stringResource(
+        if (state.operation == "update-all") R.string.subscription_update_sheet_all else R.string.subscription_update_sheet_single
+    )
+    val listTitle = stringResource(R.string.subscriptions)
+    CouiLargeTitlePage(
+        title = stringResource(R.string.subscriptions),
+        bottomSpace = CouiDockSpace,
+        actions = { CouiBarButton(CouiGlyph.More, moreText, onClick = ::showActions) },
+    ) {
+        if (updating) {
+            item {
+                CouiGroup(first = true) {
+                    CouiRow(updatingText, leading = { CouiLoading() })
+                }
+            }
+        }
+        if (state.groups.isEmpty()) {
+            item {
+                CouiGroup(first = !updating) {
+                    if (state.loading) CouiRow(stringResource(R.string.loading), leading = { CouiLoading() })
+                    else CouiRow(stringResource(if (state.loadFailed) R.string.subscriptions_read_failed else R.string.subscription_empty))
+                    CouiActionRow(addText, onClick = { navigator.push(Route.SubscriptionEdit("")) })
+                }
+            }
+        } else {
+            couiCardItems(state.groups, key = CatalogGroupSummary::id, title = listTitle, first = !updating) { group ->
+                CouiRow(
+                    title = group.name,
+                    summary = groupSummary(group),
+                    role = Role.Button,
+                    onClick = { showGroupActions(group) },
                 ) {
-                    items(state.groups, key = CatalogGroupSummary::id) { group ->
-                        CatalogGroupCard(
-                            group = group,
-                            busy = state.operation.isNotEmpty(),
-                            onSelect = { viewModel.activate(group.id) },
-                            onUpdate = { viewModel.updateSubscription(group.id) },
-                            onDelete = { viewModel.remove(group.id) },
-                            onEdit = { navigator.push(Route.SubscriptionDetails(group.id)) }
+                    if (group.active) {
+                        BasicText(
+                            stringResource(R.string.subscription_active),
+                            Modifier.padding(start = 12.dp, end = 12.dp),
+                            style = Coui.type.rowValue.copy(color = Coui.colors.success),
                         )
                     }
+                    CouiRadio(selected = group.active)
                 }
             }
         }
     }
-
-    SubscriptionUpdateSheet(state.operation)
 }
 
 @Composable
-private fun CatalogGroupCard(
-    group: CatalogGroupSummary,
-    busy: Boolean,
-    onSelect: () -> Unit,
-    onUpdate: () -> Unit,
-    onDelete: () -> Unit,
-    onEdit: () -> Unit
-) {
-    var showDeleteDialog by remember { mutableStateOf(false) }
+private fun groupSummary(group: CatalogGroupSummary): String {
     val isSubscription = group.type == "subscription"
     val usage = group.usage
     val used = (usage?.upload ?: 0L) + (usage?.download ?: 0L)
     val total = usage?.total ?: 0L
     val updatedAt = group.lastSuccessAt.ifBlank { group.updatedAt }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 12.dp),
-        insideMargin = PaddingValues(16.dp),
-        pressFeedbackType = PressFeedbackType.Sink,
-        showIndication = true,
-        onClick = onSelect
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = group.name,
-                modifier = Modifier.weight(1f),
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (group.active) {
-                val activeColor = Color(0xFF32A852)
-                Text(
-                    text = stringResource(R.string.subscription_active),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight(750),
-                    color = activeColor,
-                    modifier = Modifier
-                        .squircleBackground(activeColor.copy(alpha = 0.15f), 6.dp)
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-            }
-        }
-
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text(
-                    text = if (!isSubscription) {
-                        stringResource(R.string.subscription_node_count, group.nodeCount)
-                    } else if (total > 0) {
-                        stringResource(
-                            R.string.subscription_usage,
-                            formatBytes(used),
-                            formatBytes(total)
-                        )
-                    } else {
-                        stringResource(R.string.subscription_no_usage)
-                    },
-                    modifier = Modifier.padding(top = 2.dp),
-                    fontSize = 12.sp,
-                    color = colorScheme.onSurfaceVariantSummary
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = if (updatedAt.isNotBlank()) {
-                        stringResource(
-                            R.string.subscription_updated_at,
-                            stringResource(
-                                if (isSubscription) {
-                                    R.string.subscription_updated_label
-                                } else {
-                                    R.string.local_config_modified_label
-                                }
-                            ),
-                            formatDate(updatedAt)
-                        )
-                    } else {
-                        stringResource(
-                            if (isSubscription) {
-                                R.string.subscription_not_updated
-                            } else {
-                                R.string.local_config_modified_at
-                            }
-                        )
-                    },
-                    modifier = Modifier.padding(top = 2.dp),
-                    fontSize = 12.sp,
-                    color = colorScheme.onSurfaceVariantSummary
-                )
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            IconButton(
-                onClick = onEdit,
-                minHeight = 35.dp,
-                minWidth = 35.dp,
-                backgroundColor = colorScheme.secondaryContainer
-            ) {
-                Icon(
-                    modifier = Modifier.size(20.dp),
-                    imageVector = MiuixIcons.MoreCircle,
-                    contentDescription = stringResource(
-                        if (isSubscription) R.string.subscription_details
-                        else R.string.local_config_details
-                    ),
-                    tint = colorScheme.onSurfaceVariantSummary
-                )
-            }
-            if (isSubscription) {
-                Spacer(Modifier.width(8.dp))
-                IconButton(
-                    onClick = onUpdate,
-                    enabled = !busy,
-                    minHeight = 35.dp,
-                    minWidth = 35.dp,
-                    backgroundColor = colorScheme.secondaryContainer
-                ) {
-                    Icon(
-                        modifier = Modifier.size(20.dp),
-                        imageVector = MiuixIcons.Refresh,
-                        contentDescription = stringResource(R.string.common_update),
-                        tint = colorScheme.onSurfaceVariantSummary
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                IconButton(
-                    onClick = { showDeleteDialog = true },
-                    enabled = !busy,
-                    minHeight = 35.dp,
-                    minWidth = 35.dp,
-                    backgroundColor = colorScheme.secondaryContainer
-                ) {
-                    Icon(
-                        modifier = Modifier.size(20.dp),
-                        imageVector = MiuixIcons.Delete,
-                        contentDescription = stringResource(R.string.common_delete),
-                        tint = colorScheme.onSurfaceVariantSummary
-                    )
-                }
-            }
-        }
+    val first = when {
+        !isSubscription -> stringResource(R.string.subscription_node_count, group.nodeCount)
+        total > 0 -> stringResource(R.string.subscription_usage, formatBytes(used), formatBytes(total))
+        else -> stringResource(R.string.subscription_no_usage)
     }
-
-    OverlayDialog(
-        show = isSubscription && showDeleteDialog,
-        title = stringResource(R.string.subscription_delete_title),
-        onDismissRequest = { showDeleteDialog = false }
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(stringResource(R.string.subscription_delete_message, group.name))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(
-                    text = stringResource(R.string.common_cancel),
-                    modifier = Modifier.weight(1f),
-                    onClick = { showDeleteDialog = false }
-                )
-                TextButton(
-                    text = stringResource(R.string.common_confirm),
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.textButtonColorsPrimary(),
-                    onClick = {
-                        showDeleteDialog = false
-                        onDelete()
-                    }
-                )
-            }
-        }
+    val second = if (updatedAt.isNotBlank()) {
+        stringResource(
+            R.string.subscription_updated_at,
+            stringResource(if (isSubscription) R.string.subscription_updated_label else R.string.local_config_modified_label),
+            formatDate(updatedAt)
+        )
+    } else {
+        stringResource(if (isSubscription) R.string.subscription_not_updated else R.string.local_config_modified_at)
     }
+    return "$first\n$second"
 }
 
 /** 订阅详情：展示节点摘要和最近更新历史。 */

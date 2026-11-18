@@ -679,4 +679,5 @@
     <string name="dashboard_overview">Обзор</string>
     <string name="loading">Загрузка…</string>
     <string name="node_group">Группа</string>
+    <string name="subscription_use">Использовать</string>
 </resources>

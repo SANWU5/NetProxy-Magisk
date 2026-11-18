@@ -13,9 +13,6 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -39,7 +36,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.DpSize
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -102,15 +98,14 @@ import com.fanjv.netproxy.navigation.Route.ThemeSettings
 import com.fanjv.netproxy.navigation.rememberNavigator
 import com.fanjv.netproxy.navigation.mainDestinations
 import com.fanjv.netproxy.navigation.availableIn
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
+import dev.aiingjie.coui.CouiButton
 import dev.aiingjie.coui.CouiDockTab
+import dev.aiingjie.coui.CouiGroup
+import dev.aiingjie.coui.CouiInputRow
 import dev.aiingjie.coui.CouiOverlayHost
+import dev.aiingjie.coui.CouiPanel
 import dev.aiingjie.coui.CouiTabs
 import dev.aiingjie.coui.LocalCouiOverlay
 
@@ -305,33 +300,34 @@ private fun ModuleConnectionDialog(show: Boolean, connect: suspend (String) -> U
     val invalidAddress = stringResource(R.string.module_address_invalid)
     val scope = rememberCoroutineScope()
     val dismiss = { request?.cancel(); onDismiss() }
-    OverlayDialog(show = show, title = stringResource(R.string.module_reconnect),
-        onDismissRequest = dismiss, insideMargin = DpSize(0.dp, 24.dp)) {
-        Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextField(value = address, onValueChange = { address = it; error = "" },
-                label = stringResource(R.string.module_address), maxLines = 1, enabled = !connecting,
-                modifier = Modifier.fillMaxWidth())
-            if (error.isNotEmpty()) Text(error, style = top.yukonga.miuix.kmp.theme.MiuixTheme.textStyles.footnote1,
-                color = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.error)
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                TextButton(stringResource(android.R.string.cancel), modifier = Modifier.weight(1f), onClick = dismiss)
-                TextButton(stringResource(if (connecting) R.string.module_connecting else R.string.module_reconnect),
-                    modifier = Modifier.weight(1f), enabled = !connecting && address.isNotBlank(),
-                    colors = ButtonDefaults.textButtonColorsPrimary(), onClick = {
-                        connecting = true
-                        error = ""
-                        request = scope.launch {
-                            try { connect(address.trim()); onDismiss() }
-                            catch (cancelled: CancellationException) { throw cancelled }
-                            catch (failure: Exception) {
-                                error = if (failure is IllegalArgumentException || failure is java.net.URISyntaxException) invalidAddress
-                                    else failure.userMessage()
-                            }
-                            finally { connecting = false; request = null }
-                        }
-                    })
-            }
+    CouiPanel(visible = show, title = stringResource(R.string.module_reconnect), onDismissRequest = dismiss) {
+        CouiGroup(first = true) {
+            CouiInputRow(
+                label = stringResource(R.string.module_address),
+                value = address,
+                onValueChange = { address = it; error = "" },
+                enabled = !connecting,
+                error = error.ifEmpty { null },
+            )
         }
+        CouiButton(
+            text = stringResource(if (connecting) R.string.module_connecting else R.string.module_reconnect),
+            onClick = {
+                connecting = true
+                error = ""
+                request = scope.launch {
+                    try { connect(address.trim()); onDismiss() }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (failure: Exception) {
+                        error = if (failure is IllegalArgumentException || failure is java.net.URISyntaxException) invalidAddress
+                            else failure.userMessage()
+                    }
+                    finally { connecting = false; request = null }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+            enabled = !connecting && address.isNotBlank(),
+        )
     }
 }
 

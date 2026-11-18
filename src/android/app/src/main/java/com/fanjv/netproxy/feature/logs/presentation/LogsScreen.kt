@@ -12,7 +12,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,12 +52,17 @@ import dev.aiingjie.coui.CouiDimens
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiLoading
 import dev.aiingjie.coui.CouiRow
+import dev.aiingjie.coui.CouiShapes
 import dev.aiingjie.coui.CouiSwitchRow
 import dev.aiingjie.coui.CouiSubPage
 import dev.aiingjie.coui.LocalCouiOverlay
 import dev.aiingjie.coui.couiPressable
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import com.fanjv.netproxy.core.ui.component.CardItem
@@ -72,10 +76,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** 日志页：查看并导出服务与内核日志。 */
 @Composable
@@ -303,11 +303,13 @@ private fun LogTypeTabs(tabs: List<String>, selected: Int, onSelect: (Int) -> Un
 
 @Composable
 fun LogItemCard(item: LogItem, type: LogType) {
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 12.dp),
-        insideMargin = PaddingValues(12.dp)
+            .padding(bottom = 12.dp)
+            .clip(CouiShapes.card)
+            .background(Coui.colors.card)
+            .padding(12.dp)
     ) {
         Column {
             Row(
@@ -325,11 +327,11 @@ fun LogItemCard(item: LogItem, type: LogType) {
                         if (type == LogType.SERVICE) {
                             NativeComponentBadge(component = item.tag)
                         } else {
-                            Text(
+                            LogText(
                                 text = item.tag,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                color = Coui.colors.labelSecondary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false)
@@ -339,10 +341,10 @@ fun LogItemCard(item: LogItem, type: LogType) {
                 }
                 if (item.timestamp.isNotEmpty()) {
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
+                    LogText(
                         text = item.timestamp,
                         fontSize = 11.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = Coui.colors.labelSecondary,
                         maxLines = 1
                     )
                 }
@@ -386,10 +388,10 @@ fun LogItemCard(item: LogItem, type: LogType) {
             if (type == LogType.KERNEL && item.outboundFlow != null) {
                 OutboundFlowView(flow = item.outboundFlow)
             } else {
-                Text(
+                LogText(
                     text = item.message,
                     fontSize = 13.sp,
-                    color = MiuixTheme.colorScheme.onSurface,
+                    color = Coui.colors.label,
                     lineHeight = 18.sp
                 )
             }
@@ -507,7 +509,7 @@ private fun logBadgeColors(tone: LogBadgeTone): Pair<Color, Color> {
         } else {
             Color(0xFFF3E5F5) to Color(0xFF7B1FA2)
         }
-        LogBadgeTone.PRIMARY -> MiuixTheme.colorScheme.primary.let { color ->
+        LogBadgeTone.PRIMARY -> Coui.colors.accent.let { color ->
             color.copy(alpha = if (isDark) 0.3f else 0.1f) to color
         }
     }
@@ -521,7 +523,7 @@ private fun LogBadge(text: String, tone: LogBadgeTone) {
             .background(backgroundColor, RoundedCornerShape(4.dp))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text(
+        LogText(
             text = text,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
@@ -566,7 +568,7 @@ fun OutboundFlowView(flow: OutboundFlow) {
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                MiuixTheme.colorScheme.surfaceContainer,
+                Coui.colors.container8,
                 RoundedCornerShape(8.dp)
             )
             .padding(10.dp)
@@ -577,25 +579,25 @@ fun OutboundFlowView(flow: OutboundFlow) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
+                LogText(
                     text = stringResource(R.string.source_label),
                     fontSize = 10.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    color = Coui.colors.labelSecondary
                 )
-                Text(
+                LogText(
                     text = flow.source,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface,
+                    color = Coui.colors.label,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            Icon(
+            Image(
                 imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
                 contentDescription = null,
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                colorFilter = ColorFilter.tint(Coui.colors.labelSecondary),
                 modifier = Modifier
                     .size(16.dp)
                     .padding(horizontal = 2.dp)
@@ -605,16 +607,16 @@ fun OutboundFlowView(flow: OutboundFlow) {
                 modifier = Modifier.weight(1f),
                 horizontalAlignment = Alignment.End
             ) {
-                Text(
+                LogText(
                     text = stringResource(R.string.destination_label),
                     fontSize = 10.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    color = Coui.colors.labelSecondary
                 )
-                Text(
+                LogText(
                     text = flow.target,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface,
+                    color = Coui.colors.label,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -644,11 +646,11 @@ private fun LazyListScope.rawLogItems(logs: List<LogItem>) {
         outerHorizontalPadding = CouiDimens.cardMargin,
         items = logs.mapIndexed { index, item ->
             CardItem(key = index.toString()) {
-                Text(
+                LogText(
                     text = item.rawLine,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp,
-                    color = MiuixTheme.colorScheme.onSurface,
+                    color = Coui.colors.label,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(
@@ -662,3 +664,21 @@ private fun LazyListScope.rawLogItems(logs: List<LogItem>) {
         }
     )
 }
+
+/** 日志页的文字：用 COUI 配色的基础文本绘制，参数沿用原先的文字组件。 */
+@Composable
+private fun LogText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Coui.colors.label,
+    fontSize: TextUnit = TextUnit.Unspecified,
+    fontWeight: FontWeight? = null,
+    fontFamily: FontFamily? = null,
+    lineHeight: TextUnit = TextUnit.Unspecified,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
+) = BasicText(
+    text, modifier,
+    TextStyle(color = color, fontSize = fontSize, fontWeight = fontWeight, fontFamily = fontFamily, lineHeight = lineHeight),
+    overflow = overflow, maxLines = maxLines,
+)

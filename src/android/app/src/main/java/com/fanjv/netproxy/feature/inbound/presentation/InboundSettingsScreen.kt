@@ -7,10 +7,17 @@ import android.content.ClipboardManager
 import androidx.annotation.StringRes
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
@@ -20,7 +27,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,27 +38,25 @@ import com.fanjv.netproxy.navigation.LocalNavigator
 import com.fanjv.netproxy.navigation.Route
 import dev.aiingjie.coui.Coui
 import dev.aiingjie.coui.CouiActionRow
+import dev.aiingjie.coui.CouiButton
+import dev.aiingjie.coui.CouiDialog
 import dev.aiingjie.coui.CouiDialogButton
 import dev.aiingjie.coui.CouiFooter
 import dev.aiingjie.coui.CouiGroup
+import dev.aiingjie.coui.CouiInputRow
 import dev.aiingjie.coui.CouiJumpRow
 import dev.aiingjie.coui.CouiLoading
 import dev.aiingjie.coui.CouiMenuRow
+import dev.aiingjie.coui.CouiPanel
 import dev.aiingjie.coui.CouiRow
 import dev.aiingjie.coui.CouiSubPage
 import dev.aiingjie.coui.CouiSwitchRow
 import dev.aiingjie.coui.LocalCouiOverlay
+import com.fanjv.netproxy.feature.chain.presentation.TextArea
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.coroutines.delay
-import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.preference.CheckboxLocation
-import top.yukonga.miuix.kmp.preference.CheckboxPreference
-import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 
 private enum class InputKind { Text, List, Ports, Number, Duration, Cidr, RuleSet, Interface, Mac }
 private data class FieldEdit(
@@ -206,7 +210,7 @@ internal fun InboundSettingsScreen(
     }
     editing?.let { field ->
         FieldDialog(field, state, show = showField, canSave = state.editable,
-            onDismiss = { showField = false }, onDismissFinished = { editing = null }, onSave = { value, entries, mode ->
+            onDismiss = { showField = false }, onSave = { value, entries, mode ->
             if (field.excludeKey != null) viewModel.setFilter(field.path, field.excludeKey, mode, entries, field.backend, field.revision)
             else {
                 val jsonValue = when (field.kind) {
@@ -225,44 +229,50 @@ internal fun InboundSettingsScreen(
     }
     reviewingDraft?.let { draft ->
         val title = stringResource(R.string.inbound_draft)
-        OverlayDialog(show = showDraft, title = title, summary = stringResource(R.string.inbound_draft_hint),
-            onDismissRequest = { showDraft = false }) {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        CouiPanel(visible = showDraft, title = title, onDismissRequest = { showDraft = false }) {
+            CouiGroup(first = true, footer = stringResource(R.string.inbound_draft_hint)) {
                 SelectionContainer {
-                    Text(draft.snapshot.content, Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()))
+                    BasicText(draft.snapshot.content, Modifier.fillMaxWidth().padding(16.dp),
+                        style = Coui.type.body.copy(color = Coui.colors.label))
                 }
-                TextButton(stringResource(android.R.string.copy), onClick = {
+            }
+            CouiGroup {
+                CouiActionRow(stringResource(android.R.string.copy), {
                     context.getSystemService(ClipboardManager::class.java)
                         ?.setPrimaryClip(ClipData.newPlainText(title, draft.snapshot.content))
                 })
-                TextButton(stringResource(R.string.json_discard_changes), onClick = {
+                CouiActionRow(stringResource(R.string.json_discard_changes), {
                     viewModel.discardDraft()
                     showDraft = false
-                })
-                TextButton(stringResource(android.R.string.ok), modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.textButtonColorsPrimary(), onClick = { showDraft = false })
+                }, danger = true)
             }
+            CouiButton(stringResource(android.R.string.ok), { showDraft = false },
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp))
         }
     }
-    OverlayDialog(show = state.pendingBackend != null,
-        title = stringResource(R.string.inbound_switch_title), summary = stringResource(R.string.inbound_switch_warning),
-        onDismissRequest = viewModel::cancelBackendSwitch) {
-        DialogButtons(viewModel::cancelBackendSwitch, confirmLabel = stringResource(R.string.common_confirm),
-            confirm = viewModel::confirmBackendSwitch)
-    }
-    OverlayDialog(show = state.diagnostic != null, title = stringResource(R.string.ebpf_diagnostics),
-        onDismissRequest = viewModel::dismissDiagnostic) {
-        Column {
-            Text(
-                state.diagnostic.orEmpty(),
-                Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()).padding(vertical = 16.dp),
-                style = MiuixTheme.textStyles.body2
-            )
-            TextButton(stringResource(android.R.string.ok), modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.textButtonColorsPrimary(), onClick = viewModel::dismissDiagnostic)
-        }
-    }
+    CouiDialog(
+        visible = state.pendingBackend != null,
+        title = stringResource(R.string.inbound_switch_title),
+        message = stringResource(R.string.inbound_switch_warning),
+        onDismissRequest = viewModel::cancelBackendSwitch,
+        buttons = listOf(
+            CouiDialogButton(stringResource(R.string.common_confirm), CouiDialogButton.Kind.Primary, viewModel::confirmBackendSwitch),
+            CouiDialogButton(stringResource(android.R.string.cancel), onClick = viewModel::cancelBackendSwitch),
+        ),
+    )
+    CouiDialog(
+        visible = state.diagnostic != null,
+        title = stringResource(R.string.ebpf_diagnostics),
+        onDismissRequest = viewModel::dismissDiagnostic,
+        content = {
+            // 诊断是多行的键值文本，左对齐并允许滚动，不用对话框居中的说明样式。
+            BasicText(state.diagnostic.orEmpty(),
+                Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                style = Coui.type.body.copy(color = Coui.colors.labelSecondary))
+        },
+        buttons = listOf(CouiDialogButton(stringResource(android.R.string.ok), CouiDialogButton.Kind.Primary, viewModel::dismissDiagnostic)),
+    )
 }
 
 private fun LazyListScope.ebpfForm(
@@ -396,10 +406,9 @@ private fun List<CardItem>.withProgress(applyingField: String?) = map { preferen
             Column(content = preference.content)
             if (applyingField == preference.key) {
                 val description = stringResource(R.string.inbound_applying)
-                LinearProgressIndicator(
+                ApplyingBar(
                     Modifier.align(Alignment.BottomCenter).padding(horizontal = 24.dp)
-                        .semantics { stateDescription = description },
-                    height = 2.dp
+                        .semantics { stateDescription = description }
                 )
             }
         }
@@ -450,7 +459,7 @@ private fun NativeDropdown(
 
 @Composable
 private fun FieldDialog(field: FieldEdit, state: InboundUiState, show: Boolean, canSave: Boolean,
-    onDismiss: () -> Unit, onDismissFinished: () -> Unit, onSave: (String, List<String>, String) -> Unit) {
+    onDismiss: () -> Unit, onSave: (String, List<String>, String) -> Unit) {
     var value by remember(field) { mutableStateOf(field.value) }
     var listInput by remember(field) { mutableStateOf(InboundListInput(field.values)) }
     val isList = field.kind !in setOf(InputKind.Text, InputKind.Number, InputKind.Duration)
@@ -474,75 +483,70 @@ private fun FieldDialog(field: FieldEdit, state: InboundUiState, show: Boolean, 
             else -> R.string.value_label
         }
     }
-    OverlayDialog(show = show, title = stringResource(R.string.modify_label, field.label),
-        insideMargin = DpSize(0.dp, 24.dp),
-        onDismissRequest = onDismiss, onDismissFinished = onDismissFinished) {
-        BoxWithConstraints(Modifier.heightIn(max = 520.dp)) {
-            val compact = maxHeight < 360.dp
-            Column(verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
-                if (field.excludeKey != null) {
-                    OverlayDropdownPreference(
-                        title = stringResource(R.string.inbound_filter_mode),
-                        items = listOf(stringResource(R.string.inbound_filter_all), stringResource(R.string.inbound_filter_include), stringResource(R.string.inbound_filter_exclude)),
-                        selectedIndex = listOf("all", "include", "exclude").indexOf(mode),
-                        insideMargin = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
-                        onSelectedIndexChange = { mode = listOf("all", "include", "exclude")[it] }
-                    )
-                }
-                TextField(value = if (isList) listInput.text else value, onValueChange = {
-                    if (isList) listInput = listInput.withText(it) else value = it
+    val modes = listOf("all", "include", "exclude")
+    val invalidText = stringResource(R.string.inbound_invalid_value)
+    val help = if (hint == R.string.value_label) null
+        else stringResource(hint) + if (field.kind == InputKind.RuleSet) "\n" + stringResource(R.string.tun_rule_set_hint) else ""
+    CouiPanel(visible = show, title = stringResource(R.string.modify_label, field.label), onDismissRequest = onDismiss) {
+        if (field.excludeKey != null) CouiGroup(first = true) {
+            CouiMenuRow(
+                stringResource(R.string.inbound_filter_mode),
+                listOf(stringResource(R.string.inbound_filter_all), stringResource(R.string.inbound_filter_include), stringResource(R.string.inbound_filter_exclude)),
+                modes.indexOf(mode).coerceAtLeast(0),
+                { mode = modes[it] },
+            )
+        }
+        CouiGroup(first = field.excludeKey == null, footer = help) {
+            if (isList) TextArea(listInput.text, { listInput = listInput.withText(it); invalid = false }, stringResource(R.string.value_label))
+            else CouiInputRow(stringResource(R.string.value_label), value, { value = it; invalid = false },
+                numeric = field.kind == InputKind.Number, error = if (invalid) invalidText else null)
+        }
+        // 候选项（网卡、规则集）勾选后写入上面的列表；面板本身可滚动，这里不用嵌套的懒加载列表。
+        if (candidates.isNotEmpty()) CouiGroup {
+            candidates.forEach { candidate ->
+                CouiSwitchRow(candidate, candidate in listInput.values, { checked ->
+                    listInput = listInput.withSelection(candidate, checked)
                     invalid = false
-                },
-                    label = stringResource(R.string.value_label),
-                    maxLines = if (compact) 1 else if (candidates.isNotEmpty()) 3 else 6,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp))
-                if (hint != R.string.value_label) {
-                    val help = stringResource(hint) + if (field.kind == InputKind.RuleSet) "\n" + stringResource(R.string.tun_rule_set_hint) else ""
-                    Text(help, Modifier.padding(horizontal = 24.dp),
-                        style = MiuixTheme.textStyles.footnote2, color = colorScheme.onSurfaceVariantSummary)
-                }
-                if (candidates.isNotEmpty()) LazyColumn(Modifier.weight(1f, fill = false)) {
-                    items(candidates, key = { it }, contentType = { "candidate" }) { candidate ->
-                        CheckboxPreference(
-                            title = candidate, checked = candidate in listInput.values,
-                            checkboxLocation = CheckboxLocation.End,
-                            insideMargin = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
-                            onCheckedChange = { checked ->
-                                listInput = listInput.withSelection(candidate, checked)
-                                invalid = false
-                            }
-                        )
-                    }
-                }
-                if (invalid) Text(stringResource(R.string.inbound_invalid_value), Modifier.padding(horizontal = 24.dp), color = colorScheme.error)
-                DialogButtons(onDismiss, enabled = canSave, modifier = Modifier.padding(horizontal = 24.dp),
-                    confirmLabel = stringResource(R.string.save_text)) {
-                    val entries = listInput.entries().let { values ->
-                        if (field.kind in setOf(InputKind.Ports, InputKind.Cidr, InputKind.Mac) || field.path.endsWith("bypass_port_range")) {
-                            values.map(String::trim).filter(String::isNotEmpty).distinct()
-                        } else values
-                    }
-                    val scalarValue = value.trim()
-                    invalid = when {
-                        field.excludeKey != null && mode != "all" && entries.isEmpty() -> true
-                        field.kind == InputKind.Number -> scalarValue.isNotBlank() && scalarValue.toLongOrNull()?.let { it in 0..4294967295L } != true
-                        field.kind == InputKind.Ports -> entries.any { it.toIntOrNull()?.let { number -> number in 0..65535 } != true }
-                        field.kind == InputKind.RuleSet && !state.choicesError -> entries.any { it !in state.choices.ruleSets }
-                        else -> false
-                    }
-                    if (!invalid) onSave(scalarValue, entries, mode)
-                }
+                })
             }
         }
+        if (invalid && isList) CouiGroup { CouiRow(invalidText, titleColor = Coui.colors.error) }
+        CouiButton(
+            text = stringResource(R.string.save_text),
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+            enabled = canSave,
+            onClick = {
+                val entries = listInput.entries().let { values ->
+                    if (field.kind in setOf(InputKind.Ports, InputKind.Cidr, InputKind.Mac) || field.path.endsWith("bypass_port_range")) {
+                        values.map(String::trim).filter(String::isNotEmpty).distinct()
+                    } else values
+                }
+                val scalarValue = value.trim()
+                invalid = when {
+                    field.excludeKey != null && mode != "all" && entries.isEmpty() -> true
+                    field.kind == InputKind.Number -> scalarValue.isNotBlank() && scalarValue.toLongOrNull()?.let { it in 0..4294967295L } != true
+                    field.kind == InputKind.Ports -> entries.any { it.toIntOrNull()?.let { number -> number in 0..65535 } != true }
+                    field.kind == InputKind.RuleSet && !state.choicesError -> entries.any { it !in state.choices.ruleSets }
+                    else -> false
+                }
+                if (!invalid) onSave(scalarValue, entries, mode)
+            },
+        )
     }
 }
 
+/** 正在应用某一项设置时贴在行底部的细进度条；COUI 没有线形进度组件，按主题色绘制。 */
 @Composable
-private fun DialogButtons(cancel: () -> Unit, enabled: Boolean = true, modifier: Modifier = Modifier,
-    confirmLabel: String, confirm: () -> Unit) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-        TextButton(stringResource(android.R.string.cancel), onClick = cancel, modifier = Modifier.weight(1f))
-        TextButton(confirmLabel, onClick = confirm, modifier = Modifier.weight(1f),
-            enabled = enabled, colors = ButtonDefaults.textButtonColorsPrimary())
+private fun ApplyingBar(modifier: Modifier) {
+    val colors = Coui.colors
+    val progress by rememberInfiniteTransition(label = "applying")
+        .animateFloat(0f, 1f, infiniteRepeatable(tween(1100, easing = LinearEasing)), label = "offset")
+    Canvas(modifier.fillMaxWidth().height(2.dp)) {
+        drawRect(colors.container8)
+        val segment = size.width * 0.3f
+        val start = (size.width + segment) * progress - segment
+        val left = start.coerceAtLeast(0f)
+        val right = (start + segment).coerceAtMost(size.width)
+        if (right > left) drawRect(colors.accent, topLeft = Offset(left, 0f), size = Size(right - left, size.height))
     }
 }

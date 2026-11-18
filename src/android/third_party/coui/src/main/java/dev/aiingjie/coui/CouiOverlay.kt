@@ -35,7 +35,9 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,9 +76,16 @@ data class CouiDialogButton(val text: String, val kind: Kind = Kind.Normal, val 
 internal class DialogSpec(
     val title: String?, val message: String?, val buttons: List<CouiDialogButton>, val cancelable: Boolean,
     val onDismiss: () -> Unit, val content: (@Composable () -> Unit)?,
+    /** 按钮点按后是否自动关闭；状态驱动的 [CouiDialog] 由调用方状态决定何时关闭。 */
+    val autoClose: Boolean = true,
+    /** 状态驱动弹出层的所有者，只清除自己放上去的那一层。 */
+    val owner: Any? = null,
 )
 
-internal class PanelSpec(val title: String?, val withCards: Boolean, val onDismiss: () -> Unit, val content: @Composable ColumnScope.() -> Unit)
+internal class PanelSpec(
+    val title: String?, val withCards: Boolean, val onDismiss: () -> Unit, val content: @Composable ColumnScope.() -> Unit,
+    val owner: Any? = null,
+)
 
 internal class MenuSpec(val anchor: Rect, val items: List<String>, val selected: Int, val onSelect: (Int) -> Unit)
 
@@ -123,6 +132,57 @@ class CouiOverlayState {
 }
 
 val LocalCouiOverlay = staticCompositionLocalOf { CouiOverlayState() }
+
+/**
+ * 由调用方状态驱动的对话框：[visible] 为 true 时显示，每次重组都刷新标题、按钮与内容，
+ * 内容可以直接读取 ViewModel 状态。按钮不会自动关闭对话框，由调用方在 onClick 中改变状态；
+ * 点按遮罩或返回键（[cancelable] 时）调用 [onDismissRequest]。
+ */
+@Composable
+fun CouiDialog(
+    visible: Boolean,
+    title: String?,
+    onDismissRequest: () -> Unit,
+    buttons: List<CouiDialogButton>,
+    message: String? = null,
+    cancelable: Boolean = true,
+    content: (@Composable () -> Unit)? = null,
+) {
+    val overlay = LocalCouiOverlay.current
+    val owner = remember { Any() }
+    val spec = DialogSpec(title, message, buttons, cancelable, onDismissRequest, content, autoClose = false, owner = owner)
+    SideEffect {
+        if (visible) overlay.dialog = spec
+        else if (overlay.dialog?.owner === owner) overlay.dialog = null
+    }
+    DisposableEffect(overlay, owner) {
+        onDispose { if (overlay.dialog?.owner === owner) overlay.dialog = null }
+    }
+}
+
+/**
+ * 由调用方状态驱动的底部面板：[visible] 为 true 时显示，内容随重组刷新；
+ * 点按遮罩或返回键调用 [onDismissRequest]，是否关闭由调用方状态决定。
+ */
+@Composable
+fun CouiPanel(
+    visible: Boolean,
+    title: String?,
+    onDismissRequest: () -> Unit,
+    withCards: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val overlay = LocalCouiOverlay.current
+    val owner = remember { Any() }
+    val spec = PanelSpec(title, withCards, onDismissRequest, content, owner = owner)
+    SideEffect {
+        if (visible) overlay.panel = spec
+        else if (overlay.panel?.owner === owner) overlay.panel = null
+    }
+    DisposableEffect(overlay, owner) {
+        onDispose { if (overlay.panel?.owner === owner) overlay.panel = null }
+    }
+}
 
 @Composable
 fun CouiOverlayHost(state: CouiOverlayState = remember { CouiOverlayState() }, content: @Composable () -> Unit) {
@@ -201,7 +261,7 @@ private fun DialogCard(spec: DialogSpec, close: () -> Unit) {
                 }
                 Box(
                     Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(50)).background(fill)
-                        .couiPressable(role = Role.Button) { close(); b.onClick() },
+                        .couiPressable(role = Role.Button) { if (spec.autoClose) close(); b.onClick() },
                     contentAlignment = Alignment.Center,
                 ) { BasicText(b.text, style = type.dialogButton.copy(color = color)) }
             }

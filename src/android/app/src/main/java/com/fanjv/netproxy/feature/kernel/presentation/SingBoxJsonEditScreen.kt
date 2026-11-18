@@ -21,11 +21,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -54,11 +52,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.ui.text.TextStyle
 import dev.aiingjie.coui.Coui
 import dev.aiingjie.coui.CouiBarButton
+import dev.aiingjie.coui.CouiDialog
+import dev.aiingjie.coui.CouiDialogButton
 import dev.aiingjie.coui.CouiDimens
 import dev.aiingjie.coui.CouiGlyph
+import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiLoading
+import dev.aiingjie.coui.CouiPanel
+import dev.aiingjie.coui.CouiRow
 import dev.aiingjie.coui.LocalCouiOverlay
 import com.fanjv.netproxy.core.ui.component.JsonSyntaxHighlighter
 import com.fanjv.netproxy.core.ui.theme.isInDarkTheme
@@ -68,12 +72,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonObject
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.scripta.editor.CodeEditor
 import top.yukonga.scripta.editor.EditorColors
 import top.yukonga.scripta.editor.EditorLanguage
@@ -532,81 +530,48 @@ internal fun SingBoxJsonEditScreen(
                 }
 
                 if (!hasLoaded) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .size(28.dp),
-                        strokeWidth = 3.dp,
-                    )
+                    CouiLoading(Modifier.align(Alignment.Center), sizeDp = 28)
                 }
             }
         }
     }
 
-    OverlayDialog(
-        show = showBackendConfirmation,
+    CouiDialog(
+        visible = showBackendConfirmation,
         title = stringResource(R.string.inbound_switch_title),
-        summary = stringResource(R.string.inbound_switch_warning),
+        message = stringResource(R.string.inbound_switch_warning),
         onDismissRequest = { showBackendConfirmation = false },
-    ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(
-                text = stringResource(android.R.string.cancel),
-                onClick = { showBackendConfirmation = false },
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(
-                text = stringResource(R.string.save_text),
-                onClick = {
-                    showBackendConfirmation = false
-                    confirmedBackendSwitch = true
-                    saveDocument()
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary(),
-            )
-        }
-    }
+        buttons = listOf(
+            CouiDialogButton(stringResource(R.string.save_text), CouiDialogButton.Kind.Primary) {
+                showBackendConfirmation = false
+                confirmedBackendSwitch = true
+                saveDocument()
+            },
+            CouiDialogButton(stringResource(android.R.string.cancel)) { showBackendConfirmation = false },
+        ),
+    )
 
-    OverlayDialog(
-        show = showSaveFailureDialog,
+    CouiDialog(
+        visible = showSaveFailureDialog,
         title = stringResource(R.string.json_save_failed),
-        summary = saveFailureDetail,
+        message = saveFailureDetail,
         onDismissRequest = { showSaveFailureDialog = false },
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            TextButton(
-                text = stringResource(R.string.json_continue_editing),
-                onClick = { showSaveFailureDialog = false },
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(
-                text = stringResource(R.string.json_discard_and_exit),
-                onClick = {
-                    showSaveFailureDialog = false
-                    exitEditor()
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary(),
-            )
-        }
-    }
+        buttons = listOf(
+            CouiDialogButton(stringResource(R.string.json_continue_editing), CouiDialogButton.Kind.Primary) { showSaveFailureDialog = false },
+            CouiDialogButton(stringResource(R.string.json_discard_and_exit), CouiDialogButton.Kind.Danger) {
+                showSaveFailureDialog = false
+                exitEditor()
+            },
+        ),
+    )
 
-    OverlayDialog(
-        show = showSchemaIssuesDialog,
+    CouiPanel(
+        visible = showSchemaIssuesDialog,
         title = stringResource(R.string.json_schema_issues_title, schemaIssues.size),
-        summary = stringResource(R.string.json_schema_issues_summary),
         onDismissRequest = { showSchemaIssuesDialog = false },
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 420.dp)
-                .verticalScroll(rememberScrollState()),
-        ) {
+        // 每条问题可点按：跳到出错行并关闭面板。
+        CouiGroup(first = true, footer = stringResource(R.string.json_schema_issues_summary)) {
             schemaIssues.forEach { issue ->
                 val location = when {
                     issue.line != null && issue.column != null -> resources.getString(
@@ -618,51 +583,32 @@ internal fun SingBoxJsonEditScreen(
                     issue.instancePath.isNotBlank() -> issue.instancePath
                     else -> null
                 }
-                Text(
-                    text = buildString {
-                        append(issue.message)
-                        if (!location.isNullOrBlank()) append("\n").append(location)
+                CouiRow(
+                    title = issue.message,
+                    summary = location,
+                    titleColor = Coui.colors.error,
+                    onClick = {
+                        issue.line?.let { controller.jumpToLine((it - 1).coerceAtLeast(0)) }
+                        showSchemaIssuesDialog = false
                     },
-                    color = MiuixTheme.colorScheme.error,
-                    style = MiuixTheme.textStyles.body2,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            issue.line?.let { controller.jumpToLine((it - 1).coerceAtLeast(0)) }
-                            showSchemaIssuesDialog = false
-                        }
-                        .padding(horizontal = 4.dp, vertical = 10.dp),
                 )
             }
         }
     }
 
-    OverlayDialog(
-        show = showDiscardDialog,
+    CouiDialog(
+        visible = showDiscardDialog,
         title = stringResource(R.string.json_unsaved_title),
-        summary = stringResource(R.string.json_unsaved_summary),
+        message = stringResource(R.string.json_unsaved_summary),
         onDismissRequest = { showDiscardDialog = false },
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            TextButton(
-                text = stringResource(R.string.json_continue_editing),
-                onClick = { showDiscardDialog = false },
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(
-                text = stringResource(R.string.json_discard_changes),
-                onClick = {
-                    showDiscardDialog = false
-                    exitEditor()
-                },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary(),
-            )
-        }
-    }
+        buttons = listOf(
+            CouiDialogButton(stringResource(R.string.json_continue_editing), CouiDialogButton.Kind.Primary) { showDiscardDialog = false },
+            CouiDialogButton(stringResource(R.string.json_discard_changes), CouiDialogButton.Kind.Danger) {
+                showDiscardDialog = false
+                exitEditor()
+            },
+        ),
+    )
 }
 
 private data class EditorAction(
@@ -727,10 +673,9 @@ private fun EditorActionKey(
             .padding(horizontal = 8.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
+        BasicText(
             text = action.label,
-            color = colors.symbolBarForeground.copy(alpha = if (action.enabled) 1f else 0.38f),
-            fontSize = 13.sp,
+            style = TextStyle(color = colors.symbolBarForeground.copy(alpha = if (action.enabled) 1f else 0.38f), fontSize = 13.sp),
             maxLines = 1,
         )
     }

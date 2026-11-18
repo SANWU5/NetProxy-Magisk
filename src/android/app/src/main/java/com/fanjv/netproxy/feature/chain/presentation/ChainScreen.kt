@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -492,7 +493,10 @@ private fun RenamePanel(current: String, onSave: (String) -> Unit) {
 
 /** 多行输入框：一次粘贴多条后置代理。COUI 没有多行输入组件，按搜索框的容器色和圆角绘制。 */
 @Composable
-internal fun TextArea(value: String, onValueChange: (String) -> Unit, hint: String) {
+internal fun TextArea(
+    value: String, onValueChange: (String) -> Unit, hint: String,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+) {
     val colors = Coui.colors
     Box(
         Modifier.fillMaxWidth().padding(12.dp).clip(RoundedCornerShape(18.dp)).background(colors.container8)
@@ -503,6 +507,7 @@ internal fun TextArea(value: String, onValueChange: (String) -> Unit, hint: Stri
             value, onValueChange, Modifier.fillMaxWidth(),
             textStyle = Coui.type.body.copy(color = colors.label),
             cursorBrush = SolidColor(colors.accent),
+            keyboardOptions = keyboardOptions,
         )
     }
 }

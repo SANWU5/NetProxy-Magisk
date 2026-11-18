@@ -1,6 +1,7 @@
 package com.fanjv.netproxy.core.ui.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -8,14 +9,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import top.yukonga.miuix.kmp.squircle.squircleSurface
-import top.yukonga.miuix.kmp.theme.LocalContentColor
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import dev.aiingjie.coui.Coui
 
 class CardItem(
     val key: String,
@@ -27,8 +26,7 @@ private fun CardSegment(
     isFirst: Boolean,
     isLast: Boolean,
     modifier: Modifier = Modifier,
-    color: Color = MiuixTheme.colorScheme.surfaceContainer,
-    contentColor: Color = MiuixTheme.colorScheme.onSurfaceContainer,
+    color: Color = Coui.colors.card,
     cornerRadius: Dp = 16.dp,
     outerHorizontalPadding: Dp = 0.dp,
     outerTopPadding: Dp = 0.dp,
@@ -41,30 +39,23 @@ private fun CardSegment(
     val background = if (topCornerRadius == 0.dp && bottomCornerRadius == 0.dp) {
         Modifier.background(color)
     } else {
-        Modifier.squircleSurface(
-            color,
-            topCornerRadius,
-            topCornerRadius,
-            bottomCornerRadius,
-            bottomCornerRadius,
-        )
+        Modifier
+            .clip(RoundedCornerShape(topCornerRadius, topCornerRadius, bottomCornerRadius, bottomCornerRadius))
+            .background(color)
     }
-
-    CompositionLocalProvider(LocalContentColor provides contentColor) {
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .padding(
-                    start = outerHorizontalPadding,
-                    end = outerHorizontalPadding,
-                    top = outerTopPadding,
-                    bottom = outerBottomPadding,
-                )
-                .then(background)
-                .padding(insidePadding),
-            content = content,
-        )
-    }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(
+                start = outerHorizontalPadding,
+                end = outerHorizontalPadding,
+                top = outerTopPadding,
+                bottom = outerBottomPadding,
+            )
+            .then(background)
+            .padding(insidePadding),
+        content = content,
+    )
 }
 
 fun LazyListScope.groupedCardItems(

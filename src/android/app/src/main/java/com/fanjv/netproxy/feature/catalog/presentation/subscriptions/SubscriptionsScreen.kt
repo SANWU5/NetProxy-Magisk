@@ -6,9 +6,6 @@ import com.fanjv.netproxy.core.ui.component.MenuAction
 import com.fanjv.netproxy.core.ui.component.CouiBarMenuButton
 import android.content.ClipData
 import android.content.ClipboardManager
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,7 +20,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fanjv.netproxy.core.di.netProxyViewModel
@@ -35,12 +31,6 @@ import com.fanjv.netproxy.feature.catalog.model.CatalogNode
 import com.fanjv.netproxy.feature.catalog.model.SubscriptionHistoryEntry
 import com.fanjv.netproxy.navigation.LocalNavigator
 import com.fanjv.netproxy.navigation.Route
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.ui.semantics.Role
 import dev.aiingjie.coui.Coui
@@ -57,6 +47,7 @@ import dev.aiingjie.coui.CouiDockSpace
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiLargeTitlePage
 import dev.aiingjie.coui.CouiLoading
+import dev.aiingjie.coui.CouiPanel
 import dev.aiingjie.coui.CouiRadio
 import dev.aiingjie.coui.CouiRow
 import dev.aiingjie.coui.LocalCouiOverlay
@@ -336,45 +327,27 @@ internal fun SubscriptionDetailsScreen(
         }
     }
 
-    OverlayDialog(
-        show = state.editingNodeRef.isNotBlank(),
+    CouiPanel(
+        visible = state.editingNodeRef.isNotBlank(),
         title = stringResource(R.string.node_edit),
-        onDismissRequest = viewModel::dismissNodeEditor
+        onDismissRequest = viewModel::dismissNodeEditor,
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextField(
-                value = editedNodeLink,
-                onValueChange = { editedNodeLink = it },
-                label = stringResource(R.string.node_link_label),
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-                maxLines = 8
-            )
-            Text(
-                text = if (state.details?.group?.type == "subscription") {
-                    stringResource(R.string.subscription_edit_remote_note)
-                } else {
-                    stringResource(R.string.subscription_edit_local_note)
-                },
-                color = colorScheme.onSurfaceVariantSummary,
-                fontSize = 13.sp
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(
-                    text = stringResource(R.string.common_cancel),
-                    modifier = Modifier.weight(1f),
-                    enabled = state.operation != "edit",
-                    onClick = viewModel::dismissNodeEditor
-                )
-                TextButton(
-                    text = stringResource(R.string.save_text),
-                    modifier = Modifier.weight(1f),
-                    enabled = editedNodeLink.isNotBlank() && state.operation != "edit",
-                    colors = ButtonDefaults.textButtonColorsPrimary(),
-                    onClick = { viewModel.saveEditedNode(editedNodeLink) }
-                )
-            }
+        CouiGroup(
+            first = true,
+            title = stringResource(R.string.node_link_label),
+            footer = stringResource(
+                if (state.details?.group?.type == "subscription") R.string.subscription_edit_remote_note
+                else R.string.subscription_edit_local_note
+            ),
+        ) {
+            TextArea(editedNodeLink, { editedNodeLink = it }, "")
         }
+        CouiButton(
+            text = stringResource(R.string.save_text),
+            onClick = { viewModel.saveEditedNode(editedNodeLink) },
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+            enabled = editedNodeLink.isNotBlank() && state.operation != "edit",
+        )
     }
 }
 

@@ -134,7 +134,7 @@ func beginConfigApply(options Options, destination string) (*configApplyTransact
 		}
 		transaction.journal.Static = append(transaction.journal.Static, snapshot)
 	}
-	for index, name := range []string{"providers.json", "outbounds.json", "inbound.json"} {
+	for index, name := range runtimeSnapshotNames {
 		path := filepath.Join(options.RuntimeDir, name)
 		snapshot, err := createConfigSnapshot(directory, fmt.Sprintf("runtime-%d", index), path)
 		if err != nil {
@@ -334,7 +334,7 @@ func validateConfigJournal(options Options, journal configApplyJournal) error {
 		allowedStatic[path] = struct{}{}
 	}
 	allowedRuntime := make(map[string]struct{})
-	for _, name := range []string{"providers.json", "outbounds.json", "inbound.json"} {
+	for _, name := range runtimeSnapshotNames {
 		allowedRuntime[filepath.Clean(filepath.Join(options.RuntimeDir, name))] = struct{}{}
 	}
 	for _, snapshot := range journal.Static {
@@ -404,6 +404,9 @@ func restoreConfigSnapshot(snapshot configFileSnapshot) error {
 	return os.Rename(temporaryPath, snapshot.Path)
 }
 
+// runtimeSnapshotNames 是配置事务需要一起回滚的运行时文件；route.json 只在启用策略时存在。
+var runtimeSnapshotNames = []string{"providers.json", "outbounds.json", "inbound.json", "route.json"}
+
 func prepareFromConfigJournal(options Options, journal configApplyJournal) PrepareResult {
 	prepared := PrepareResult{Backend: journal.Backend}
 	if journal.Mode != "" {
@@ -422,6 +425,10 @@ func prepareFromConfigJournal(options Options, journal configApplyJournal) Prepa
 			prepared.Outbounds = snapshot.Path
 		case "inbound.json":
 			prepared.Inbound = snapshot.Path
+		case "route.json":
+			if snapshot.Exists {
+				prepared.Route = snapshot.Path
+			}
 		}
 	}
 	return prepared

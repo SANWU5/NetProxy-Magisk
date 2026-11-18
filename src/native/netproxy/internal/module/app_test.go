@@ -20,10 +20,9 @@ import (
 	"time"
 
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/catalog"
+	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/chain"
 	moduleconfig "github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/config"
-	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/paths"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/provider"
-	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/policy"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/serviceapi"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/subscription"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/worker"
@@ -94,7 +93,7 @@ func TestSelectNodeStoppedKeepsTwoFieldStateAndPublicResult(t *testing.T) {
 	}
 }
 
-func TestPrepareWritesPolicyOverlayAlongsideCatalogRuntime(t *testing.T) {
+func TestPrepareWritesChainRuntime(t *testing.T) {
 	options := selectionFixture(t)
 	if err := os.MkdirAll(options.SingBoxDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -108,22 +107,78 @@ func TestPrepareWritesPolicyOverlayAlongsideCatalogRuntime(t *testing.T) {
 	if err := os.WriteFile(options.InboundConfig, []byte(testInboundConfig), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	items := policy.Defaults()
-	items[0].Mode = "manual"
-	items[0].NodeTag = "NODE"
-	if err := policy.Save(t.Context(), paths.New(options.ModuleDir).Policies(), items); err != nil {
+	document, _, err := chain.ParseLandings(t.Context(), "203.0.113.5:1080:u:p", chain.DefaultTypeSOCKS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := chain.Update(t.Context(), options.chainDir(), func(state *chain.State) error {
+		result := state.AppendLandings(document)
+		state.Mode, state.Manual = chain.ModeManualPolicy, result.Added[0]
+		state.Policies = []chain.Policy{{ID: "p", Name: "应用", Enabled: true, Landing: result.Added[0], Packages: []string{"com.example.app"}}}
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	prepared, err := Prepare(t.Context(), options, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	content, err := os.ReadFile(prepared.Policy)
+	route, err := os.ReadFile(prepared.Route)
+	if err != nil || !strings.Contains(string(route), `"outbound": "落地/203.0.113.5:1080"`) || !strings.Contains(string(route), "com.example.app") {
+		t.Fatalf("策略路由未进入 Prepare 结果: %s %v", route, err)
+	}
+	outbounds, err := os.ReadFile(prepared.Outbounds)
+	if err != nil || !strings.Contains(string(outbounds), `"detour": "链式前置"`) || !strings.Contains(string(outbounds), `"default": "链式代理"`) {
+		t.Fatalf("链式出站未生成: %s %v", outbounds, err)
+	}
+	if args := strings.Join(preparedConfigArgs(options, prepared), " "); !strings.HasPrefix(args, "-c "+prepared.Route+" -c ") {
+		t.Fatalf("策略路由必须排在主配置之前: %s", args)
+	}
+	if _, _, _, err := chain.Update(t.Context(), options.chainDir(), func(state *chain.State) error {
+		state.Mode = chain.ModeManual
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err = Prepare(t.Context(), options, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(content), `"outbound":"本地配置/NODE"`) || !strings.Contains(string(content), `"rule_set":["geosite/category-ai-!cn"]`) {
-		t.Fatalf("策略 overlay 未进入 Prepare 结果: %s", content)
+	if prepared.Route != "" {
+		t.Fatalf("手动模式不应生成策略路由: %s", prepared.Route)
+	}
+	if _, err := os.Stat(filepath.Join(options.RuntimeDir, "route.json")); !os.IsNotExist(err) {
+		t.Fatalf("旧策略路由未清理: %v", err)
+	}
+}
+
+func TestLoadChainTargetsFollowsNodeSelection(t *testing.T) {
+	options := selectionFixture(t)
+	targets, err := loadChainTargets(t.Context(), options, "Auto/本地配置")
+	if err != nil || targets.enabled || targets.proxy != "Auto/本地配置" {
+		t.Fatalf("没有后置时只能同步 Proxy: %+v %v", targets, err)
+	}
+	document, _, err := chain.ParseLandings(t.Context(), "socks5://203.0.113.6:1080#A", chain.DefaultTypeSOCKS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		mode  string
+		proxy string
+	}{{chain.ModePolicy, "Select/本地配置"}, {chain.ModeManual, chain.SelectorTag}} {
+		if _, _, _, err := chain.Update(t.Context(), options.chainDir(), func(state *chain.State) error {
+			if len(state.Landings.Outbounds) == 0 {
+				state.AppendLandings(document)
+			}
+			state.Mode, state.Manual = test.mode, "A"
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		targets, err := loadChainTargets(t.Context(), options, "Select/本地配置")
+		if err != nil || !targets.enabled || targets.landing != "落地/A" || targets.proxy != test.proxy {
+			t.Fatalf("%s 模式的选择目标错误: %+v %v", test.mode, targets, err)
+		}
 	}
 }
 

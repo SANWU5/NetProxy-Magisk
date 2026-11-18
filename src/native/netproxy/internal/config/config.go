@@ -21,7 +21,7 @@ import (
 type ModuleConfig struct {
 	AutoStart bool `json:"auto_start"`
 	Selection `json:"selection"`
-	WiFi      WiFiPolicy `json:"wifi"`
+	WiFi      WiFiPolicy  `json:"wifi"`
 	Chain     ChainConfig `json:"chain"`
 }
 
@@ -38,10 +38,9 @@ type WiFiPolicy struct {
 	ProxyOnNonWiFi bool     `json:"proxy_on_non_wifi"`
 }
 
-// ChainConfig 保存链式代理的连接偏好。
+// ChainConfig 只为让旧版 module.json 中的 chain 字段继续通过严格解析而保留；
+// 链式代理的后置列表、模式与策略位于 data/chain，不再读取这里的端口覆写。
 type ChainConfig struct {
-	// LandingPort 覆写链式落地副本的连接端口；0 表示使用节点原端口。
-	// 部分订阅要求落地端口低于 10000 才允许链式，因此必须允许用户改写。
 	LandingPort int `json:"landing_port"`
 }
 
@@ -154,14 +153,6 @@ func UpdateSelection(ctx context.Context, path string, selection Selection) erro
 	return editor.UpdateSelection(selection)
 }
 
-func UpdateChainLandingPort(ctx context.Context, path string, port int) error {
-	editor, err := Lock(ctx, path)
-	if err != nil {
-		return err
-	}
-	defer editor.Release()
-	return editor.UpdateChainLandingPort(port)
-}
 // Editor 在显式持有文件锁期间完成配置读改写。
 type Editor struct {
 	path string
@@ -198,33 +189,6 @@ func (editor *Editor) UpdateSelection(selection Selection) error {
 		return err
 	}
 	fields["selection"], err = json.Marshal(selection, json.Deterministic(true))
-	if err != nil {
-		return err
-	}
-	return editor.write(fields)
-}
-
-func (editor *Editor) UpdateChainLandingPort(port int) error {
-	content, err := os.ReadFile(editor.path)
-	if err != nil {
-		return err
-	}
-	config, err := ParseModule(content)
-	if err != nil {
-		return err
-	}
-	if config.Chain.LandingPort == port {
-		return nil
-	}
-	config.Chain.LandingPort = port
-	if err := config.validate(); err != nil {
-		return err
-	}
-	var fields map[string]jsontext.Value
-	if err := json.Unmarshal(content, &fields); err != nil {
-		return err
-	}
-	fields["chain"], err = json.Marshal(config.Chain, json.Deterministic(true))
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,6 @@ package catalog
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,9 +12,6 @@ import (
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
 	moduleconfig "github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/config"
-	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/provider"
-	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/option"
 )
 
 func TestScanAndBuildRuntime(t *testing.T) {
@@ -331,182 +327,91 @@ func TestBuildRuntimeFallbackAndEmpty(t *testing.T) {
 	}
 }
 
-func TestBuildRuntimeAddsEphemeralChainCopies(t *testing.T) {
+func TestBuildRuntimeChainOutbounds(t *testing.T) {
 	root := t.TempDir()
-	writeGroup(t, root, "default", "前置订阅", "subscription", "香港")
-	writeGroup(t, root, "landing", "落地订阅", "subscription", "美国")
-	userProvider := readFile(t, filepath.Join(root, "landing", "provider.json"))
+	writeGroup(t, root, "default", "机场", "subscription", "香港")
 	runtimeDir := t.TempDir()
+	landing := map[string]jsontext.Value{
+		"type": jsontext.Value(`"socks"`), "tag": jsontext.Value(`"落地/住宅"`),
+		"server": jsontext.Value(`"203.0.113.9"`), "server_port": jsontext.Value(`1080`),
+		"detour": jsontext.Value(`"链式前置"`),
+	}
 	if _, err := BuildRuntime(t.Context(), RuntimeOptions{
 		Root: root, ProvidersOutput: filepath.Join(runtimeDir, "providers.json"),
 		OutboundsOutput: filepath.Join(runtimeDir, "outbounds.json"),
 		Selection:       moduleconfig.Selection{ActiveGroupID: "default"},
+		Chain: &ChainOutbounds{
+			FrontTag: "链式前置", SelectorTag: "链式代理",
+			Landings: []map[string]jsontext.Value{landing}, LandingTags: []string{"落地/住宅"},
+			Manual: "落地/住宅", ProxyOption: true, ProxyChain: true,
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	providers := readFile(t, filepath.Join(runtimeDir, "providers.json"))
-	landing := readFile(t, filepath.Join(runtimeDir, "chain-landing.json"))
+	var document struct {
+		Outbounds []struct {
+			Type      string   `json:"type"`
+			Tag       string   `json:"tag"`
+			Outbounds []string `json:"outbounds"`
+			Default   string   `json:"default"`
+			Detour    string   `json:"detour"`
+		} `json:"outbounds"`
+	}
+	if err := json.Unmarshal([]byte(readFile(t, filepath.Join(runtimeDir, "outbounds.json"))), &document, json.RejectUnknownMembers(false)); err != nil {
+		t.Fatal(err)
+	}
+	byTag := make(map[string]int, len(document.Outbounds))
+	for index, outbound := range document.Outbounds {
+		byTag[outbound.Tag] = index
+	}
+	front := document.Outbounds[byTag["链式前置"]]
+	if front.Type != "selector" || front.Default != "Auto/机场" || strings.Join(front.Outbounds, ",") != "Auto/机场,Select/机场" {
+		t.Fatalf("链式前置必须与 Proxy 使用同一组节点选项并默认当前选择: %#v", front)
+	}
+	selector := document.Outbounds[byTag["链式代理"]]
+	if selector.Default != "落地/住宅" || strings.Join(selector.Outbounds, ",") != "落地/住宅" {
+		t.Fatalf("链式代理选择器错误: %#v", selector)
+	}
+	proxy := document.Outbounds[byTag["Proxy"]]
+	if proxy.Default != "链式代理" || strings.Join(proxy.Outbounds, ",") != "Auto/机场,Select/机场,链式代理" {
+		t.Fatalf("手动模式下 Proxy 必须默认走链式代理: %#v", proxy)
+	}
+	index, ok := byTag["落地/住宅"]
+	if !ok || document.Outbounds[index].Detour != "链式前置" {
+		t.Fatalf("后置代理必须经由链式前置连接: %#v", document.Outbounds)
+	}
+}
+
+func TestBuildRuntimeChainPolicyModeKeepsNodeSelection(t *testing.T) {
+	root := t.TempDir()
+	writeGroup(t, root, "default", "机场", "subscription", "香港")
+	runtimeDir := t.TempDir()
+	if _, err := BuildRuntime(t.Context(), RuntimeOptions{
+		Root: root, ProvidersOutput: filepath.Join(runtimeDir, "providers.json"),
+		OutboundsOutput: filepath.Join(runtimeDir, "outbounds.json"),
+		Selection:       moduleconfig.Selection{ActiveGroupID: "default", SelectedNodeTag: "香港"},
+		Chain: &ChainOutbounds{
+			FrontTag: "链式前置", SelectorTag: "链式代理",
+			Landings:    []map[string]jsontext.Value{{"type": jsontext.Value(`"http"`), "tag": jsontext.Value(`"落地/A"`), "server": jsontext.Value(`"203.0.113.1"`), "server_port": jsontext.Value(`8080`), "detour": jsontext.Value(`"链式前置"`)}},
+			LandingTags: []string{"落地/A"}, ProxyOption: true,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	outbounds := readFile(t, filepath.Join(runtimeDir, "outbounds.json"))
-	for _, expected := range []string{
-		`"type": "local"`, `"tag": "链式落地"`, `chain-landing.json`,
-	} {
-		if !strings.Contains(providers, expected) {
-			t.Fatalf("chain provider missing %s: %s", expected, providers)
-		}
-	}
-	for _, expected := range []string{
-		`"tag": "前置订阅/香港"`, `"detour": "链式前置"`, `"server_port": 1080`,
-	} {
-		if !strings.Contains(landing, expected) {
-			t.Fatalf("chain landing missing %s: %s", expected, landing)
-		}
-	}
-	// sing-box 的 selector 启动阶段不解析 provider 节点，default 不能指向
-	// 链式落地副本；落地选择由用户在面板选择后经 cache_file 持久化。
-	for _, expected := range []string{`"tag": "链式前置"`, `"tag": "链式代理"`, `"outbounds": [`} {
-		if !strings.Contains(outbounds, expected) {
-			t.Fatalf("chain outbound missing %s: %s", expected, outbounds)
-		}
-	}
-	if strings.Contains(outbounds, `"default": "链式落地/`) {
-		t.Fatalf("chain landing selector must not default to a provider node: %s", outbounds)
-	}
-	if got := readFile(t, filepath.Join(root, "landing", "provider.json")); got != userProvider {
-		t.Fatal("chain generation modified the persisted provider")
+	if !strings.Contains(outbounds, `"default": "Select/机场"`) || strings.Contains(outbounds, `"default": "链式代理"`) {
+		t.Fatalf("策略模式不能改变 Proxy 的节点选择: %s", outbounds)
 	}
 }
 
-func TestChainLandingCopiesPreserveRawFields(t *testing.T) {
+func TestBuildRuntimeManualChainRequiresNodes(t *testing.T) {
 	root := t.TempDir()
-	directory := filepath.Join(root, "default")
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	providerDocument := `{"outbounds":[{"type":"shadowsocks","tag":"加密节点","server":"example.com","server_port":8388,` +
-		`"method":"aes-128-gcm","password":"secret","plugin":"obfs-local","plugin_opts":"obfs=http;obfs-host=example.com"}]}`
-	if err := os.WriteFile(filepath.Join(directory, "provider.json"), []byte(providerDocument), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	metadata, err := json.Marshal(map[string]any{
-		"id": "default", "name": "落地订阅", "type": "subscription", "revision": 1,
-		"node_count": 1, "update_interval": 86400, "update_via_proxy": "auto",
-	}, json.Deterministic(true))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(directory, "meta.json"), metadata, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	runtimeDir := t.TempDir()
 	if _, err := BuildRuntime(t.Context(), RuntimeOptions{
-		Root: root, ProvidersOutput: filepath.Join(runtimeDir, "providers.json"),
-		OutboundsOutput: filepath.Join(runtimeDir, "outbounds.json"),
-		Selection:       moduleconfig.Selection{ActiveGroupID: "default"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	landing := readFile(t, filepath.Join(runtimeDir, "chain-landing.json"))
-	for _, expected := range []string{
-		`"method": "aes-128-gcm"`, `"password": "secret"`,
-		`"plugin_opts": "obfs=http;obfs-host=example.com"`, `"tag": "落地订阅/加密节点"`,
-	} {
-		if !strings.Contains(landing, expected) {
-			t.Fatalf("chain landing lost raw field %s: %s", expected, landing)
-		}
-	}
-}
-
-func TestBuildRuntimeOverridesChainLandingPort(t *testing.T) {
-	root := t.TempDir()
-	writeGroup(t, root, "default", "前置订阅", "subscription", "香港")
-	writeGroup(t, root, "landing", "落地订阅", "subscription", "美国")
-	moduleConfig := filepath.Join(t.TempDir(), "module.json")
-	if err := os.WriteFile(moduleConfig, []byte(`{"selection":{"group_id":"default"},"chain":{"landing_port":9876}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	runtimeDir := t.TempDir()
-	if _, err := BuildRuntime(t.Context(), RuntimeOptions{
-		Root: root, ModuleConfig: moduleConfig,
-		ProvidersOutput: filepath.Join(runtimeDir, "providers.json"),
-		OutboundsOutput: filepath.Join(runtimeDir, "outbounds.json"),
-	}); err != nil {
-		t.Fatal(err)
-	}
-	landing := readFile(t, filepath.Join(runtimeDir, "chain-landing.json"))
-	if !strings.Contains(landing, `"server_port": 9876`) || strings.Contains(landing, `"server_port": 1080`) {
-		t.Fatalf("后置端口覆写未生效: %s", landing)
-	}
-	if got := readFile(t, filepath.Join(root, "landing", "provider.json")); strings.Contains(got, `"server_port": 9876`) {
-		t.Fatal("端口覆写不应修改持久化 Provider")
-	}
-}
-
-func TestBuildRuntimeWithoutEligibleProvidersRemovesLandingFile(t *testing.T) {
-	root := t.TempDir()
-	directory := filepath.Join(root, "default")
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	providerDocument := `{"outbounds":[{"type":"ssh","tag":"ssh节点","server":"example.com","server_port":22,"user":"root"}]}`
-	if err := os.WriteFile(filepath.Join(directory, "provider.json"), []byte(providerDocument), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	metadata, err := json.Marshal(map[string]any{
-		"id": "default", "name": "本地配置", "type": "local", "revision": 1,
-		"node_count": 1, "update_interval": 86400, "update_via_proxy": "auto",
-	}, json.Deterministic(true))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(directory, "meta.json"), metadata, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	runtimeDir := t.TempDir()
-	landingPath := filepath.Join(runtimeDir, "chain-landing.json")
-	if err := os.WriteFile(landingPath, []byte("stale"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := BuildRuntime(t.Context(), RuntimeOptions{
-		Root: root, ProvidersOutput: filepath.Join(runtimeDir, "providers.json"),
-		OutboundsOutput: filepath.Join(runtimeDir, "outbounds.json"),
-		Selection:       moduleconfig.Selection{ActiveGroupID: "default"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(landingPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("stale chain landing file should be removed")
-	}
-}
-
-func TestChainProviderEligibilityRejectsEndpointsAndUnsupportedProtocols(t *testing.T) {
-	if ChainProviderEligible(provider.Document{Outbounds: []option.Outbound{{
-		Type: C.TypeSSH, Tag: "ssh", Options: new(option.SSHOutboundOptions),
-	}}}) {
-		t.Fatal("SSH provider should not be a chain landing provider")
-	}
-	if ChainProviderEligible(provider.Document{Endpoints: []option.Endpoint{{
-		Type: C.TypeWireGuard, Tag: "wg", Options: new(option.WireGuardEndpointOptions),
-	}}}) {
-		t.Fatal("endpoint provider should not be a chain landing provider")
-	}
-}
-
-func TestChainLandingSkipsSubscriptionMetadataPseudoNodes(t *testing.T) {
-	document := provider.Document{Outbounds: []option.Outbound{
-		{Type: C.TypeVLESS, Tag: "🇯🇵 日本东京", Options: new(option.VLESSOutboundOptions)},
-		{Type: C.TypeVLESS, Tag: "剩余流量：58 GB", Options: new(option.VLESSOutboundOptions)},
-		{Type: C.TypeVLESS, Tag: "套餐到期：2027-04-28", Options: new(option.VLESSOutboundOptions)},
-		{Type: C.TypeVLESS, Tag: "距离下次重置剩余：28 天", Options: new(option.VLESSOutboundOptions)},
-	}}
-	eligible, err := eligibleLandingTags(document)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(eligible) != 1 {
-		t.Fatalf("metadata pseudo-nodes must not be chain candidates: %#v", eligible)
-	}
-	if _, ok := eligible["🇯🇵 日本东京"]; !ok {
-		t.Fatalf("real node missing from chain candidates: %#v", eligible)
+		Root: root, ProvidersOutput: filepath.Join(root, "providers.json"),
+		OutboundsOutput: filepath.Join(root, "outbounds.json"), AllowEmpty: true,
+		Chain: &ChainOutbounds{FrontTag: "链式前置", SelectorTag: "链式代理", LandingTags: []string{"落地/A"}, ProxyChain: true},
+	}); err == nil {
+		t.Fatal("没有前置节点时手动后置不能静默退回直连")
 	}
 }
 

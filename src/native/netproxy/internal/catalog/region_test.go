@@ -2,19 +2,12 @@ package catalog
 
 import "testing"
 
-func TestRegionIncludeRegexMatchesRuntimeProviderNames(t *testing.T) {
-	pattern := RegionIncludeRegex("示例分组", []string{"🇯🇵日本东京A1", "🇯🇵日本东京A2"})
-	if pattern == nil {
-		t.Fatal("expected region include regex")
-	}
-	for _, tag := range []string{"示例分组/🇯🇵日本东京A1", "示例分组/🇯🇵日本东京A2"} {
-		if !pattern.MatchString(tag) {
-			t.Fatalf("region regex does not match runtime tag %q: %s", tag, pattern)
-		}
-	}
-	for _, tag := range []string{"🇯🇵日本东京A1", "示例分组/🇺🇸美国A1"} {
-		if pattern.MatchString(tag) {
-			t.Fatalf("region regex matched unrelated tag %q: %s", tag, pattern)
+func TestRegionKeyRecognizesCommonMarkers(t *testing.T) {
+	for tag, want := range map[string]string{
+		"🇯🇵日本东京A1": "jp", "香港 IPLC 01": "hk", "US-Seattle": "us", "未知节点": "other",
+	} {
+		if got := RegionKey(tag); got != want {
+			t.Fatalf("RegionKey(%q) = %q, want %q", tag, got, want)
 		}
 	}
 }

@@ -213,7 +213,7 @@ func TestDelaySupportsSingleNodeAutoGroupWithoutGroupsSnapshot(t *testing.T) {
 	}
 }
 
-func TestDelayResolvesGroupIDToRuntimeTagForRegionAndNodeTargets(t *testing.T) {
+func TestDelayResolvesGroupIDToRuntimeTagForNodeTargets(t *testing.T) {
 	temp := t.TempDir()
 	catalogRoot := filepath.Join(temp, "catalog")
 	groupDir := filepath.Join(catalogRoot, "group-1")
@@ -234,24 +234,12 @@ func TestDelayResolvesGroupIDToRuntimeTagForRegionAndNodeTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := &delayServerState{current: []serviceapi.GroupItem{
-		{Tag: "Auto/日本节点 [jp]", Type: "urltest", URLTestTime: 200},
 		{Tag: "日本节点/🇯🇵日本A1", Type: "socks", URLTestTime: 200, URLTestDelay: 88},
 		{Tag: "日本节点/🇺🇸美国A1", Type: "socks", URLTestTime: 200, URLTestDelay: 99},
 	}}
 	server := delayServer(t, state)
 	defer server.Close()
 	options := delayOptions(t, catalogRoot, moduleConfig, server.URL)
-
-	regionResult, err := Delay(t.Context(), options, "Auto/group-1 [jp]", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if regionResult.Target != "Auto/日本节点 [jp]" || len(regionResult.Groups) != 1 || len(regionResult.Groups[0].Items) != 1 {
-		t.Fatalf("地区测速目标映射错误: %#v", regionResult)
-	}
-	if regionResult.Groups[0].Items[0].Tag != "日本节点/🇯🇵日本A1" {
-		t.Fatalf("地区测速返回了其他地区节点: %#v", regionResult.Groups[0].Items)
-	}
 
 	nodeResult, err := Delay(t.Context(), options, "group-1/🇯🇵日本A1", "")
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/catalog"
 	moduleapp "github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/module"
+	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/paths"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/provider"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/service"
 )
@@ -28,6 +29,7 @@ func (c *cli) node(ctx context.Context, args []string) error {
 		CatalogRoot: options.CatalogRoot, ModuleConfig: options.ModuleConfig, StateFile: options.StateFile,
 		ProgressDir: options.ProgressDir, WorkerPIDFile: options.WorkerPIDFile, SingBoxPath: options.SingBoxPath,
 		ServiceAddress: options.ServiceAddress, ServiceSecret: options.ServiceSecret, RequestTimeout: options.RequestTimeout,
+		ChainDir: paths.New(options.ModuleDir).Chain(),
 	}
 	switch action {
 	case "add", "import", "edit", "remove", "use", "show":

@@ -281,8 +281,12 @@ func failureStatus(code string, err error) int {
 		return http.StatusGatewayTimeout
 	case "command.canceled", "subscription.cancelled":
 		return http.StatusRequestTimeout
-	case "node.runtime_sync_failed", "mode.runtime_sync_failed", "subscription.runtime_sync_failed", "policy.runtime_sync_failed", "node.delay_api_failed":
+	case "node.runtime_sync_failed", "mode.runtime_sync_failed", "subscription.runtime_sync_failed", "chain.runtime_sync_failed", "chain.apply_failed", "node.delay_api_failed":
 		return http.StatusBadGateway
+	case "chain.invalid":
+		return http.StatusUnprocessableEntity
+	case "chain.service_stopped":
+		return http.StatusConflict
 	case "subscription.invalid_target", "subscription.invalid_group", "subscription.read_only", "subscription.interval_too_short",
 		"subscription.edit_invalid", "subscription.proxy_mode_invalid", "subscription.timeout_invalid", "subscription.text_invalid", "mode.invalid", "mode.unavailable",
 		"ebpf.status_invalid", "ebpf.unsupported", "network.direct_route_required":
@@ -370,7 +374,8 @@ func (s *Server) controlOptions() service.Options {
 		SingBoxConfig: paths.SingBoxConfig(s.options.SingBoxDir), InboundConfig: s.options.InboundConfig,
 		StateFile: s.options.StateFile, ProgressDir: s.options.ProgressDir, DelayDir: layout.DelayDir(),
 		WorkerPIDFile: s.options.WorkerPIDFile, SingBoxPath: s.options.SingBoxPath,
-		ServiceAddress: s.options.ServiceAddress, ServiceSecret: s.options.ServiceSecret, RequestTimeout: s.options.RequestTimeout}
+		ServiceAddress: s.options.ServiceAddress, ServiceSecret: s.options.ServiceSecret, RequestTimeout: s.options.RequestTimeout,
+		ChainDir: layout.Chain()}
 }
 
 func (s *Server) info(context.Context, *http.Request) (contract.Result, error) {

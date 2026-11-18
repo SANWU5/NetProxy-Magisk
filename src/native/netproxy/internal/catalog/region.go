@@ -1,14 +1,8 @@
 package catalog
 
-import (
-	"regexp"
-	"strings"
+import "strings"
 
-	"github.com/sagernet/sing/common/json/badoption"
-)
-
-// RegionKey is the stable, locale-neutral region identifier used by policy
-// selection and the generated URL-test groups.
+// RegionKey 返回与语言无关的稳定地区标识，供节点列表按地区展示。
 func RegionKey(tag string) string {
 	value := strings.ToLower(tag)
 	for _, region := range catalogRegions {
@@ -19,34 +13,6 @@ func RegionKey(tag string) string {
 		}
 	}
 	return "other"
-}
-
-func regexpToBadOption(value *regexp.Regexp) *badoption.Regexp {
-	if value == nil {
-		return nil
-	}
-	converted := badoption.Regexp(*value)
-	return &converted
-}
-
-// RegionAutoTag is deliberately stable so policy overlays can refer to the
-// generated group without persisting provider changes.
-func RegionAutoTag(runtimeTag, region string) string {
-	return "Auto/" + runtimeTag + " [" + region + "]"
-}
-
-// RegionIncludeRegex matches the runtime provider names exposed by sing-box.
-// Provider nodes are namespaced as "<runtime group>/<node>", so matching the
-// persisted node tag alone leaves a region URLTest with no members.
-func RegionIncludeRegex(runtimeTag string, tags []string) *regexp.Regexp {
-	parts := make([]string, 0, len(tags))
-	for _, tag := range tags {
-		parts = append(parts, regexp.QuoteMeta(runtimeTag+"/"+tag))
-	}
-	if len(parts) == 0 {
-		return nil
-	}
-	return regexp.MustCompile("^(?:" + strings.Join(parts, "|") + ")$")
 }
 
 type regionRule struct {

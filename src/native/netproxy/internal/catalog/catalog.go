@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -81,6 +82,22 @@ type RuntimeOptions struct {
 	OutboundsOutput string
 	Selection       moduleconfig.Selection
 	AllowEmpty      bool
+	Chain           *ChainOutbounds
+}
+
+// ChainOutbounds 是链式代理需要编入出站图的片段，由 chain 包生成。
+// Catalog 只负责让「链式前置」与顶层 Proxy 共用同一组节点选项。
+type ChainOutbounds struct {
+	FrontTag    string
+	SelectorTag string
+	// Landings 是已经设置好 tag 与 detour 的后置代理原始出站。
+	Landings    []map[string]jsontext.Value
+	LandingTags []string
+	// Manual 是「链式代理」选择器的默认后置；为空时由内核选择第一个。
+	Manual string
+	// ProxyOption 让顶层 Proxy 可以选择链式代理；ProxyChain 让它默认选择链式代理。
+	ProxyOption bool
+	ProxyChain  bool
 }
 
 type RuntimeResult struct {
@@ -379,14 +396,12 @@ func BuildRuntime(ctx context.Context, options RuntimeOptions) (RuntimeResult, e
 		return RuntimeResult{}, err
 	}
 	defer release()
-	landingPort := 0
 	if options.ModuleConfig != "" {
 		module, err := moduleconfig.LoadModule(options.ModuleConfig)
 		if err != nil {
 			return RuntimeResult{}, fmt.Errorf("读取 module.json 失败: %w", err)
 		}
 		options.Selection = module.Selection
-		landingPort = module.Chain.LandingPort
 	}
 	groups, err := loadGroups(ctx, options.Root, false)
 	if err != nil {
@@ -396,23 +411,13 @@ func BuildRuntime(ctx context.Context, options RuntimeOptions) (RuntimeResult, e
 		if !options.AllowEmpty {
 			return RuntimeResult{}, errors.New("Catalog 中没有可用节点，请先导入单节点、文件或订阅")
 		}
+		if options.Chain != nil && options.Chain.ProxyChain {
+			return RuntimeResult{}, errors.New("链式代理需要前置节点，请先导入节点或关闭手动后置")
+		}
 		if err := writeEmptyRuntime(options); err != nil {
 			return RuntimeResult{}, err
 		}
 		return RuntimeResult{SelectorMode: "urltest"}, nil
-	}
-	for _, group := range groups {
-		group.Nodes, err = provider.InspectFile(ctx, group.ProviderPath)
-		if err != nil {
-			// Runtime generation already preserves the provider path. A malformed
-			// secondary group must not prevent the active selection from being built;
-			// sing-box check will report it at the existing validation boundary.
-			group.Nodes = nil
-			continue
-		}
-		for index := range group.Nodes {
-			group.Nodes[index].Region = RegionKey(group.Nodes[index].Tag)
-		}
 	}
 
 	selection, runtimeTag, err := normalizeSelection(ctx, groups, options.Selection, "")
@@ -423,19 +428,11 @@ func BuildRuntime(ctx context.Context, options RuntimeOptions) (RuntimeResult, e
 		return RuntimeResult{}, errors.New("Catalog 元数据与 Provider 节点数量不一致")
 	}
 
-		landingOutput := ChainLandingOutputPath(options.ProvidersOutput)
-	chain, err := buildChainRuntime(ctx, groups, landingOutput, landingPort)
-	if err != nil {
-		return RuntimeResult{}, err
-	}
-	if chain == nil {
-		_ = os.Remove(landingOutput)
-	}
-	if err := writeRuntimeProviders(options.ProvidersOutput, groups, chain); err != nil {
+	if err := writeRuntimeProviders(options.ProvidersOutput, groups); err != nil {
 		return RuntimeResult{}, err
 	}
 	activeTag, _ := selection.RuntimeTargets(runtimeTag)
-	if err := writeRuntimeOutbounds(options.OutboundsOutput, groups, activeTag, chain); err != nil {
+	if err := writeRuntimeOutbounds(options.OutboundsOutput, groups, activeTag, options.Chain); err != nil {
 		return RuntimeResult{}, err
 	}
 
@@ -531,7 +528,7 @@ func findGroup(groups []*loadedGroup, id string) int {
 	return -1
 }
 
-func writeRuntimeProviders(path string, groups []*loadedGroup, chain ...*chainRuntime) error {
+func writeRuntimeProviders(path string, groups []*loadedGroup) error {
 	items := make([]option.Provider, 0, len(groups)+1)
 	for _, group := range groups {
 		items = append(items, option.Provider{
@@ -548,21 +545,12 @@ func writeRuntimeProviders(path string, groups []*loadedGroup, chain ...*chainRu
 			},
 		})
 	}
-	if len(chain) > 0 && chain[0] != nil && len(chain[0].LandingTags) > 0 {
-		items = append(items, option.Provider{
-			Type: C.ProviderTypeLocal,
-			Tag:  ChainLandingProviderTag,
-			Options: &option.ProviderLocalOptions{
-				Path: chain[0].LandingPath,
-			},
-		})
-	}
 	return writeRuntimeJSONAtomic(path, struct {
 		Providers []option.Provider `json:"providers"`
 	}{Providers: items})
 }
 
-func writeRuntimeOutbounds(path string, groups []*loadedGroup, defaultTag string, chain ...*chainRuntime) error {
+func writeRuntimeOutbounds(path string, groups []*loadedGroup, defaultTag string, chain *ChainOutbounds) error {
 	outbounds := []option.Outbound{
 		{Type: C.TypeDirect, Tag: "direct", Options: new(option.DirectOutboundOptions)},
 		{Type: C.TypeBlock, Tag: "block", Options: new(option.StubOptions)},
@@ -593,62 +581,53 @@ func writeRuntimeOutbounds(path string, groups []*loadedGroup, defaultTag string
 			},
 		)
 		options = append(options, autoTag, selectTag)
-		regions := make(map[string][]string)
-		for _, node := range group.Nodes {
-			regions[node.Region] = append(regions[node.Region], node.Tag)
-		}
-		for region, tags := range regions {
-			if region == "" || len(tags) == 0 {
-				continue
-			}
-			outbounds = append(outbounds, option.Outbound{
-				Type: C.TypeURLTest,
-				Tag:  RegionAutoTag(group.RuntimeTag, region),
-				Options: &option.URLTestOutboundOptions{
-					Providers:                 []string{group.RuntimeTag},
-					Include:                   regexpToBadOption(RegionIncludeRegex(group.RuntimeTag, tags)),
-					URL:                       "https://www.gstatic.com/generate_204",
-					Interval:                  badoption.Duration(3 * time.Minute),
-					Tolerance:                 50,
-					InterruptExistConnections: true,
-				},
-			})
-		}
 	}
-	if len(chain) > 0 && chain[0] != nil && len(chain[0].LandingTags) > 0 {
+	proxyOptions, proxyDefault := options, defaultTag
+	var landings []map[string]jsontext.Value
+	if chain != nil && len(chain.LandingTags) > 0 {
+		// 链式前置与 Proxy 使用同一组节点选项，并由选择同步保持在同一个分组目标上，
+		// 这样手动后置接管 Proxy 后，前置仍然是用户在节点页选择的节点。
 		outbounds = append(outbounds,
 			option.Outbound{
 				Type: C.TypeSelector,
-				Tag:  ChainFrontTag,
+				Tag:  chain.FrontTag,
 				Options: &option.SelectorOutboundOptions{
-					Providers:                 chain[0].FrontProviders,
+					GroupCommonOption:         option.GroupCommonOption{Outbounds: options},
+					Default:                   defaultTag,
 					InterruptExistConnections: true,
 				},
 			},
 			option.Outbound{
 				Type: C.TypeSelector,
-				Tag:  ChainOutboundTag,
+				Tag:  chain.SelectorTag,
 				Options: &option.SelectorOutboundOptions{
-					Providers:                 []string{ChainLandingProviderTag},
+					GroupCommonOption:         option.GroupCommonOption{Outbounds: chain.LandingTags},
+					Default:                   chain.Manual,
 					InterruptExistConnections: true,
 				},
 			},
 		)
-		options = append(options, ChainOutboundTag)
+		landings = chain.Landings
+		if chain.ProxyOption {
+			proxyOptions = append(slices.Clone(options), chain.SelectorTag)
+		}
+		if chain.ProxyChain {
+			proxyDefault = chain.SelectorTag
+		}
 	}
 	outbounds = append(outbounds, option.Outbound{
 		Type: C.TypeSelector,
 		Tag:  "Proxy",
 		Options: &option.SelectorOutboundOptions{
-			Outbounds:                 options,
-			Default:                   defaultTag,
+			GroupCommonOption:         option.GroupCommonOption{Outbounds: proxyOptions},
+			Default:                   proxyDefault,
 			InterruptExistConnections: true,
 		},
 	})
-	return writeRuntimeOutboundsAtomic(path, outbounds)
+	return writeRuntimeOutboundsAtomic(path, outbounds, landings...)
 }
 
-func writeRuntimeOutboundsAtomic(path string, outbounds []option.Outbound) error {
+func writeRuntimeOutboundsAtomic(path string, outbounds []option.Outbound, raw ...map[string]jsontext.Value) error {
 	content, err := SJSON.MarshalContext(provider.RuntimeContext(context.Background()), struct {
 		Outbounds []option.Outbound `json:"outbounds"`
 	}{Outbounds: outbounds})
@@ -668,6 +647,7 @@ func writeRuntimeOutboundsAtomic(path string, outbounds []option.Outbound) error
 			}
 		}
 	}
+	document.Outbounds = append(document.Outbounds, raw...)
 	return writeJSONAtomic(path, document)
 }
 

@@ -46,40 +46,14 @@ func TestModuleJSONDefaultsAndStrictValidation(t *testing.T) {
 	}
 }
 
-func TestChainLandingPortUpdateKeepsOtherFields(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "module.json")
-	original := `{"auto_start":true,"selection":{"group_id":"default"},"wifi":{"mode":"whitelist","blacklist":["Home"]}}`
-	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := UpdateChainLandingPort(t.Context(), path, 9876); err != nil {
-		t.Fatal(err)
-	}
-	after, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := LoadModule(path)
-	if err != nil || got.Chain.LandingPort != 9876 || !got.AutoStart || got.SelectedNodeTag != "" ||
-		got.WiFi.Mode != "whitelist" || !reflect.DeepEqual(got.WiFi.Blacklist, []string{"Home"}) {
-		t.Fatalf("端口更新丢失其他字段: %+v %v", got, err)
-	}
-	if err := UpdateChainLandingPort(t.Context(), path, 9876); err != nil {
-		t.Fatal(err)
-	}
-	unchanged, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !os.SameFile(after, unchanged) {
-		t.Fatal("无变更仍替换了原文件")
-	}
-	if err := UpdateChainLandingPort(t.Context(), path, 70000); err == nil {
-		t.Fatal("接受了无效端口")
-	}
-	got, err = LoadModule(path)
+func TestLegacyChainFieldStillParses(t *testing.T) {
+	// 旧版模块在 module.json 写入过 chain.landing_port，保留数据升级后必须仍能启动。
+	got, err := ParseModule([]byte(`{"selection":{"group_id":"default"},"chain":{"landing_port":9876}}`))
 	if err != nil || got.Chain.LandingPort != 9876 {
-		t.Fatalf("失败更新修改了原文件: %+v %v", got, err)
+		t.Fatalf("旧版 chain 字段解析失败: %+v %v", got, err)
+	}
+	if _, err := ParseModule([]byte(`{"chain":{"landing_port":70000}}`)); err == nil {
+		t.Fatal("接受了无效端口")
 	}
 }
 

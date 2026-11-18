@@ -15,6 +15,7 @@ import (
 	json "encoding/json/v2"
 
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/catalog"
+	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/chain"
 	moduleconfig "github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/config"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/inbound"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/paths"
@@ -40,6 +41,8 @@ type Options struct {
 	ServiceAddress string
 	ServiceSecret  string
 	RequestTimeout time.Duration
+	// ChainDir 是链式代理设置目录；为空时按默认模块布局推导。
+	ChainDir string
 }
 
 // Status 是仪表盘使用的服务状态快照，字段与 netproxyctl schema=1 保持一致。
@@ -63,16 +66,19 @@ type Status struct {
 	ActiveGroupNodeCount   int      `json:"active_group_node_count"`
 	SelectedNodeRef        string   `json:"selected_node_ref"`
 	RuntimeSelected        string   `json:"runtime_selected"`
-	MemoryBytes            uint64   `json:"memory_bytes"`
-	ProcessCPUTicks        uint64   `json:"process_cpu_ticks"`
-	SystemCPUTicks         uint64   `json:"system_cpu_ticks"`
-	CPUCount               int      `json:"cpu_count"`
-	ConnectionsIn          int32    `json:"connections_in"`
-	ConnectionsOut         int32    `json:"connections_out"`
-	UploadTotal            int64    `json:"upload_total"`
-	DownloadTotal          int64    `json:"download_total"`
-	WorkerState            string   `json:"worker_state"`
-	WorkerPID              *int     `json:"worker_pid"`
+	// ChainMode 与 ChainLanding 来自链式代理设置：手动模式下顶层流量经由 ChainLanding 出网。
+	ChainMode       string `json:"chain_mode"`
+	ChainLanding    string `json:"chain_landing"`
+	MemoryBytes     uint64 `json:"memory_bytes"`
+	ProcessCPUTicks uint64 `json:"process_cpu_ticks"`
+	SystemCPUTicks  uint64 `json:"system_cpu_ticks"`
+	CPUCount        int    `json:"cpu_count"`
+	ConnectionsIn   int32  `json:"connections_in"`
+	ConnectionsOut  int32  `json:"connections_out"`
+	UploadTotal     int64  `json:"upload_total"`
+	DownloadTotal   int64  `json:"download_total"`
+	WorkerState     string `json:"worker_state"`
+	WorkerPID       *int   `json:"worker_pid"`
 }
 
 // DelayResult 是一次节点测速请求及其最新分组状态。
@@ -140,7 +146,13 @@ func ReadStatus(ctx context.Context, options Options) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
+	chainState, err := chain.Load(ctx, options.ChainDir)
+	if err != nil {
+		return Status{}, err
+	}
 	status := Status{
+		ChainMode:              chainState.Mode,
+		ChainLanding:           chainState.Manual,
 		State:                  state.State,
 		StartedAt:              state.StartedAt,
 		ReadyAt:                state.ReadyAt,
@@ -376,52 +388,15 @@ func Delay(ctx context.Context, options Options, target, group string) (DelayRes
 	cancel()
 	_ = client.Close()
 	if requestErr == nil {
-		return filterDelayRegion(ctx, options, request, result)
+		return result, nil
 	}
 	if errors.Is(requestErr, context.DeadlineExceeded) || errors.Is(requestErr, context.Canceled) {
 		return DelayResult{}, mapDelayRequestError(request.Target, requestErr)
 	}
 	if serviceAPIUnavailable(requestErr) && offlineDelayAllowed(options) {
-		result, err := offlineDelayRunner(ctx, options, request)
-		if err != nil {
-			return DelayResult{}, err
-		}
-		return filterDelayRegion(ctx, options, request, result)
+		return offlineDelayRunner(ctx, options, request)
 	}
 	return DelayResult{}, mapDelayRequestError(request.Target, requestErr)
-}
-
-func filterDelayRegion(ctx context.Context, options Options, request delayRequest, result DelayResult) (DelayResult, error) {
-	if request.Region == "" {
-		return result, nil
-	}
-	groups, err := catalog.Scan(ctx, catalog.ScanOptions{Root: options.CatalogRoot, GroupID: request.GroupID, WithNodes: true})
-	if err != nil {
-		return DelayResult{}, err
-	}
-	if len(groups) != 1 {
-		return DelayResult{}, delayTargetError(request.Target)
-	}
-	runtimeTag := groups[0].Group.RuntimeTag
-	allowed := make(map[string]struct{})
-	for _, node := range groups[0].Nodes {
-		if catalog.RegionKey(node.Tag) == request.Region {
-			allowed[runtimeTag+"/"+node.Tag] = struct{}{}
-		}
-	}
-	for index := range result.Groups {
-		items := result.Groups[index].Items[:0]
-		for _, item := range result.Groups[index].Items {
-			if _, ok := allowed[item.Tag]; ok {
-				items = append(items, item)
-			}
-		}
-		result.Groups[index].Items = items
-	}
-	if len(allowed) == 0 || len(result.Groups) == 0 || len(result.Groups[0].Items) == 0 {
-		return DelayResult{}, delayTargetError(request.Target)
-	}
-	return result, nil
 }
 
 func delayWithClient(ctx context.Context, client *serviceapi.Client, target string, waitForResults bool) (DelayResult, error) {
@@ -451,9 +426,6 @@ func delayWithClient(ctx context.Context, client *serviceapi.Client, target stri
 			groupType = "selector"
 		}
 		runtimeTag := strings.TrimPrefix(strings.TrimPrefix(target, "Auto/"), "Select/")
-		if index := strings.LastIndex(runtimeTag, " ["); index > 0 && strings.HasSuffix(runtimeTag, "]") {
-			runtimeTag = runtimeTag[:index]
-		}
 		prefix := runtimeTag + "/"
 		items := make([]serviceapi.GroupItem, 0)
 		groupFound := false
@@ -534,11 +506,7 @@ func waitDelayResults(ctx context.Context, client *serviceapi.Client, target str
 
 func delayResultProgress(target string, outbounds []serviceapi.GroupItem) (expected int, completed int) {
 	groupTarget := strings.HasPrefix(target, "Auto/") || strings.HasPrefix(target, "Select/")
-	runtimeTag := strings.TrimPrefix(strings.TrimPrefix(target, "Auto/"), "Select/")
-	if index := strings.LastIndex(runtimeTag, " ["); index > 0 && strings.HasSuffix(runtimeTag, "]") {
-		runtimeTag = runtimeTag[:index]
-	}
-	prefix := runtimeTag + "/"
+	prefix := strings.TrimPrefix(strings.TrimPrefix(target, "Auto/"), "Select/") + "/"
 	for _, item := range outbounds {
 		if (!groupTarget && item.Tag == target) || (groupTarget && strings.HasPrefix(item.Tag, prefix)) {
 			expected++
@@ -557,6 +525,9 @@ func normalizeOptions(options Options) Options {
 	}
 	if options.ServiceAddress == "" {
 		options.ServiceAddress = "127.0.0.1:9090"
+	}
+	if options.ChainDir == "" {
+		options.ChainDir = layout.Chain()
 	}
 	if options.ServiceSecret == "" {
 		options.ServiceSecret = "singbox"
@@ -824,7 +795,6 @@ type delayRequest struct {
 	Target  string
 	GroupID string
 	NodeTag string
-	Region  string
 }
 
 func resolveDelayRequest(ctx context.Context, options Options, target, group string) (delayRequest, error) {
@@ -855,13 +825,6 @@ func resolveDelayRequest(ctx context.Context, options Options, target, group str
 		if groupRef == "" {
 			return delayRequest{}, errors.New("测速分组引用格式应为 Auto/<group> 或 Select/<group>")
 		}
-		region := ""
-		if prefix == "Auto" {
-			if index := strings.LastIndex(groupRef, " ["); index > 0 && strings.HasSuffix(groupRef, "]") {
-				region = strings.TrimSuffix(groupRef[index+2:], "]")
-				groupRef = groupRef[:index]
-			}
-		}
 		resolvedGroup, err := resolveDelayGroup(ctx, options, groupRef)
 		if err != nil {
 			return delayRequest{}, err
@@ -870,11 +833,7 @@ func resolveDelayRequest(ctx context.Context, options Options, target, group str
 		if err != nil {
 			return delayRequest{}, err
 		}
-		resolvedTarget := prefix + "/" + runtimeTag
-		if region != "" {
-			resolvedTarget = catalog.RegionAutoTag(runtimeTag, region)
-		}
-		return delayRequest{Target: resolvedTarget, GroupID: resolvedGroup, Region: region}, nil
+		return delayRequest{Target: prefix + "/" + runtimeTag, GroupID: resolvedGroup}, nil
 	}
 	return runtimeNodeDelayRequest(ctx, options, target)
 }

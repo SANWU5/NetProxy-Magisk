@@ -513,13 +513,7 @@ func newSingBoxCommand(options Options, prepared PrepareResult) (*exec.Cmd, *os.
 	if err != nil {
 		return nil, nil, err
 	}
-	args := []string{"run", "--disable-color"}
-	if prepared.Policy != "" {
-		if _, err := os.Stat(prepared.Policy); err == nil {
-			args = append(args, "-c", prepared.Policy)
-		}
-	}
-	args = append(args, "-c", paths.SingBoxConfig(options.SingBoxDir), "-c", prepared.Providers, "-c", prepared.Outbounds, "-c", prepared.Inbound)
+	args := append([]string{"run", "--disable-color"}, preparedConfigArgs(options, prepared)...)
 	command := exec.Command(options.SingBoxPath, args...)
 	command.Dir = options.SingBoxDir
 	command.Stdout = logFile
@@ -528,14 +522,18 @@ func newSingBoxCommand(options Options, prepared PrepareResult) (*exec.Cmd, *os.
 	return command, logFile, nil
 }
 
-func checkPreparedConfiguration(ctx context.Context, options Options, prepared PrepareResult) error {
-	args := []string{"check", "--disable-color"}
-	if prepared.Policy != "" {
-		if _, err := os.Stat(prepared.Policy); err == nil {
-			args = append(args, "-c", prepared.Policy)
-		}
+// preparedConfigArgs 返回传给 sing-box 的配置文件参数。策略路由片段必须排在主配置之前，
+// sing-box 按 -c 顺序拼接 route.rules，片段放在后面会被主配置的兜底规则抢先命中。
+func preparedConfigArgs(options Options, prepared PrepareResult) []string {
+	var args []string
+	if prepared.Route != "" {
+		args = append(args, "-c", prepared.Route)
 	}
-	args = append(args, "-c", paths.SingBoxConfig(options.SingBoxDir), "-c", prepared.Providers, "-c", prepared.Outbounds, "-c", prepared.Inbound)
+	return append(args, "-c", paths.SingBoxConfig(options.SingBoxDir), "-c", prepared.Providers, "-c", prepared.Outbounds, "-c", prepared.Inbound)
+}
+
+func checkPreparedConfiguration(ctx context.Context, options Options, prepared PrepareResult) error {
+	args := append([]string{"check", "--disable-color"}, preparedConfigArgs(options, prepared)...)
 	command := exec.CommandContext(ctx, options.SingBoxPath, args...)
 	command.Dir = options.SingBoxDir
 	command.Stdout = os.Stderr
@@ -660,6 +658,8 @@ func cleanupRuntimeFiles(options Options) {
 	for _, name := range []string{"providers.json", "outbounds.json", "inbound.json"} {
 		_ = os.Remove(filepath.Join(options.RuntimeDir, name))
 	}
+	_ = os.Remove(filepath.Join(options.RuntimeDir, "route.json"))
+	// 旧版策略功能写在主配置目录的片段，保留数据升级后不再被加载，停止时顺手清理。
 	_ = os.Remove(filepath.Join(options.SingBoxDir, "00-policies.json"))
 }
 

@@ -344,6 +344,7 @@ func networkControlOptions(options Options) service.Options {
 		ServiceAddress: options.ServiceAddress,
 		ServiceSecret:  options.ServiceSecret,
 		RequestTimeout: options.RequestTimeout,
+		ChainDir:       options.chainDir(),
 	}
 }
 

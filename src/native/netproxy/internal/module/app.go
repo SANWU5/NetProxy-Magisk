@@ -14,10 +14,11 @@ import (
 	"time"
 
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/catalog"
+	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/chain"
 	moduleconfig "github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/config"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/inbound"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/paths"
-	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/policy"
+	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/provider"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/service"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/serviceapi"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/subscription"
@@ -84,7 +85,7 @@ type PrepareResult struct {
 	Providers string             `json:"providers"`
 	Outbounds string             `json:"outbounds"`
 	Inbound   string             `json:"inbound"`
-	Policy    string             `json:"policy"`
+	Route     string             `json:"route,omitempty"`
 	Backend   string             `json:"backend"`
 	Network   *NetworkEvaluation `json:"-"`
 }
@@ -139,77 +140,41 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 			}
 		}
 	}
-	runtime, err := catalog.BuildRuntime(ctx, catalog.RuntimeOptions{
+	chainState, err := chain.Load(ctx, options.chainDir())
+	if err != nil {
+		return PrepareResult{}, err
+	}
+	chainRuntime, err := chain.BuildRuntime(ctx, options.chainDir(), chainState)
+	if err != nil {
+		return PrepareResult{}, err
+	}
+	runtimeOptions := catalog.RuntimeOptions{
 		Root: options.CatalogRoot, ModuleConfig: options.ModuleConfig,
 		ProvidersOutput: providers, OutboundsOutput: outbounds,
 		AllowEmpty: allowEmpty,
-	})
+	}
+	if chainRuntime != nil {
+		runtimeOptions.Chain = &catalog.ChainOutbounds{
+			FrontTag: chain.FrontTag, SelectorTag: chain.SelectorTag,
+			Landings: chainRuntime.Landings, LandingTags: chainRuntime.LandingTags,
+			Manual: chainRuntime.Manual, ProxyOption: chainRuntime.ProxyOption, ProxyChain: chainRuntime.ProxyChain,
+		}
+	}
+	runtime, err := catalog.BuildRuntime(ctx, runtimeOptions)
 	if err != nil {
 		return PrepareResult{}, err
 	}
-	policyFile := paths.New(options.ModuleDir).Policies()
-	policies, err := policy.Load(ctx, policyFile)
-	if err != nil {
-		return PrepareResult{}, err
-	}
-	groups, err := catalog.Scan(ctx, catalog.ScanOptions{Root: options.CatalogRoot, Type: "all", WithNodes: true})
-	if err != nil {
-		return PrepareResult{}, err
-	}
-	groupByID := make(map[string]catalog.GroupSnapshot, len(groups))
-	for _, group := range groups {
-		groupByID[group.Group.ID] = group
-	}
-	selectionChanged := false
-	for index, item := range policies {
-		group, ok := groupByID[item.GroupID]
-		if item.Mode == "auto" && item.Region != "" && ok {
-			regionFound := false
-			for _, node := range group.Nodes {
-				if catalog.RegionKey(node.Tag) == item.Region {
-					regionFound = true
-					break
-				}
-			}
-			if !regionFound {
-				policies[index].Region = ""
-				selectionChanged = true
-			}
-		}
-		if item.Mode != "manual" || !ok {
-			if item.Mode == "manual" && !ok {
-				policies[index].Mode, policies[index].NodeTag, selectionChanged = "auto", "", true
-			}
-			continue
-		}
-		found := false
-		for _, node := range group.Nodes {
-			if node.Tag == item.NodeTag {
-				found = true
-				break
-			}
-		}
-		if !found {
-			policies[index].Mode, policies[index].NodeTag, selectionChanged = "auto", "", true
-		}
-	}
-	if selectionChanged {
-		if err := policy.Save(ctx, policyFile, policies); err != nil {
+	// 策略路由作为第一个 -c 传入：sing-box 按传入顺序拼接 route.rules，
+	// 片段必须排在主配置规则之前才能先于兜底规则命中。
+	routePath := filepath.Join(options.RuntimeDir, "route.json")
+	if chainRuntime != nil && chainRuntime.Route != nil {
+		if err := provider.WriteAtomic(routePath, chainRuntime.Route, 0o600); err != nil {
 			return PrepareResult{}, err
 		}
-	}
-	// sing-box merges array values in path order. Keep the policy overlay in
-	// the sing-box config directory with a leading name so its route rules
-	// precede the base config's final catch-all rule.
-	policyPath := filepath.Join(options.SingBoxDir, "00-policies.json")
-	if _, err := policy.BuildRuntime(ctx, policyPath, options.CatalogRoot, catalog.ChainLandingOutputPath(providers), policies); err != nil {
+	} else if err := os.Remove(routePath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return PrepareResult{}, err
-	}
-	if err := os.MkdirAll(filepath.Dir(policyFile), 0o700); err != nil {
-		return PrepareResult{}, err
-	}
-	if err := os.WriteFile(filepath.Join(filepath.Dir(options.StateFile), "policy-runtime.synced"), []byte("synced\n"), 0o600); err != nil {
-		return PrepareResult{}, err
+	} else {
+		routePath = ""
 	}
 	network, err := configuredNetwork(ctx, options)
 	if err != nil {
@@ -231,7 +196,11 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 	for _, ref := range missingPackages {
 		logService(options, "WARN", "inbound.package", "skipped", "分应用代理跳过未安装应用: %s", ref.String())
 	}
-	return PrepareResult{RuntimeResult: runtime, Providers: providers, Outbounds: outbounds, Inbound: inboundPath, Policy: policyPath, Backend: config.Backend, Network: &network}, nil
+	return PrepareResult{RuntimeResult: runtime, Providers: providers, Outbounds: outbounds, Inbound: inboundPath, Route: routePath, Backend: config.Backend, Network: &network}, nil
+}
+
+func (options Options) chainDir() string {
+	return paths.New(options.ModuleDir).Chain()
 }
 
 func (options Options) updateSelection(ctx context.Context, selection moduleconfig.Selection) error {
@@ -330,6 +299,10 @@ func syncSelection(ctx context.Context, options Options) error {
 }
 
 func syncRuntimeSelector(ctx context.Context, options Options, active, inner string) error {
+	targets, err := loadChainTargets(ctx, options, active)
+	if err != nil {
+		return err
+	}
 	client, err := serviceapi.New(options.ServiceAddress, options.ServiceSecret)
 	if err != nil {
 		return err
@@ -342,7 +315,7 @@ func syncRuntimeSelector(ctx context.Context, options Options, active, inner str
 			return err
 		}
 		attemptContext, cancelAttempt := context.WithTimeout(requestContext, time.Second)
-		err := client.SelectGroup(attemptContext, active, inner)
+		err := applyRuntimeSelection(attemptContext, client, active, inner, targets)
 		cancelAttempt()
 		if err == nil || !serviceapi.IsRetryable(err) {
 			return err

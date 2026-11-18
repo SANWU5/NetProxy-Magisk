@@ -15,11 +15,11 @@ import (
 
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/apiconfig"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/catalog"
+	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/chain"
 	moduleconfig "github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/config"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/contract"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/module"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/paths"
-	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/policy"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/service"
 )
 
@@ -180,142 +180,74 @@ func TestResourcesReadWhileCoreStopped(t *testing.T) {
 	}
 }
 
-func TestResourcesPolicyListSaveAndValidation(t *testing.T) {
+func TestResourcesChainLandingsModesAndPolicies(t *testing.T) {
 	server := resourceFixture(t)
-	response, result := resourceRequest(t, server, "GET", "/api/v1/policies", "")
-	if response.Code != http.StatusOK || result.Code != "policy.list" || !strings.Contains(string(result.Data), `"schema":1`) {
-		t.Fatalf("策略列表契约不符: %s", response.Body.String())
+	var view module.ChainView
+	resourceAssertSuccess(t, server, "GET", "/api/v1/chain", "", "chain.current", &view)
+	if view.Mode != "off" || len(view.Landings) != 0 || view.Running {
+		t.Fatalf("初始链式设置错误: %+v", view)
 	}
-	if !strings.Contains(string(result.Data), `"id":"ai"`) || !strings.Contains(string(result.Data), `"group_id":"default"`) {
-		t.Fatalf("策略列表遗漏默认策略或可用组: %s", response.Body.String())
+	response, result := resourceRequest(t, server, "PUT", "/api/v1/chain", `{"mode":"manual","manual":""}`)
+	if response.Code != http.StatusUnprocessableEntity || result.Code != "chain.invalid" {
+		t.Fatalf("没有后置时开启手动模式应返回 422: %s", response.Body.String())
 	}
-	resourceAssertSuccess(t, server, "PUT", "/api/v1/policies/ai", `{"group_id":"default","node_tag":"节点 / 02","mode":"manual"}`, "policy.saved", nil)
-	stored, err := os.ReadFile(paths.New(server.options.ModuleDir).Policies())
-	if err != nil || !strings.Contains(string(stored), `"node_tag":"节点 / 02"`) || !strings.Contains(string(stored), `"mode":"manual"`) {
-		t.Fatalf("手动策略未持久化: %s, %v", stored, err)
+	var imported struct {
+		Chain  module.ChainView   `json:"chain"`
+		Import chain.ImportResult `json:"import"`
 	}
-	resourceAssertSuccess(t, server, "PUT", "/api/v1/policies/ai", `{"group_id":"default","node_tag":"","mode":"auto"}`, "policy.saved", nil)
-	stored, err = os.ReadFile(paths.New(server.options.ModuleDir).Policies())
-	if err != nil || !strings.Contains(string(stored), `"mode":"auto"`) || !strings.Contains(string(stored), `"node_tag":""`) {
-		t.Fatalf("Auto 选择未持久化: %s, %v", stored, err)
+	body := resourceJSON(t, map[string]string{"content": "203.0.113.1:1080:user:pass\nhttp://u:p@203.0.113.2:8080#办公\nbad line", "type": "socks"})
+	response, result = resourceRequest(t, server, "POST", "/api/v1/chain/landings", body)
+	if response.Code != http.StatusOK || result.Code != "chain.landings_imported" {
+		t.Fatalf("导入失败: %s", response.Body.String())
 	}
-	resourceAssertSuccess(t, server, "PUT", "/api/v1/policies/ai", `{"group_id":"default","node_tag":"","mode":"auto","region":"other"}`, "policy.saved", nil)
-	stored, err = os.ReadFile(paths.New(server.options.ModuleDir).Policies())
-	if err != nil || !strings.Contains(string(stored), `"mode":"auto"`) || !strings.Contains(string(stored), `"region":"other"`) || !strings.Contains(string(stored), `"node_tag":""`) {
-		t.Fatalf("地区自动选择未持久化为地区而非节点: %s, %v", stored, err)
-	}
-	resourceAssertSuccess(t, server, "PUT", "/api/v1/policies/ai", `{"group_id":"default","node_tag":"","mode":"direct"}`, "policy.saved", nil)
-	stored, err = os.ReadFile(paths.New(server.options.ModuleDir).Policies())
-	if err != nil || !strings.Contains(string(stored), `"mode":"direct"`) {
-		t.Fatalf("独立直连策略未持久化: %s, %v", stored, err)
-	}
-	response, result = resourceRequest(t, server, "PUT", "/api/v1/policies/ai", `{"group_id":"default","node_tag":"","mode":"chain"}`)
-	if response.Code != http.StatusBadRequest || result.Code != "usage.invalid" || !strings.Contains(response.Body.String(), "链式代理当前不可用") {
-		t.Fatalf("不可用链式出口未被拒绝: %s", response.Body.String())
-	}
-	response, result = resourceRequest(t, server, "PUT", "/api/v1/policies/missing", `{"group_id":"default","node_tag":"","mode":"auto"}`)
-	if response.Code != http.StatusNotFound || result.Code != "policy.not_found" {
-		t.Fatalf("未知策略错误契约不符: %s", response.Body.String())
-	}
-	response, result = resourceRequest(t, server, "PUT", "/api/v1/policies/ai", `{"group_id":"default","node_tag":"","mode":"selective"}`)
-	if response.Code != http.StatusBadRequest || result.Code != "usage.invalid" {
-		t.Fatalf("非法策略模式未被拒绝: %s", response.Body.String())
-	}
-	response, result = resourceRequest(t, server, "PUT", "/api/v1/policies/ai", `{"group_id":"missing","node_tag":"","mode":"auto"}`)
-	if response.Code != http.StatusBadRequest || result.Code != "usage.invalid" {
-		t.Fatalf("不存在的策略分组未被拒绝: %s", response.Body.String())
-	}
-	response, result = resourceRequest(t, server, "PUT", "/api/v1/policies/ai", `{"group_id":"default","node_tag":"missing","mode":"manual"}`)
-	if response.Code != http.StatusBadRequest || result.Code != "usage.invalid" {
-		t.Fatalf("不存在的策略节点未被拒绝: %s", response.Body.String())
-	}
-	resourceAssertSuccess(t, server, "PUT", "/api/v1/policies/ai", `{"group_id":"default","node_tag":"","mode":"proxy"}`, "policy.saved", nil)
-	response, result = resourceRequest(t, server, "POST", "/api/v1/policies/ai/url-test", "")
-	if response.Code != http.StatusBadRequest || result.Code != "usage.invalid" || !strings.Contains(response.Body.String(), "Proxy 模式") {
-		t.Fatalf("Proxy 策略测速未明确拒绝: %s", response.Body.String())
-	}
-}
-
-func TestResourcesCustomPolicyCrud(t *testing.T) {
-	server := resourceFixture(t)
-	var created struct {
-		Policy struct {
-			ID string `json:"id"`
-		} `json:"policy"`
-	}
-	resourceAssertSuccess(t, server, "POST", "/api/v1/policies", `{"name":"Work app","package_names":["com.example.work"],"domain_suffixes":["example.com"],"ports":[]}`, "policy.created", &created)
-	if !strings.HasPrefix(created.Policy.ID, "custom-") {
-		t.Fatalf("unexpected custom policy id: %#v", created)
-	}
-	resourceAssertSuccess(t, server, "PUT", "/api/v1/policies/"+created.Policy.ID, `{"group_id":"default","node_tag":"节点 / 02","mode":"manual"}`, "policy.saved", nil)
-	resourceAssertSuccess(t, server, "PUT", "/api/v1/policies/"+created.Policy.ID, `{"name":"Work app 2"}`, "policy.saved", nil)
-	stored, err := os.ReadFile(paths.New(server.options.ModuleDir).Policies())
-	if err != nil || !strings.Contains(string(stored), `"node_tag":"节点 / 02"`) || !strings.Contains(string(stored), `"mode":"manual"`) {
-		t.Fatalf("仅修改自定义策略定义时不应清除出口选择: %s, %v", stored, err)
-	}
-	resourceAssertSuccess(t, server, "PUT", "/api/v1/policies/"+created.Policy.ID, `{"name":"Work app 2","package_names":["com.example.work"],"domain_suffixes":["work.example.com"],"ports":[],"group_id":"default","node_tag":"","mode":"auto","region":""}`, "policy.saved", nil)
-	resourceAssertSuccess(t, server, "DELETE", "/api/v1/policies/"+created.Policy.ID, "", "policy.deleted", nil)
-	response, result := resourceRequest(t, server, "DELETE", "/api/v1/policies/ai", "")
-	if response.Code != http.StatusBadRequest || result.Code != "usage.invalid" {
-		t.Fatalf("built-in policy deletion should be rejected: %s", response.Body.String())
-	}
-}
-
-func TestResourcesChainSaveRejectsInvalidLandingPort(t *testing.T) {
-	server := resourceFixture(t)
-	response, result := resourceRequest(t, server, "GET", "/api/v1/chain", "")
-	if response.Code != http.StatusOK || result.Code != "chain.current" || !strings.Contains(string(result.Data), `"landing_port":0`) {
-		t.Fatalf("链式设置未返回后置端口: %s", response.Body.String())
-	}
-	response, result = resourceRequest(t, server, "PUT", "/api/v1/chain", `{"front":"链式前置","landing":"链式代理/节点 / 02","landing_port":70000}`)
-	if response.Code != http.StatusBadRequest || result.Code != "usage.invalid" || !strings.Contains(response.Body.String(), "后置端口") {
-		t.Fatalf("无效后置端口未被拒绝: %s", response.Body.String())
-	}
-}
-
-func TestResourcesCreatePackageOnlyPolicyWithEmptyLocalGroup(t *testing.T) {
-	server := resourceFixture(t)
-	resourceWriteFile(t, filepath.Join(server.options.CatalogRoot, "default", "provider.json"), `{"outbounds":[]}`)
-	body := `{"name":"hills","package_names":["com.mountains.hills"],"domain_suffixes":[],"ports":[]}`
-
-	var created struct {
-		Policy        policy.Policy `json:"policy"`
-		Persisted     bool          `json:"persisted"`
-		RuntimeSynced bool          `json:"runtime_synced"`
-	}
-	resourceAssertSuccess(t, server, "POST", "/api/v1/policies", body, "policy.created", &created)
-	if !created.Persisted || created.RuntimeSynced || created.Policy.Mode != "proxy" || created.Policy.Name != "hills" {
-		t.Fatalf("package-only policy creation failed: %+v", created)
-	}
-	stored, err := policy.Load(t.Context(), server.policyPath())
-	if err != nil {
+	if err := json.Unmarshal(result.Data, &imported); err != nil {
 		t.Fatal(err)
 	}
-	item, found := policy.Find(stored, created.Policy.ID)
-	if !found || len(item.PackageNames) != 1 || item.PackageNames[0] != "com.mountains.hills" {
-		t.Fatalf("package-only policy was not persisted: %+v", stored)
+	if len(imported.Import.Added) != 2 || len(imported.Import.Diagnostics) != 1 || len(imported.Chain.Landings) != 2 {
+		t.Fatalf("导入结果错误: %+v", imported)
 	}
-	var listed struct {
-		Policies []policyView `json:"policies"`
+	if imported.Chain.Landings[0].Username != "user" || !imported.Chain.Landings[0].HasPassword || strings.Contains(response.Body.String(), `"pass"`) {
+		t.Fatalf("后置摘要错误或泄露密码: %+v", imported.Chain.Landings[0])
 	}
-	resourceAssertSuccess(t, server, "GET", "/api/v1/policies", "", "policy.list", &listed)
-	for _, item := range listed.Policies {
-		if item.ID == created.Policy.ID && item.Name == "hills" && item.Persisted {
-			return
-		}
+	resourceAssertSuccess(t, server, "PUT", "/api/v1/chain", `{"mode":"manual_policy","manual":"办公"}`, "chain.saved", &view)
+	if view.Mode != "manual_policy" || view.Manual != "办公" {
+		t.Fatalf("模式未保存: %+v", view)
 	}
-	t.Fatalf("new policy disappeared from the policy list: %+v", listed)
-}
-
-func TestResourcesCreateExplicitAutoPolicyStillRequiresNodes(t *testing.T) {
-	server := resourceFixture(t)
-	resourceWriteFile(t, filepath.Join(server.options.CatalogRoot, "default", "provider.json"), `{"outbounds":[]}`)
-	response, _ := resourceRequest(t, server, "POST", "/api/v1/policies", `{"name":"hills","package_names":["com.mountains.hills"],"mode":"auto","group_id":"default"}`)
-	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "策略分组没有可用节点") {
-		t.Fatalf("explicit empty auto target must be rejected: %s", response.Body.String())
+	var created struct {
+		Chain  module.ChainView `json:"chain"`
+		Policy chain.Policy     `json:"policy"`
 	}
-	if _, err := os.Stat(server.policyPath()); !os.IsNotExist(err) {
-		t.Fatalf("rejected policy must not be written: %v", err)
+	resourceAssertSuccess(t, server, "POST", "/api/v1/chain/policies", `{"name":"海外","enabled":true,"landing":"203.0.113.1:1080","packages":["com.example.app"," com.example.app "]}`, "chain.policy_created", &created)
+	if created.Policy.ID == "" || len(created.Policy.Packages) != 1 || len(created.Chain.Policies) != 1 {
+		t.Fatalf("策略创建结果错误: %+v", created)
+	}
+	response, result = resourceRequest(t, server, "POST", "/api/v1/chain/policies", `{"name":"冲突","enabled":true,"landing":"办公","packages":["com.example.app"]}`)
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(result.Message, "com.example.app") {
+		t.Fatalf("同一应用出现在两个策略中应被拒绝: %s", response.Body.String())
+	}
+	response, result = resourceRequest(t, server, "DELETE", "/api/v1/chain/landings?tag="+url.QueryEscape("办公"), "")
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(result.Message, "手动模式") {
+		t.Fatalf("删除手动后置应被拒绝: %s", response.Body.String())
+	}
+	resourceAssertSuccess(t, server, "PUT", "/api/v1/chain/landings", `{"tag":"203.0.113.1:1080","name":"住宅"}`, "chain.landing_renamed", &view)
+	if view.Policies[0].Landing != "住宅" {
+		t.Fatalf("重命名未同步策略引用: %+v", view.Policies)
+	}
+	response, result = resourceRequest(t, server, "PUT", "/api/v1/chain/policies/missing", `{"name":"x","enabled":false,"landing":"住宅","packages":[]}`)
+	if response.Code != http.StatusNotFound || result.Code != "chain.policy_not_found" {
+		t.Fatalf("不存在的策略应返回 404: %s", response.Body.String())
+	}
+	resourceAssertSuccess(t, server, "PUT", "/api/v1/chain/policies/"+created.Policy.ID, `{"name":"海外应用","enabled":false,"landing":"住宅","packages":["com.example.app"]}`, "chain.policy_saved", &view)
+	resourceAssertSuccess(t, server, "DELETE", "/api/v1/chain/policies/"+created.Policy.ID, "", "chain.policy_deleted", &view)
+	if len(view.Policies) != 0 {
+		t.Fatalf("策略未删除: %+v", view.Policies)
+	}
+	response, result = resourceRequest(t, server, "POST", "/api/v1/chain/landings/delay", `{"tag":""}`)
+	if response.Code != http.StatusConflict || result.Code != "chain.service_stopped" {
+		t.Fatalf("服务停止时测速应返回 409: %s", response.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(server.options.ModuleDir, "data", "chain", "landing.json")); err != nil {
+		t.Fatalf("后置列表未写入 data/chain: %v", err)
 	}
 }
 

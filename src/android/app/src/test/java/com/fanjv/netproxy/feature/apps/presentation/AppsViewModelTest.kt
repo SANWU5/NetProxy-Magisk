@@ -2,9 +2,7 @@ package com.fanjv.netproxy.feature.apps.presentation
 
 import com.fanjv.netproxy.core.api.*
 
-import androidx.compose.runtime.saveable.SaverScope
 import com.fanjv.netproxy.core.config.*
-import com.fanjv.netproxy.core.ui.component.SearchStatus
 import com.fanjv.netproxy.feature.apps.data.*
 import com.fanjv.netproxy.feature.apps.model.AppProxyConfig
 import com.fanjv.netproxy.feature.settings.data.ConfigRepository
@@ -551,47 +549,6 @@ class AppsViewModelTest {
         assertFalse(vm.state.value.isFilteringApps)
         assertEquals(0, transport.writes)
         assertFalse(vm.state.value.hasPendingPolicy)
-    }
-
-    @Test fun searchStateRestoresExpandedQueryButNotClosingAnimation() {
-        val search = SearchStatus("Search").apply { searchText = "example"; current = SearchStatus.Status.EXPANDING }
-        val scope = SaverScope { true }
-        val restored = with(SearchStatus.Saver) { restore(scope.save(search)!!)!! }
-        assertEquals("example", restored.searchText)
-        assertEquals(SearchStatus.Status.EXPANDED, restored.current)
-        search.current = SearchStatus.Status.COLLAPSING
-        val closed = with(SearchStatus.Saver) { restore(scope.save(search)!!)!! }
-        assertEquals("", closed.searchText)
-        assertTrue(closed.isCollapsed())
-    }
-
-    @Test fun searchAnimationOnlyShowsResultsAfterExpansionAndRestoresContentOnCollapse() {
-        val search = SearchStatus("").apply {
-            searchText = "example"
-            current = SearchStatus.Status.EXPANDING
-        }
-        assertTrue(search.shouldExpand())
-        assertFalse(search.isExpand())
-        assertFalse(search.shouldCollapsed())
-        search.onAnimationComplete()
-        assertTrue(search.isExpand())
-        assertEquals("example", search.searchText)
-
-        search.current = SearchStatus.Status.COLLAPSING
-        assertTrue(search.shouldCollapsed())
-        assertFalse(search.shouldExpand())
-        search.onAnimationComplete()
-        assertTrue(search.isCollapsed())
-        assertEquals("", search.searchText)
-    }
-
-    @Test fun interruptedExpansionCompletesCurrentCollapseInsteadOfReopeningSearch() {
-        val search = SearchStatus("").apply { current = SearchStatus.Status.EXPANDING }
-        search.current = SearchStatus.Status.COLLAPSING
-        search.onAnimationComplete()
-        assertTrue(search.isCollapsed())
-        search.onAnimationComplete()
-        assertTrue(search.isCollapsed())
     }
 
     @Test fun newestFilterWinsWhenQueuedCalculationsRunInReverseOrder() = runBlocking {

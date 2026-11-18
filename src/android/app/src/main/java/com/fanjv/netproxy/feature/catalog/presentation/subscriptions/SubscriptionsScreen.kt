@@ -3,39 +3,21 @@ package com.fanjv.netproxy.feature.catalog.presentation.subscriptions
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.NetworkPing
-import androidx.compose.material.icons.rounded.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -44,45 +26,23 @@ import com.fanjv.netproxy.core.di.netProxyViewModel
 import com.fanjv.netproxy.R
 import com.fanjv.netproxy.core.ui.UiText
 import com.fanjv.netproxy.core.ui.resolve
-import com.fanjv.netproxy.core.ui.component.AppSnackbarHost
-import com.fanjv.netproxy.core.ui.component.BackIconButton
-import com.fanjv.netproxy.core.ui.component.BlurredBar
-import com.fanjv.netproxy.core.ui.component.SnackbarNoticeEffect
-import com.fanjv.netproxy.core.ui.component.StatusTag
-import com.fanjv.netproxy.core.ui.component.rememberAppSnackbarHostState
-import com.fanjv.netproxy.core.ui.component.rememberBlurBackdrop
 import com.fanjv.netproxy.feature.catalog.model.CatalogGroupSummary
 import com.fanjv.netproxy.feature.catalog.model.CatalogNode
 import com.fanjv.netproxy.feature.catalog.model.SubscriptionHistoryEntry
 import com.fanjv.netproxy.navigation.LocalNavigator
 import com.fanjv.netproxy.navigation.Route
-import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.Refresh
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.ui.semantics.Role
 import dev.aiingjie.coui.Coui
 import dev.aiingjie.coui.CouiButton
 import dev.aiingjie.coui.CouiInputRow
+import dev.aiingjie.coui.CouiJumpRow
 import dev.aiingjie.coui.CouiMenuRow
 import dev.aiingjie.coui.CouiSubPage
 import dev.aiingjie.coui.CouiSwitchRow
@@ -251,12 +211,7 @@ internal fun SubscriptionDetailsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
-    val snackbarHostState = rememberAppSnackbarHostState()
-    val backdrop = rememberBlurBackdrop()
-    val scrollBehavior = MiuixScrollBehavior()
-    val barColor = if (backdrop != null) Color.Transparent else colorScheme.surface
-    var showDelete by remember { mutableStateOf(false) }
-    var actionNode by remember { mutableStateOf<CatalogNode?>(null) }
+    val overlay = LocalCouiOverlay.current
     var editedNodeLink by remember { mutableStateOf("") }
 
     LaunchedEffect(id) { viewModel.load(id) }
@@ -270,198 +225,109 @@ internal fun SubscriptionDetailsScreen(
             ?.setPrimaryClip(ClipData.newPlainText("NetProxy node", link))
         viewModel.nodeLinkCopied()
     }
-    val noticeText = if (state.error !is UiText.Empty) state.error else state.notice
-    SnackbarNoticeEffect(
-        eventId = state.noticeId,
-        message = noticeText.resolve(),
-        isError = state.error !is UiText.Empty,
-        hostState = snackbarHostState,
-        onConsumed = viewModel::clearNotice
+    val noticeText = (if (state.error !is UiText.Empty) state.error else state.notice).resolve()
+    LaunchedEffect(state.noticeId) {
+        if (noticeText.isBlank()) return@LaunchedEffect
+        viewModel.clearNotice()
+        overlay.showSnack(noticeText)
+    }
+
+    val testText = stringResource(R.string.node_test_delay)
+    val editNodeText = stringResource(R.string.node_edit)
+    val exportText = stringResource(R.string.node_export)
+    val deleteNodeText = stringResource(R.string.node_delete)
+    val cancelText = stringResource(R.string.common_cancel)
+    val deleteText = stringResource(R.string.common_delete)
+    val deleteTitle = stringResource(R.string.subscription_delete_title)
+    val deleteMessage = stringResource(R.string.subscription_delete_details_message)
+    fun showNodeActions(node: CatalogNode) = overlay.showDialog(
+        title = node.tag,
+        buttons = listOf(
+            CouiDialogButton(testText, CouiDialogButton.Kind.Primary) { viewModel.testNode(id, node.tag) },
+            CouiDialogButton(editNodeText) { viewModel.editNode(id, node.tag) },
+            CouiDialogButton(exportText) { viewModel.exportNode(id, node.tag) },
+            CouiDialogButton(deleteNodeText, CouiDialogButton.Kind.Danger) { viewModel.removeNode(id, node.tag) },
+            CouiDialogButton(cancelText),
+        ),
     )
+    fun confirmDelete() = overlay.showDialog(deleteTitle, deleteMessage, listOf(
+        CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) { viewModel.remove(id, onBack) },
+        CouiDialogButton(cancelText),
+    ))
 
-    Scaffold(
-        snackbarHost = { AppSnackbarHost(snackbarHostState) },
-        topBar = {
-            BlurredBar(backdrop) {
-                TopAppBar(
-                    color = barColor,
-                    title = stringResource(
-                        if (state.details?.group?.type == "local") {
-                            R.string.local_config_details
-                        } else {
-                            R.string.subscription_details
-                        }
-                    ),
-                    scrollBehavior = scrollBehavior,
-                    navigationIcon = { BackIconButton(onClick = onBack) },
-                    actions = {
-                        if (state.details?.group?.type == "subscription") {
-                            IconButton(onClick = { navigator.push(Route.SubscriptionEdit(id)) }) {
-                                Icon(
-                                    Icons.Rounded.Edit,
-                                    contentDescription = stringResource(R.string.common_edit)
-                                )
-                            }
-                            IconButton(
-                                enabled = state.operation.isEmpty(),
-                                onClick = { viewModel.update(id) }
-                            ) {
-                                Icon(
-                                    MiuixIcons.Refresh,
-                                    contentDescription = stringResource(R.string.common_update)
-                                )
-                            }
-                        }
-                    }
-                )
+    val details = state.details
+    val isSubscription = details?.group?.type == "subscription"
+    val updating = state.operation == "update" || state.operation == "update-all"
+    val updatingText = stringResource(
+        if (state.operation == "update-all") R.string.subscription_update_sheet_all else R.string.subscription_update_sheet_single
+    )
+    val nodesTitle = stringResource(R.string.subscription_nodes_section, details?.nodes?.size ?: 0)
+    val historyTitle = stringResource(R.string.subscription_history_section)
+    CouiSubPage(
+        title = stringResource(if (details?.group?.type == "local") R.string.local_config_details else R.string.subscription_details),
+        onBack = onBack,
+    ) {
+        if (updating) item("updating") {
+            CouiGroup(first = true) { CouiRow(updatingText, leading = { CouiLoading() }) }
+        }
+        if (details == null) {
+            if (state.loading) item("loading") {
+                CouiGroup(first = !updating) { CouiRow(stringResource(R.string.loading), leading = { CouiLoading() }) }
             }
-        },
-        contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)
-    ) { innerPadding ->
-        val details = state.details
-        if (state.loading && details == null) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding), contentAlignment = Alignment.Center
-            ) {
-                InfiniteProgressIndicator()
-            }
-        } else if (details != null) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
-                    .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    .scrollEndHaptic()
-                    .overScrollVertical()
-                    .padding(horizontal = 12.dp),
-                contentPadding = PaddingValues(
-                    top = innerPadding.calculateTopPadding() + 12.dp,
-                    bottom = innerPadding.calculateBottomPadding() + 24.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                overscrollEffect = null
-            ) {
-                item {
-                    SubscriptionSummaryCard(details.group) {
-                        viewModel.activate(id)
-                    }
+            return@CouiSubPage
+        }
+        val group = details.group
+        item("summary") {
+            val status = subscriptionStatus(group)
+            CouiGroup(first = !updating) {
+                CouiRow(
+                    title = group.name,
+                    summary = listOf(
+                        if (isSubscription) stringResource(R.string.subscription_summary, group.nodeCount, formatDuration(group.updateInterval))
+                        else stringResource(R.string.local_config_summary, group.nodeCount),
+                        group.profileTitle,
+                    ).filter(String::isNotBlank).joinToString("\n"),
+                ) {
+                    BasicText(
+                        if (group.active) stringResource(R.string.subscription_active) else status.label,
+                        Modifier.padding(start = 12.dp),
+                        style = Coui.type.rowValue.copy(color = if (group.active) Coui.colors.success else status.color),
+                    )
                 }
-                item {
-                    SectionLabel(stringResource(R.string.subscription_nodes_section, details.nodes.size))
-                }
-                items(details.nodes, key = { it.tag }) { node ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        BasicComponent(
-                            title = node.tag,
-                            summary = buildString {
-                                append("${node.protocol.uppercase()} · ${node.server}:${node.port}")
-                                state.latencies["${details.group.id}/${node.tag}"]?.let { latency ->
-                                    append(" · ")
-                                    append(if (latency.all(Char::isDigit)) "$latency ms" else latency)
-                                }
-                            },
-                            onClick = { actionNode = node }
-                        )
-                    }
-                }
-                if (details.group.type == "subscription") {
-                    item { SectionLabel(stringResource(R.string.subscription_history_section)) }
-                    if (state.history.isEmpty()) {
-                        item {
-                            Text(
-                                text = stringResource(R.string.subscription_history_empty),
-                                color = colorScheme.onSurfaceVariantSummary,
-                                modifier = Modifier.padding(12.dp)
-                            )
-                        }
-                    } else {
-                        items(state.history.takeLast(20).reversed()) { history ->
-                            HistoryRow(history)
-                        }
-                    }
-                    item {
-                        TextButton(
-                            text = stringResource(R.string.common_delete),
-                            onClick = { showDelete = true },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
+                if (!group.active) CouiActionRow(stringResource(
+                    if (isSubscription) R.string.subscription_set_active else R.string.local_config_set_active
+                ), { viewModel.activate(id) })
             }
         }
-    }
-
-    OverlayDialog(
-        show = showDelete,
-        title = stringResource(R.string.subscription_delete_title),
-        onDismissRequest = { showDelete = false }
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(stringResource(R.string.subscription_delete_details_message))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(
-                    text = stringResource(R.string.common_cancel),
-                    onClick = { showDelete = false },
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(
-                    text = stringResource(R.string.common_delete),
-                    onClick = {
-                        showDelete = false
-                        viewModel.remove(id, onBack)
-                    },
-                    modifier = Modifier.weight(1f)
-                )
+        if (isSubscription) item("actions") {
+            CouiGroup {
+                CouiJumpRow(stringResource(R.string.common_edit), { navigator.push(Route.SubscriptionEdit(id)) })
+                CouiActionRow(stringResource(R.string.common_update), { viewModel.update(id) }, enabled = state.operation.isEmpty())
             }
         }
-    }
-
-    val selectedNode = actionNode
-    OverlayBottomSheet(
-        show = selectedNode != null,
-        title = selectedNode?.tag.orEmpty(),
-        onDismissRequest = { actionNode = null }
-    ) {
-        if (selectedNode != null) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-            ) {
-                BasicComponent(
-                    title = stringResource(R.string.node_test_delay),
-                    startAction = { DetailActionIcon(Icons.Rounded.NetworkPing) },
-                    onClick = {
-                        viewModel.testNode(id, selectedNode.tag)
-                        actionNode = null
+        couiCardItems(details.nodes, key = { "node:" + it.tag }, title = nodesTitle) { node ->
+            CouiRow(
+                title = node.tag,
+                summary = buildString {
+                    append("${node.protocol.uppercase()} · ${node.server}:${node.port}")
+                    state.latencies["${group.id}/${node.tag}"]?.let { latency ->
+                        append(" · ")
+                        append(if (latency.all(Char::isDigit)) "$latency ms" else latency)
                     }
-                )
-                BasicComponent(
-                    title = stringResource(R.string.node_edit),
-                    startAction = { DetailActionIcon(Icons.Rounded.Edit) },
-                    onClick = {
-                        viewModel.editNode(id, selectedNode.tag)
-                        actionNode = null
-                    }
-                )
-                BasicComponent(
-                    title = stringResource(R.string.node_export),
-                    startAction = { DetailActionIcon(Icons.Rounded.Share) },
-                    onClick = {
-                        viewModel.exportNode(id, selectedNode.tag)
-                        actionNode = null
-                    }
-                )
-                BasicComponent(
-                    title = stringResource(R.string.node_delete),
-                    startAction = { DetailActionIcon(MiuixIcons.Delete) },
-                    onClick = {
-                        viewModel.removeNode(id, selectedNode.tag)
-                        actionNode = null
-                    }
-                )
+                },
+                role = Role.Button,
+                onClick = { showNodeActions(node) },
+            )
+        }
+        if (isSubscription) {
+            val history = state.history.takeLast(20).reversed().withIndex().toList()
+            if (history.isEmpty()) item("history") {
+                CouiGroup(title = historyTitle) { CouiRow(stringResource(R.string.subscription_history_empty)) }
+            } else couiCardItems(history, key = { "history:" + it.index }, title = historyTitle) { entry ->
+                HistoryRow(entry.value)
+            }
+            item("delete") {
+                CouiGroup { CouiActionRow(deleteText, ::confirmDelete, danger = true) }
             }
         }
     }
@@ -506,18 +372,6 @@ internal fun SubscriptionDetailsScreen(
             }
         }
     }
-
-    SubscriptionUpdateSheet(state.operation)
-}
-
-@Composable
-private fun DetailActionIcon(imageVector: androidx.compose.ui.graphics.vector.ImageVector) {
-    Icon(
-        imageVector = imageVector,
-        modifier = Modifier.size(22.dp),
-        tint = colorScheme.onSurfaceVariantSummary,
-        contentDescription = null
-    )
 }
 
 /** 新增/编辑 URL 订阅。敏感字段只通过 root CLI 的私有契约读取。 */
@@ -637,65 +491,6 @@ internal fun SubscriptionEditorScreen(
 }
 
 @Composable
-private fun SubscriptionSummaryCard(
-    subscription: CatalogGroupSummary,
-    onActivate: () -> Unit
-) {
-    val isSubscription = subscription.type == "subscription"
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = subscription.name,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
-                StatusTag(
-                    label = if (subscription.active) {
-                        stringResource(R.string.subscription_active)
-                    } else {
-                        subscriptionStatus(subscription).label
-                    },
-                    backgroundColor = colorScheme.primaryContainer,
-                    contentColor = colorScheme.onPrimaryContainer
-                )
-            }
-            Text(
-                text = if (isSubscription) {
-                    stringResource(
-                        R.string.subscription_summary,
-                        subscription.nodeCount,
-                        formatDuration(subscription.updateInterval)
-                    )
-                } else {
-                    stringResource(R.string.local_config_summary, subscription.nodeCount)
-                },
-                color = colorScheme.onSurfaceVariantSummary,
-                fontSize = 13.sp
-            )
-            subscription.profileTitle.takeIf(String::isNotBlank)?.let {
-                Text(it, color = colorScheme.onSurfaceVariantSummary, fontSize = 13.sp)
-            }
-            if (!subscription.active) {
-                TextButton(
-                    text = stringResource(
-                        if (isSubscription) R.string.subscription_set_active
-                        else R.string.local_config_set_active
-                    ),
-                    onClick = onActivate,
-                    colors = ButtonDefaults.textButtonColorsPrimary(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun HistoryRow(entry: SubscriptionHistoryEntry) {
     val nodeCount = entry.nodeCount?.let {
         stringResource(R.string.subscription_node_count, it)
@@ -703,64 +498,25 @@ private fun HistoryRow(entry: SubscriptionHistoryEntry) {
     val revision = entry.revision?.let {
         stringResource(R.string.subscription_revision, it)
     }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        BasicComponent(
-            title = when {
-                !entry.ok -> stringResource(R.string.subscription_update_failed)
-                entry.code == "subscription.not_modified" ->
-                    stringResource(R.string.subscription_not_modified)
-                else -> stringResource(R.string.subscription_update_success)
-            },
-            summary = buildString {
-                append(formatDate(entry.time))
-                nodeCount?.let { append(" · ").append(it) }
-                revision?.let { append(" · ").append(it) }
-                if (!entry.ok) {
-                    entry.message.takeIf(String::isNotBlank)?.let {
-                        append(" · ").append(it)
-                    }
+    CouiRow(
+        title = when {
+            !entry.ok -> stringResource(R.string.subscription_update_failed)
+            entry.code == "subscription.not_modified" ->
+                stringResource(R.string.subscription_not_modified)
+            else -> stringResource(R.string.subscription_update_success)
+        },
+        summary = buildString {
+            append(formatDate(entry.time))
+            nodeCount?.let { append(" · ").append(it) }
+            revision?.let { append(" · ").append(it) }
+            if (!entry.ok) {
+                entry.message.takeIf(String::isNotBlank)?.let {
+                    append(" · ").append(it)
                 }
             }
-        )
-    }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    SmallTitle(
-        text = text,
-        insideMargin = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 0.dp)
+        },
+        titleColor = if (entry.ok) null else Coui.colors.error,
     )
-}
-
-@Composable
-private fun SubscriptionUpdateSheet(operation: String) {
-    val updateAll = operation == "update-all"
-    OverlayBottomSheet(
-        show = operation == "update" || updateAll,
-        title = stringResource(
-            if (updateAll) R.string.subscription_update_all else R.string.common_update
-        ),
-        onDismissRequest = {}
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            InfiniteProgressIndicator(modifier = Modifier.size(28.dp))
-            Spacer(Modifier.width(16.dp))
-            Text(
-                text = if (updateAll) {
-                    stringResource(R.string.subscription_update_sheet_all)
-                } else {
-                    stringResource(R.string.subscription_update_sheet_single)
-                },
-                color = colorScheme.onSurface
-            )
-        }
-    }
 }
 
 private data class SubscriptionStatus(val label: String, val color: Color)
@@ -774,24 +530,24 @@ private fun subscriptionStatus(subscription: CatalogGroupSummary): SubscriptionS
         subscription.progress?.stage?.let(activeProgressStages::contains) == true ->
             SubscriptionStatus(
                 stringResource(R.string.subscription_update_in_progress),
-                colorScheme.primary
+                Coui.colors.accentText
             )
 
         subscription.lastError.isNotBlank() -> SubscriptionStatus(
             stringResource(R.string.subscription_update_failed),
-            colorScheme.error
+            Coui.colors.error
         )
         expire > 0 && expire <= Instant.now().epochSecond -> SubscriptionStatus(
             stringResource(R.string.subscription_expired),
-            colorScheme.error
+            Coui.colors.error
         )
 
         subscription.lastSuccessAt.isBlank() -> SubscriptionStatus(
             stringResource(R.string.subscription_never_updated),
-            colorScheme.onSurfaceVariantSummary
+            Coui.colors.labelSecondary
         )
 
-        else -> SubscriptionStatus(stringResource(R.string.subscription_normal), colorScheme.primary)
+        else -> SubscriptionStatus(stringResource(R.string.subscription_normal), Coui.colors.accentText)
     }
 }
 

@@ -1,44 +1,18 @@
 package com.fanjv.netproxy.core.ui.component
 
 import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import com.fanjv.netproxy.R
 import com.fanjv.netproxy.core.module.ModuleAvailability
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiLoading
 import dev.aiingjie.coui.CouiRow
 import dev.aiingjie.coui.CouiSubPage
-import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 internal val LocalModuleAvailability = staticCompositionLocalOf<ModuleAvailability?> { null }
-
-@Composable
-internal fun ContentStatus(
-    padding: PaddingValues,
-    text: String,
-    loading: Boolean = false,
-    modifier: Modifier = Modifier,
-) {
-    Box(modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp),
-        contentAlignment = Alignment.Center) {
-        if (loading) InfiniteProgressIndicator()
-        else Text(text, style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary, textAlign = TextAlign.Center)
-    }
-}
 
 @Composable
 internal fun ModulePage(

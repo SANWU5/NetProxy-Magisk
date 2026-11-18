@@ -1,8 +1,5 @@
 package com.fanjv.netproxy.feature.logs.presentation
 
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.layout.layout
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
@@ -16,15 +13,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -42,9 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -54,15 +45,23 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fanjv.netproxy.R
-import com.fanjv.netproxy.core.ui.component.AppSnackbarHost
-import com.fanjv.netproxy.core.ui.component.BackIconButton
-import com.fanjv.netproxy.core.ui.component.ContentStatus
-import com.fanjv.netproxy.core.ui.component.BlurredBar
+import dev.aiingjie.coui.Coui
+import dev.aiingjie.coui.CouiBarButton
+import dev.aiingjie.coui.CouiDialogButton
+import dev.aiingjie.coui.CouiDimens
+import dev.aiingjie.coui.CouiGlyph
+import dev.aiingjie.coui.CouiGroup
+import dev.aiingjie.coui.CouiLoading
+import dev.aiingjie.coui.CouiRow
+import dev.aiingjie.coui.CouiSubPage
+import dev.aiingjie.coui.LocalCouiOverlay
+import dev.aiingjie.coui.couiPressable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import com.fanjv.netproxy.core.ui.component.CardItem
 import com.fanjv.netproxy.core.ui.component.groupedCardItems
-import com.fanjv.netproxy.core.ui.component.rememberAppSnackbarHostState
-import com.fanjv.netproxy.core.ui.component.rememberBlurBackdrop
-import com.fanjv.netproxy.core.ui.theme.LocalEnableBlur
 import com.fanjv.netproxy.core.ui.theme.isInDarkTheme
 import com.fanjv.netproxy.feature.logs.data.LogItem
 import com.fanjv.netproxy.feature.logs.data.LogLevel
@@ -73,27 +72,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SnackbarDuration
-import top.yukonga.miuix.kmp.basic.TabRow
-import top.yukonga.miuix.kmp.basic.TabRowDefaults
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.MoreCircle
-import top.yukonga.miuix.kmp.icon.extended.Share
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 /** 日志页：查看并导出服务与内核日志。 */
 @Composable
@@ -104,9 +85,10 @@ internal fun LogsScreen(
     val logsState by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val snackbarHostState = rememberAppSnackbarHostState()
+    val overlay = LocalCouiOverlay.current
     val listState = rememberLazyListState()
     val sendLogTitle = stringResource(R.string.send_log)
+    val saveLogTitle = stringResource(R.string.save_log)
     val logSavedMessage = stringResource(R.string.log_saved)
     val clearSuccessMessage = stringResource(R.string.clear_logs_success)
     val clearFailedMessage = stringResource(R.string.clear_logs_failed)
@@ -116,20 +98,15 @@ internal fun LogsScreen(
     val shareFailed = stringResource(R.string.log_share_failed)
     val exportFailed = stringResource(R.string.log_export_failed)
     val shareFailedDetail = stringResource(R.string.log_share_failed_detail)
+    val scrollTopText = stringResource(R.string.scroll_to_top)
+    val scrollBottomText = stringResource(R.string.scroll_to_bottom)
+    val clearText = stringResource(R.string.clear_logs_now)
+    val cancelText = stringResource(android.R.string.cancel)
 
-    fun showMessage(message: String, isError: Boolean = false) {
-        scope.launch {
-            snackbarHostState.showSnackbar(
-                message = message,
-                withDismissAction = isError,
-                duration = if (isError) SnackbarDuration.Long else SnackbarDuration.Short
-            )
-        }
-    }
+    fun showMessage(message: String) = overlay.showSnack(message)
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var isCardView by remember { mutableStateOf(true) }
-    var showMoreMenu by remember { mutableStateOf(false) }
 
     val currentType = remember(selectedTabIndex) {
         when (selectedTabIndex) {
@@ -145,7 +122,7 @@ internal fun LogsScreen(
     val content = logsState[currentType]
     val logs = content.entries
     LaunchedEffect(currentType, content.error) {
-        if (content.error.isNotEmpty() && logs.isNotEmpty()) showMessage(content.error, isError = true)
+        if (content.error.isNotEmpty() && logs.isNotEmpty()) showMessage(content.error)
     }
 
     // 导出保存启动器
@@ -176,235 +153,123 @@ internal fun LogsScreen(
                 showMessage(logSavedMessage)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                showMessage(e.message ?: saveFailed, isError = true)
+                showMessage(e.message ?: saveFailed)
             }
         }
     }
+
+    fun sendLog() {
+        scope.launch {
+            try {
+                val logFile = withContext(Dispatchers.IO) {
+                    viewModel.createReport()
+                }
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    logFile
+                )
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/gzip"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    clipData = ClipData.newRawUri(sendLogTitle, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(intent, sendLogTitle))
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                showMessage(e.message ?: shareFailedDetail.format(shareFailed))
+            }
+        }
+    }
+
+    fun saveLog() {
+        try {
+            val timestamp = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmm")
+                .format(java.time.LocalDateTime.now())
+            exportLauncher.launch("NetProxy_Logs_$timestamp.tar.gz")
+        } catch (e: Exception) {
+            showMessage(exportFailed.format(e.message ?: saveFailed))
+        }
+    }
+
+    val viewText = stringResource(if (isCardView) R.string.raw_view else R.string.card_view)
+    fun showActions() = overlay.showDialog(title = null, buttons = buildList {
+        add(CouiDialogButton(sendLogTitle) { sendLog() })
+        add(CouiDialogButton(saveLogTitle) { saveLog() })
+        if (!content.loading && (logs.isNotEmpty() || content.error.isEmpty())) {
+            add(CouiDialogButton(viewText) { isCardView = !isCardView })
+            add(CouiDialogButton(scrollTopText) { scope.launch { listState.animateScrollToItem(0) } })
+            add(CouiDialogButton(scrollBottomText) {
+                scope.launch { if (logs.isNotEmpty()) listState.animateScrollToItem(logs.lastIndex) }
+            })
+            add(CouiDialogButton(clearText, CouiDialogButton.Kind.Danger) {
+                viewModel.clear(currentType) { success ->
+                    showMessage(if (success) clearSuccessMessage else clearFailedMessage)
+                }
+            })
+        }
+        add(CouiDialogButton(cancelText))
+    })
 
     val tabs = listOf(
         stringResource(R.string.service_logs),
         stringResource(R.string.kernel_logs)
     )
-
-    val scrollBehavior = MiuixScrollBehavior()
-    val dynamicTopPadding = remember(scrollBehavior) {
-        { 12.dp * (1f - scrollBehavior.state.collapsedFraction) }
-    }
-    val enableBlur = LocalEnableBlur.current
-    val backdrop = rememberBlurBackdrop(enableBlur)
-    val blurActive = backdrop != null
-    val barColor = if (blurActive) Color.Transparent else MiuixTheme.colorScheme.surface
-
-    Scaffold(
-        snackbarHost = { AppSnackbarHost(snackbarHostState) },
-        topBar = {
-            BlurredBar(backdrop) {
-                TopAppBar(
-                    color = barColor,
-                    title = stringResource(R.string.logs),
-                    navigationIcon = {
-                        BackIconButton(onClick = onBack)
-                    },
-                    actions = {
-                            IconButton(onClick = {
-                                scope.launch {
-                                    try {
-                                        val logFile = withContext(Dispatchers.IO) {
-                                            viewModel.createReport()
-                                        }
-                                        val uri = FileProvider.getUriForFile(
-                                            context,
-                                            "${context.packageName}.fileprovider",
-                                            logFile
-                                        )
-                                        val intent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "application/gzip"
-                                            putExtra(Intent.EXTRA_STREAM, uri)
-                                            clipData = ClipData.newRawUri(sendLogTitle, uri)
-                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        }
-                                        context.startActivity(
-                                            Intent.createChooser(
-                                                intent,
-                                                sendLogTitle
-                                            )
-                                        )
-                                    } catch (e: Exception) {
-                                        if (e is CancellationException) throw e
-                                        showMessage(
-                                            e.message ?: shareFailedDetail.format(shareFailed),
-                                            isError = true
-                                        )
-                                    }
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = MiuixIcons.Share,
-                                    contentDescription = stringResource(R.string.send_log),
-                                    tint = MiuixTheme.colorScheme.onSurface
-                                )
-                            }
-                            IconButton(onClick = {
-                                try {
-                                    val timestamp =
-                                        java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmm")
-                                            .format(java.time.LocalDateTime.now())
-                                    exportLauncher.launch("NetProxy_Logs_$timestamp.tar.gz")
-                                } catch (e: Exception) {
-                                    showMessage(
-                                        exportFailed.format(e.message ?: saveFailed),
-                                        isError = true
-                                    )
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = MiuixIcons.Download,
-                                    contentDescription = stringResource(R.string.save_log),
-                                    tint = MiuixTheme.colorScheme.onSurface
-                                )
-                            }
-                            Box {
-                                IconButton(enabled = !content.loading && (logs.isNotEmpty() || content.error.isEmpty()),
-                                    onClick = { showMoreMenu = true }) {
-                                    Icon(
-                                        imageVector = MiuixIcons.MoreCircle,
-                                        contentDescription = stringResource(R.string.more_options),
-                                        tint = MiuixTheme.colorScheme.onSurface
-                                    )
-                                }
-                                OverlayListPopup(
-                                    show = showMoreMenu,
-                                    onDismissRequest = { showMoreMenu = false }
-                                ) {
-                                    ListPopupColumn {
-                                        DropdownImpl(
-                                            text = stringResource(if (isCardView) R.string.raw_view else R.string.card_view),
-                                            optionSize = 4,
-                                            isSelected = false,
-                                            index = 0,
-                                            onSelectedIndexChange = {
-                                                isCardView = !isCardView
-                                                showMoreMenu = false
-                                            }
-                                        )
-                                        HorizontalDivider(
-                                            modifier = Modifier.padding(
-                                                horizontal = 20.dp,
-                                                vertical = 4.dp
-                                            ),
-                                            thickness = 1.5.dp
-                                        )
-                                        DropdownImpl(
-                                            text = stringResource(R.string.scroll_to_top),
-                                            optionSize = 4,
-                                            isSelected = false,
-                                            index = 1,
-                                            onSelectedIndexChange = {
-                                                scope.launch {
-                                                    listState.animateScrollToItem(0)
-                                                }
-                                                showMoreMenu = false
-                                            }
-                                        )
-                                        DropdownImpl(
-                                            text = stringResource(R.string.scroll_to_bottom),
-                                            optionSize = 4,
-                                            isSelected = false,
-                                            index = 2,
-                                            onSelectedIndexChange = {
-                                                scope.launch {
-                                                    if (logs.isNotEmpty()) {
-                                                        listState.animateScrollToItem(logs.lastIndex)
-                                                    }
-                                                }
-                                                showMoreMenu = false
-                                            }
-                                        )
-                                        HorizontalDivider(
-                                            modifier = Modifier.padding(
-                                                horizontal = 20.dp,
-                                                vertical = 4.dp
-                                            ),
-                                            thickness = 1.5.dp
-                                        )
-                                        DropdownImpl(
-                                            text = stringResource(R.string.clear_logs_now),
-                                            optionSize = 4,
-                                            isSelected = false,
-                                            index = 3,
-                                            onSelectedIndexChange = {
-                                                viewModel.clear(currentType) { success ->
-                                                    showMessage(
-                                                        if (success) clearSuccessMessage else clearFailedMessage,
-                                                        isError = !success
-                                                    )
-                                                }
-                                                showMoreMenu = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                    },
-                    scrollBehavior = scrollBehavior,
-                    bottomContent = {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp)
-                                .padding(bottom = 6.dp)
-                                .deferredTopPadding(dynamicTopPadding)
-                        ) {
-                            TabRow(
-                                tabs = tabs,
-                                selectedTabIndex = selectedTabIndex,
-                                onTabSelected = { selectedTabIndex = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = TabRowDefaults.tabRowColors(
-                                    backgroundColor = barColor
-                                ),
-                                height = 40.dp
-                            )
-                        }
-                    }
-                )
-            }
-        },
-    ) { innerPadding ->
-        val layoutDirection = LocalLayoutDirection.current
-        Box(modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier) {
-            if (logs.isEmpty()) {
-                ContentStatus(innerPadding,
-                    stringResource(if (content.error.isNotEmpty()) R.string.logs_read_failed else R.string.no_logs),
-                    loading = content.loading)
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .scrollEndHaptic()
-                        .overScrollVertical()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(
-                        top = innerPadding.calculateTopPadding() + 6.dp,
-                        start = innerPadding.calculateStartPadding(layoutDirection) + 12.dp,
-                        end = innerPadding.calculateEndPadding(layoutDirection) + 12.dp,
-                        bottom = innerPadding.calculateBottomPadding()
-                    ),
-                    overscrollEffect = null
-                ) {
-                    if (isCardView) {
-                        items(logs) { item ->
-                            LogItemCard(item = item, type = currentType)
-                        }
-                    } else {
-                        rawLogItems(logs = logs)
-                    }
-
-                    item {
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
+    CouiSubPage(
+        title = stringResource(R.string.logs),
+        onBack = onBack,
+        listState = listState,
+        actions = { CouiBarButton(CouiGlyph.More, stringResource(R.string.more_options), ::showActions) },
+        header = { LogTypeTabs(tabs, selectedTabIndex) { selectedTabIndex = it } },
+    ) {
+        if (logs.isEmpty()) {
+            item {
+                CouiGroup(first = true) {
+                    if (content.loading) CouiRow(stringResource(R.string.loading), leading = { CouiLoading() })
+                    else CouiRow(
+                        stringResource(if (content.error.isNotEmpty()) R.string.logs_read_failed else R.string.no_logs),
+                        summary = content.error.ifEmpty { null },
+                    )
                 }
+            }
+            return@CouiSubPage
+        }
+        if (isCardView) {
+            items(logs) { item ->
+                Box(Modifier.padding(horizontal = CouiDimens.cardMargin)) {
+                    LogItemCard(item = item, type = currentType)
+                }
+            }
+        } else {
+            rawLogItems(logs = logs)
+        }
+    }
+}
+
+/** 服务日志与内核日志的分段切换。COUI 组件库没有分段控件，按搜索框的容器色与圆角绘制。 */
+@Composable
+private fun LogTypeTabs(tabs: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    val colors = Coui.colors
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).height(38.dp)
+            .clip(RoundedCornerShape(19.dp)).background(colors.container8).padding(3.dp),
+    ) {
+        tabs.forEachIndexed { index, label ->
+            val active = index == selected
+            Box(
+                Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(16.dp))
+                    .background(if (active) colors.card else Color.Transparent)
+                    .couiPressable(role = Role.Tab) { onSelect(index) },
+                contentAlignment = Alignment.Center,
+            ) {
+                BasicText(
+                    label,
+                    style = Coui.type.rowSummary.copy(
+                        color = if (active) colors.label else colors.labelSecondary,
+                        fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+                    ),
+                )
             }
         }
     }
@@ -750,6 +615,7 @@ fun OutboundFlowView(flow: OutboundFlow) {
 private fun LazyListScope.rawLogItems(logs: List<LogItem>) {
     groupedCardItems(
         keyPrefix = "raw-log",
+        outerHorizontalPadding = CouiDimens.cardMargin,
         items = logs.mapIndexed { index, item ->
             CardItem(key = index.toString()) {
                 Text(
@@ -770,22 +636,3 @@ private fun LazyListScope.rawLogItems(logs: List<LogItem>) {
         }
     )
 }
-
-private fun Modifier.deferredTopPadding(top: () -> Dp): Modifier =
-    layout { measurable, constraints ->
-        val topPx = top().roundToPx().coerceAtLeast(0)
-        val placeable = measurable.measure(
-            constraints.copy(
-                minHeight = (constraints.minHeight - topPx).coerceAtLeast(0),
-                maxHeight = if (constraints.maxHeight == Constraints.Infinity) Constraints.Infinity else (constraints.maxHeight - topPx).coerceAtLeast(
-                    0
-                )
-            )
-        )
-        val width = placeable.width.coerceIn(constraints.minWidth, constraints.maxWidth)
-        val height =
-            (placeable.height + topPx).coerceIn(constraints.minHeight, constraints.maxHeight)
-        layout(width, height) {
-            placeable.place(0, topPx)
-        }
-    }

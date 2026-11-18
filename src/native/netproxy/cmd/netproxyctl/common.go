@@ -65,6 +65,8 @@ func (c *cli) help() {
   netproxyctl [--json] [--timeout <秒|时长>] config list|read|check|validate|apply
   netproxyctl [--json] [--timeout <秒|时长>] logs show|clear|export
   netproxyctl [--json] [--timeout <秒|时长>] api init|start|status|access
+  netproxyctl [--json] [--timeout <秒|时长>] chain status|mode|landing|front|policy
+  netproxyctl [--json] [--timeout <秒|时长>] smart list|generate|use|select|test
 
 默认配置的出站模式:
   Rule          规则
@@ -75,7 +77,10 @@ func (c *cli) help() {
 
 节点引用固定为 <group-id>/<tag>；自动模式使用 node use auto [分组]。
 node import <文件> 会将文件中的全部节点追加到 default 本地配置组。
-默认命令超时为 30 秒，service start 默认 120 秒；订阅变更由各订阅下载超时控制。
+链式代理：chain mode <off|manual|policy|manual_policy> [后置]；chain landing list|import <文件> [--type socks|http]|use|rename|remove|test [后置]；
+chain front follow|<分组>|<分组>/<节点>|smart <智能分组ID>；chain policy list。
+智能分组：smart generate [--english] 重新分组；smart use <ID> 让节点页改用分组；smart select <ID> <分组>/<节点>|auto 在分组内选择。
+默认命令超时为 30 秒，service start、chain 与 smart 的修改默认 120 秒；订阅变更由各订阅下载超时控制。
 所有命令均可使用 --timeout 显式覆盖。
 配置目标：singbox/config.json 为完整主配置，singbox/dns、singbox/inbounds、singbox/route 等为分区。
 模块设置：module 为完整 JSON，module/wifi 与 module/auto_start 分别编辑网络策略与开机自启。

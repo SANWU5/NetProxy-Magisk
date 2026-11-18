@@ -85,6 +85,10 @@ func (c *cli) run(ctx context.Context, args []string) int {
 		handler = c.logs
 	case "api":
 		handler = c.api
+	case "chain":
+		handler = c.chain
+	case "smart":
+		handler = c.smart
 	default:
 		return c.fail("usage.invalid", "未知命令组，使用 netproxyctl help 查看帮助", 2)
 	}
@@ -146,7 +150,29 @@ func defaultTimeoutFor(args []string) time.Duration {
 	if len(args) > 1 && (args[0] == "config" && args[1] == "apply" || args[0] == "service" && (args[1] == "restart" || args[1] == "reload")) {
 		return serviceStartTimeout
 	}
+	if isChainMutation(args) {
+		// 链式代理与智能分组的修改可能重载核心，与 HTTP API 使用相同的时限。
+		return serviceStartTimeout
+	}
 	return defaultCommandTimeout
+}
+
+// isChainMutation 判断命令是否修改链式代理或智能分组（只读的 status/list 不算）。
+func isChainMutation(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+	switch args[0] {
+	case "chain":
+		if args[1] == "landing" || args[1] == "policy" {
+			return len(args) > 2 && args[2] != "list"
+		}
+		return args[1] != "status"
+	case "smart":
+		return args[1] != "list"
+	default:
+		return false
+	}
 }
 
 func isSubscriptionMutation(args []string) bool {

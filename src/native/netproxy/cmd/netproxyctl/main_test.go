@@ -100,6 +100,24 @@ func TestDefaultTimeoutDoesNotPreemptSubscriptionMutation(t *testing.T) {
 	}
 }
 
+func TestChainMutationsUseCoreReloadTimeout(t *testing.T) {
+	for _, args := range [][]string{
+		{"chain", "mode", "manual"}, {"chain", "front", "follow"}, {"chain", "landing", "import", "a.txt"},
+		{"chain", "landing", "test"}, {"smart", "generate"}, {"smart", "use", "id"}, {"smart", "test"},
+	} {
+		if got := defaultTimeoutFor(args); got != serviceStartTimeout {
+			t.Fatalf("timeout for %v = %s, want %s", args, got, serviceStartTimeout)
+		}
+	}
+	for _, args := range [][]string{
+		{"chain"}, {"chain", "status"}, {"chain", "landing"}, {"chain", "landing", "list"}, {"chain", "policy", "list"}, {"smart"}, {"smart", "list"},
+	} {
+		if got := defaultTimeoutFor(args); got != defaultCommandTimeout {
+			t.Fatalf("timeout for %v = %s, want %s", args, got, defaultCommandTimeout)
+		}
+	}
+}
+
 func TestInternalUsageOnlyListsProcessEntrypoints(t *testing.T) {
 	usage := internalUsageText()
 	for _, expected := range []string{"__internal boot", "__internal worker <start|stop|run>"} {

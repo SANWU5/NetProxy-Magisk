@@ -24,6 +24,9 @@ internal data class ServiceStatusSnapshot(
     @SerialName("active_group_node_count") val activeGroupNodeCount: Int = 0,
     @SerialName("selected_node_ref") val selectedNodeRef: String = "",
     @SerialName("runtime_selected") val runtimeSelected: String = "",
+    /** 节点页使用智能分组时不为空。 */
+    @SerialName("smart_group_id") val smartGroupId: String = "",
+    @SerialName("smart_group_name") val smartGroupName: String = "",
     @SerialName("chain_mode") val chainMode: String = "off",
     @SerialName("chain_landing") val chainLanding: String = "",
     @SerialName("memory_bytes") val memoryBytes: Long = 0,

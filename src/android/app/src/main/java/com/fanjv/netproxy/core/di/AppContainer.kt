@@ -1,5 +1,6 @@
 package com.fanjv.netproxy.core.di
 
+import com.fanjv.netproxy.feature.smart.data.SmartGroupRepository
 import android.content.Context
 import android.widget.Toast
 import com.fanjv.netproxy.R
@@ -34,6 +35,7 @@ internal class AppContainer(context: Context) {
     val inboundRepository = InboundRepository(configRepository, serviceRepository)
     val logRepository = LogRepository(apiClient, appContext)
     val chainRepository = ChainRepository(apiClient)
+    val smartGroupRepository = SmartGroupRepository(apiClient)
     val moduleEnvironment = AndroidModuleEnvironment(appContext, apiClient)
     val nodeImportStore = NodeImportStore(appContext)
     val appPackageRepository = AppPackageRepository(apiClient)

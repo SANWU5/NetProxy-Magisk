@@ -36,6 +36,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,13 +61,17 @@ private class DividerPlan {
 fun CouiCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val colors = Coui.colors
     val plan = remember { DividerPlan() }
+    val bounds = remember { CouiCardBounds() }
     Layout(
-        content = { CompositionLocalProvider(LocalCouiCardEdge provides CouiDimens.cardEdgeExtra, content = content) },
+        content = {
+            CompositionLocalProvider(LocalCouiCardEdge provides CouiDimens.cardEdgeExtra, LocalCouiCardBounds provides bounds, content = content)
+        },
         modifier = modifier
             .padding(horizontal = CouiDimens.cardMargin)
             .fillMaxWidth()
             .clip(CouiShapes.card)
             .background(colors.card)
+            .onPlaced { bounds.coordinates = it }
             .drawWithContent {
                 drawContent()
                 val t = max(1f, CouiDimens.dividerThickness.toPx())

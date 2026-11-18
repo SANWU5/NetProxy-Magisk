@@ -186,16 +186,17 @@ private fun DialogCard(spec: DialogSpec, close: () -> Unit) {
             .padding(start = 24.dp, end = 24.dp, top = if (spec.title == null) 24.dp else 0.dp, bottom = 16.dp),
             style = type.dialogMessage.copy(color = colors.labelSecondary, textAlign = TextAlign.Center))
         spec.content?.invoke()
-        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)) {
             spec.buttons.forEachIndexed { i, b ->
-                if (i > 0) Spacer(Modifier.height(4.dp))
-                val color = when (b.kind) {
-                    CouiDialogButton.Kind.Primary -> colors.accentText
-                    CouiDialogButton.Kind.Danger -> colors.error
-                    CouiDialogButton.Kind.Normal -> colors.label
+                if (i > 0) Spacer(Modifier.height(8.dp))
+                // 每个按钮都有自己的底色：主按钮用强调色填充，其余按钮用浅灰底，危险操作用红字。
+                val (fill, color) = when (b.kind) {
+                    CouiDialogButton.Kind.Primary -> colors.accent to colors.onColor
+                    CouiDialogButton.Kind.Danger -> colors.container8 to colors.error
+                    CouiDialogButton.Kind.Normal -> colors.container8 to colors.label
                 }
                 Box(
-                    Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(50))
+                    Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(50)).background(fill)
                         .couiPressable(role = Role.Button) { close(); b.onClick() },
                     contentAlignment = Alignment.Center,
                 ) { BasicText(b.text, style = type.dialogButton.copy(color = color)) }

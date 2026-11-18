@@ -1,5 +1,11 @@
 package com.fanjv.netproxy.feature.catalog.presentation.nodes.list
 
+import dev.aiingjie.coui.CouiJumpRow
+import com.fanjv.netproxy.navigation.Route
+import com.fanjv.netproxy.core.ui.component.showActionSheet
+import com.fanjv.netproxy.core.ui.component.SheetAction
+import com.fanjv.netproxy.core.ui.component.MenuAction
+import com.fanjv.netproxy.core.ui.component.CouiBarMenuButton
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.net.Uri
@@ -41,7 +47,6 @@ import com.fanjv.netproxy.feature.chain.presentation.TextArea
 import com.fanjv.netproxy.navigation.LocalNavigator
 import com.fanjv.netproxy.navigation.Route.NodeEdit
 import dev.aiingjie.coui.Coui
-import dev.aiingjie.coui.CouiBarButton
 import dev.aiingjie.coui.CouiButton
 import dev.aiingjie.coui.CouiDialogButton
 import dev.aiingjie.coui.CouiDockSpace
@@ -147,30 +152,31 @@ internal fun CatalogNodesScreen(
         }
     }
 
-    fun showMore() = overlay.showDialog(
-        title = null,
-        buttons = listOf(
-            CouiDialogButton(singleLinkText) { showAddLink() },
-            CouiDialogButton(localFileText) { fileLauncher.launch(arrayOf("*/*")) },
-            CouiDialogButton(testGroupText) { selectedGroup?.group?.id?.let(viewModel::testGroupDelay) },
-            CouiDialogButton(sortText) { showSort() },
-            CouiDialogButton(cancelText),
-        ),
-    )
-
-    fun showNodeActions(group: CatalogNodeGroup, node: CatalogNode) = overlay.showDialog(
+    val deleteConfirm = stringResource(R.string.node_delete_confirm)
+    fun showNodeActions(group: CatalogNodeGroup, node: CatalogNode) = overlay.showActionSheet(
         title = node.tag,
         message = node.serverLabel(),
-        buttons = listOf(
-            CouiDialogButton(testText, CouiDialogButton.Kind.Primary) { viewModel.testDelay("${group.group.id}/${node.tag}") },
-            CouiDialogButton(editText) { navigator.push(NodeEdit("${group.group.id}/${node.tag}")) },
-            CouiDialogButton(exportText) { viewModel.exportNode(group.group.id, node.tag) },
-            CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) { viewModel.removeNode(group.group.id, node.tag) },
-            CouiDialogButton(cancelText),
+        actions = listOf(
+            SheetAction(testText) { viewModel.testDelay("${group.group.id}/${node.tag}") },
+            SheetAction(editText) { navigator.push(NodeEdit("${group.group.id}/${node.tag}")) },
+            SheetAction(exportText) { viewModel.exportNode(group.group.id, node.tag) },
+            SheetAction(deleteText, danger = true) {
+                overlay.showDialog(deleteText, String.format(deleteConfirm, node.tag), listOf(
+                    CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) { viewModel.removeNode(group.group.id, node.tag) },
+                    CouiDialogButton(cancelText),
+                ))
+            },
         ),
+        cancel = cancelText,
     )
 
     val groupTitle = stringResource(R.string.node_count, selectedGroup?.nodes?.size ?: 0)
+    val smartTitle = stringResource(R.string.smart_groups)
+    val smartEntrySummary = stringResource(R.string.smart_entry_summary)
+    val smartCurrentText = stringResource(R.string.smart_current)
+    val smartInUseText = stringResource(R.string.smart_in_use_summary)
+    fun smartInUseSummary(runtimeSelected: String): String =
+        if (runtimeSelected.isEmpty()) smartInUseText else String.format(smartCurrentText, runtimeSelected.substringAfter('/', runtimeSelected))
     val nodes = remember(selectedGroup, sortMode, state.latencies) {
         selectedGroup?.let { sortCatalogNodes(it.nodes, sortMode, it.group.id, state.latencies) }.orEmpty()
     }
@@ -178,7 +184,16 @@ internal fun CatalogNodesScreen(
     CouiLargeTitlePage(
         title = stringResource(R.string.nodes),
         bottomSpace = CouiDockSpace,
-        actions = { CouiBarButton(CouiGlyph.More, moreText, onClick = ::showMore) },
+        actions = {
+            CouiBarMenuButton(moreText, listOf(
+                MenuAction(singleLinkText, onClick = ::showAddLink),
+                MenuAction(localFileText) { fileLauncher.launch(arrayOf("*/*")) },
+                MenuAction(testGroupText, enabled = selectedGroup != null && !busy) {
+                    selectedGroup?.group?.id?.let(viewModel::testGroupDelay)
+                },
+                MenuAction(sortText, onClick = ::showSort),
+            ))
+        },
     ) {
         if (selectedGroup == null) {
             item {
@@ -197,7 +212,19 @@ internal fun CatalogNodesScreen(
         val groupId = selectedGroup.group.id
         val autoSelected = state.selection.selectorMode == "urltest" && state.selection.activeGroupId == groupId
         item {
+            // 智能分组入口：正在使用智能分组时显示分组名与它当前选中的节点。
+            val smartInUse = state.selection.selectorMode == "smart"
             CouiGroup(first = true) {
+                CouiJumpRow(
+                    title = smartTitle,
+                    value = if (smartInUse) state.selection.smartGroupName else null,
+                    summary = if (smartInUse) smartInUseSummary(state.selection.runtimeSelected) else smartEntrySummary,
+                    onClick = { navigator.push(Route.SmartGroups) },
+                )
+            }
+        }
+        item {
+            CouiGroup {
                 if (state.groups.size > 1) {
                     val localName = stringResource(R.string.node_local_config)
                     CouiMenuRow(

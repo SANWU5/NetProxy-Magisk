@@ -1,5 +1,7 @@
 package com.fanjv.netproxy.feature.kernel.presentation
 
+import com.fanjv.netproxy.core.ui.component.MenuAction
+import com.fanjv.netproxy.core.ui.component.CouiBarMenuButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -9,9 +11,6 @@ import com.fanjv.netproxy.R
 import com.fanjv.netproxy.core.di.netProxyViewModel
 import com.fanjv.netproxy.navigation.LocalNavigator
 import com.fanjv.netproxy.navigation.Route
-import dev.aiingjie.coui.CouiBarButton
-import dev.aiingjie.coui.CouiDialogButton
-import dev.aiingjie.coui.CouiGlyph
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiJumpRow
 import dev.aiingjie.coui.CouiLoading
@@ -36,7 +35,6 @@ internal fun SingBoxKernelSettingsScreen(
     val checkFailed = stringResource(R.string.singbox_check_failed)
     val restartText = stringResource(R.string.restart_core)
     val checkText = stringResource(R.string.singbox_check_all)
-    val cancelText = stringResource(android.R.string.cancel)
     val sections = listOf(
         SingBoxDocumentCategory.Config to stringResource(R.string.singbox_main_config),
         SingBoxDocumentCategory.LocalRule to stringResource(R.string.singbox_rule_files),
@@ -47,15 +45,12 @@ internal fun SingBoxKernelSettingsScreen(
         title = stringResource(R.string.kernel_settings),
         onBack = onBack,
         actions = {
-            CouiBarButton(CouiGlyph.More, stringResource(R.string.more_actions), enabled = state.documents.isNotEmpty(), onClick = {
-                overlay.showDialog(title = null, buttons = listOf(
-                    CouiDialogButton(restartText) { viewModel.restartService() },
-                    CouiDialogButton(checkText) {
-                        viewModel.checkConfig { success -> overlay.showSnack(if (success) checkSuccess else checkFailed) }
-                    },
-                    CouiDialogButton(cancelText),
-                ))
-            })
+            CouiBarMenuButton(stringResource(R.string.more_actions), listOf(
+                MenuAction(restartText) { viewModel.restartService() },
+                MenuAction(checkText) {
+                    viewModel.checkConfig { success -> overlay.showSnack(if (success) checkSuccess else checkFailed) }
+                },
+            ), enabled = state.documents.isNotEmpty())
         },
     ) {
         if (state.documents.isEmpty()) {

@@ -1,5 +1,11 @@
 package com.fanjv.netproxy.feature.chain.presentation
 
+import com.fanjv.netproxy.feature.smart.model.SmartNodeRef
+import com.fanjv.netproxy.feature.smart.model.SmartGroup
+import com.fanjv.netproxy.feature.smart.data.SmartGroupRepository
+import com.fanjv.netproxy.feature.chain.model.ChainFront
+import com.fanjv.netproxy.feature.catalog.model.CatalogNodeGroup
+import com.fanjv.netproxy.feature.catalog.data.NodeRepository
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fanjv.netproxy.core.ui.userMessage
@@ -31,6 +37,11 @@ internal data class ChainUiState(
     val apps: List<ChainAppChoice> = emptyList(),
     val appsLoading: Boolean = false,
     val appsError: String = "",
+    /** 前置选择面板的可选项：全部节点分组与智能/自建分组。 */
+    val nodeGroups: List<CatalogNodeGroup> = emptyList(),
+    val smartGroups: List<SmartGroup> = emptyList(),
+    /** 本次进入页面后做过链路测速，界面据此显示诊断结论。 */
+    val tested: Boolean = false,
 )
 
 /** 一次写操作的结果，交给页面用轻提示展示。 */
@@ -43,6 +54,8 @@ internal sealed interface ChainEvent {
 internal class ChainViewModel(
     private val repository: ChainRepository,
     private val packages: AppPackageRepository,
+    private val nodes: NodeRepository,
+    private val smart: SmartGroupRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ChainUiState())
     val state: StateFlow<ChainUiState> = _state.asStateFlow()
@@ -91,7 +104,46 @@ internal class ChainViewModel(
         write("mode") { repository.saveMode(mode.value, manual) }
     }
 
-    fun setManual(tag: String) = write("manual") { repository.saveMode(_state.value.chain.mode, tag) }
+    fun setManual(tag: String) = write("manual", onDone = ::testAfterChange) { repository.saveMode(_state.value.chain.mode, tag) }
+
+    /** 设置链式前置（为空表示跟随节点页），服务运行时随后测一次链路。 */
+    fun setFront(front: ChainFront?) = write("front", onDone = ::testAfterChange) { repository.saveFront(front) }
+
+    /** 把勾选的节点保存为自建分组 frontGroupName，并让前置使用它的自动选择。 */
+    fun pickFrontNodes(frontGroupName: String, members: List<SmartNodeRef>) =
+        write("front", onDone = ::testAfterChange) {
+            val existing = smart.current().groups.firstOrNull { it.custom && it.name == frontGroupName }
+            val saved = if (existing == null) smart.create(frontGroupName, members) else smart.save(existing.id, frontGroupName, members)
+            _state.update { it.copy(smartGroups = saved.smart.groups) }
+            repository.saveFront(ChainFront(smartId = saved.id))
+        }
+
+    /** 读取前置选择面板需要的节点分组与智能分组。 */
+    fun loadFrontChoices() {
+        viewModelScope.launch {
+            try {
+                val groups = nodes.snapshot().groups
+                val smartGroups = smart.current().groups
+                _state.update { it.copy(nodeGroups = groups, smartGroups = smartGroups) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                emit(ChainEvent.Failed(error.userMessage()))
+            }
+        }
+    }
+
+    /** 链路测速：测试前置节点本身，以及经由前置连接当前后置（手动模式）或全部后置。 */
+    fun testChain() {
+        val chain = _state.value.chain
+        val tag = if (chain.chainMode.usesManual) chain.manual else ""
+        testLandings(tag)
+    }
+
+    private fun testAfterChange() {
+        val chain = _state.value.chain
+        if (chain.running && chain.landings.isNotEmpty()) testChain()
+    }
 
     fun importLandings(content: String, type: String, onDone: () -> Unit) {
         if (_state.value.busy.isNotEmpty()) return
@@ -116,7 +168,9 @@ internal class ChainViewModel(
     fun removeLanding(tag: String) = write("remove") { repository.removeLanding(tag) }
 
     fun testLandings(tag: String = "") = write(if (tag.isEmpty()) "test" else "test:$tag", announce = false) {
-        repository.testLandings(tag)
+        val chain = repository.testLandings(tag)
+        _state.update { it.copy(tested = true) }
+        chain
     }
 
     fun savePolicy(id: String?, name: String, enabled: Boolean, landing: String, packages: List<String>, onDone: () -> Unit) =

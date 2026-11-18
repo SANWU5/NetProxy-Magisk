@@ -1,5 +1,9 @@
 package com.fanjv.netproxy
 
+import com.fanjv.netproxy.navigation.Route.SmartGroupEdit
+import com.fanjv.netproxy.navigation.Route.SmartGroups
+import com.fanjv.netproxy.feature.smart.presentation.SmartGroupEditScreen
+import com.fanjv.netproxy.feature.smart.presentation.SmartGroupsScreen
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -251,6 +255,16 @@ internal fun NetProxyApp(themeViewModel: ThemeViewModel) {
                 entry<ChainPolicy> {
                     ModulePage(R.string.chain, R.string.chain_load_failed, { navigator.pop() }) {
                         ChainPolicyScreen(id = it.id, onBack = { navigator.pop() })
+                    }
+                }
+                entry<SmartGroups> {
+                    ModulePage(R.string.smart_groups, R.string.smart_load_failed, { navigator.pop() }) {
+                        SmartGroupsScreen(onBack = { navigator.pop() })
+                    }
+                }
+                entry<SmartGroupEdit> {
+                    ModulePage(R.string.smart_groups, R.string.smart_load_failed, { navigator.pop() }) {
+                        SmartGroupEditScreen(id = it.id, onBack = { navigator.pop() })
                     }
                 }
                 entry<ThemeSettings> { ThemeSettingsScreen(viewModel = themeViewModel) }

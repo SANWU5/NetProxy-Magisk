@@ -1,5 +1,7 @@
 package com.fanjv.netproxy.feature.inbound.presentation
 
+import com.fanjv.netproxy.core.ui.component.MenuAction
+import com.fanjv.netproxy.core.ui.component.CouiBarMenuButton
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.annotation.StringRes
@@ -30,10 +32,8 @@ import com.fanjv.netproxy.navigation.LocalNavigator
 import com.fanjv.netproxy.navigation.Route
 import dev.aiingjie.coui.Coui
 import dev.aiingjie.coui.CouiActionRow
-import dev.aiingjie.coui.CouiBarButton
 import dev.aiingjie.coui.CouiDialogButton
 import dev.aiingjie.coui.CouiFooter
-import dev.aiingjie.coui.CouiGlyph
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiJumpRow
 import dev.aiingjie.coui.CouiLoading
@@ -107,20 +107,18 @@ internal fun InboundSettingsScreen(
     val restartText = stringResource(R.string.restart_core)
     val diagnoseText = stringResource(R.string.ebpf_diagnostics)
     val fullJsonText = stringResource(R.string.inbound_full_json)
-    val cancelText = stringResource(android.R.string.cancel)
-    fun showActions() = overlay.showDialog(title = null, buttons = buildList {
-        if (state.editable) add(CouiDialogButton(restartText) { viewModel.restart() })
-        if (state.hasConfiguration && !state.isDiagnosing) add(CouiDialogButton(diagnoseText) { viewModel.diagnose() })
-        if (state.editable) add(CouiDialogButton(fullJsonText) { commitAction { navigator.push(Route.JsonEdit("inbound")) } })
-        add(CouiDialogButton(cancelText))
-    })
+    val menu = listOf(
+        MenuAction(restartText, enabled = state.editable) { viewModel.restart() },
+        MenuAction(diagnoseText, enabled = state.hasConfiguration && !state.isDiagnosing) { viewModel.diagnose() },
+        MenuAction(fullJsonText, enabled = state.editable) { commitAction { navigator.push(Route.JsonEdit("inbound")) } },
+    )
 
     CouiSubPage(
         title = stringResource(R.string.inbound_settings),
         onBack = leave,
         actions = {
             if (applyingField == "restart") CouiLoading()
-            CouiBarButton(CouiGlyph.More, stringResource(R.string.more_actions), ::showActions)
+            CouiBarMenuButton(stringResource(R.string.more_actions), menu)
         },
     ) {
         if (state.snapshot == null && !state.hasPendingChanges) {

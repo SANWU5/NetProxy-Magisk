@@ -72,6 +72,16 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data class ChainPolicy(val id: String) : Route
 
+    /** 智能分组：按地区整理的分组与自建分组。 */
+    @Parcelize
+    @Serializable
+    data object SmartGroups : Route
+
+    /** 智能分组或自建分组的编辑页；id 为空表示新建自建分组。 */
+    @Parcelize
+    @Serializable
+    data class SmartGroupEdit(val id: String) : Route
+
 }
 
 /**

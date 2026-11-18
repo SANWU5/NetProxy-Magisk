@@ -1,5 +1,7 @@
 package com.fanjv.netproxy.feature.logs.presentation
 
+import com.fanjv.netproxy.core.ui.component.MenuAction
+import com.fanjv.netproxy.core.ui.component.CouiBarMenuButton
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
@@ -46,10 +48,8 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fanjv.netproxy.R
 import dev.aiingjie.coui.Coui
-import dev.aiingjie.coui.CouiBarButton
 import dev.aiingjie.coui.CouiDialogButton
 import dev.aiingjie.coui.CouiDimens
-import dev.aiingjie.coui.CouiGlyph
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiLoading
 import dev.aiingjie.coui.CouiRow
@@ -194,23 +194,25 @@ internal fun LogsScreen(
     }
 
     val viewText = stringResource(if (isCardView) R.string.raw_view else R.string.card_view)
-    fun showActions() = overlay.showDialog(title = null, buttons = buildList {
-        add(CouiDialogButton(sendLogTitle) { sendLog() })
-        add(CouiDialogButton(saveLogTitle) { saveLog() })
-        if (!content.loading && (logs.isNotEmpty() || content.error.isEmpty())) {
-            add(CouiDialogButton(viewText) { isCardView = !isCardView })
-            add(CouiDialogButton(scrollTopText) { scope.launch { listState.animateScrollToItem(0) } })
-            add(CouiDialogButton(scrollBottomText) {
-                scope.launch { if (logs.isNotEmpty()) listState.animateScrollToItem(logs.lastIndex) }
-            })
-            add(CouiDialogButton(clearText, CouiDialogButton.Kind.Danger) {
-                viewModel.clear(currentType) { success ->
-                    showMessage(if (success) clearSuccessMessage else clearFailedMessage)
-                }
-            })
-        }
-        add(CouiDialogButton(cancelText))
-    })
+    val clearConfirm = stringResource(R.string.logs_clear_confirm)
+    val viewReady = !content.loading && (logs.isNotEmpty() || content.error.isEmpty())
+    val menu = listOf(
+        MenuAction(sendLogTitle) { sendLog() },
+        MenuAction(saveLogTitle) { saveLog() },
+        MenuAction(viewText, enabled = viewReady) { isCardView = !isCardView },
+        MenuAction(scrollTopText, enabled = viewReady) { scope.launch { listState.animateScrollToItem(0) } },
+        MenuAction(scrollBottomText, enabled = viewReady) {
+            scope.launch { if (logs.isNotEmpty()) listState.animateScrollToItem(logs.lastIndex) }
+        },
+        MenuAction(clearText, enabled = viewReady) {
+            overlay.showDialog(clearText, clearConfirm, listOf(
+                CouiDialogButton(clearText, CouiDialogButton.Kind.Danger) {
+                    viewModel.clear(currentType) { success -> showMessage(if (success) clearSuccessMessage else clearFailedMessage) }
+                },
+                CouiDialogButton(cancelText),
+            ))
+        },
+    )
 
     val tabs = listOf(
         stringResource(R.string.service_logs),
@@ -220,7 +222,7 @@ internal fun LogsScreen(
         title = stringResource(R.string.logs),
         onBack = onBack,
         listState = listState,
-        actions = { CouiBarButton(CouiGlyph.More, stringResource(R.string.more_options), ::showActions) },
+        actions = { CouiBarMenuButton(stringResource(R.string.more_options), menu) },
         header = { LogTypeTabs(tabs, selectedTabIndex) { selectedTabIndex = it } },
     ) {
         if (logs.isEmpty()) {

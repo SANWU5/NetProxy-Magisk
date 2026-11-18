@@ -36,10 +36,25 @@ internal data class ChainPolicy(
     val packages: List<String> = emptyList(),
 )
 
+/**
+ * 指定的链式前置：smartId 指定智能分组或自建分组的自动选择；否则 groupId 指定节点分组，
+ * node 为空时使用该分组的自动选择，不为空时固定为这个节点。
+ */
+@Serializable
+internal data class ChainFront(
+    @SerialName("group_id") val groupId: String = "",
+    val node: String = "",
+    @SerialName("smart_id") val smartId: String = "",
+)
+
 @Serializable
 internal data class ChainState(
     val mode: String = ChainMode.Off.value,
     val manual: String = "",
+    /** 指定的前置；为空表示跟随节点页的选择。 */
+    @SerialName("front_setting") val frontSetting: ChainFront? = null,
+    /** 指定的前置已不存在或没有可用节点，运行时暂时跟随节点页的选择。 */
+    @SerialName("front_unavailable") val frontUnavailable: Boolean = false,
     val landings: List<ChainLanding> = emptyList(),
     val policies: List<ChainPolicy> = emptyList(),
     val running: Boolean = false,
@@ -47,7 +62,10 @@ internal data class ChainState(
     val front: String = "",
     /** 「链式代理」选择器当前选中的后置。 */
     val landing: String = "",
+    /** 后置经由前置的测速结果，-1 表示最近一次测试失败。 */
     val delays: Map<String, Int> = emptyMap(),
+    /** 本次链路测速中前置节点自身的延迟，-1 表示失败；未测试时为空。 */
+    @SerialName("front_delay") val frontDelay: Int? = null,
 ) {
     val chainMode: ChainMode get() = ChainMode.of(mode)
 }

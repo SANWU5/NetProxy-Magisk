@@ -1,5 +1,6 @@
 package com.fanjv.netproxy.feature.chain.data
 
+import com.fanjv.netproxy.feature.chain.model.ChainFront
 import com.fanjv.netproxy.core.api.ModuleApiClient
 import com.fanjv.netproxy.feature.chain.model.ChainImportResponse
 import com.fanjv.netproxy.feature.chain.model.ChainPolicyResponse
@@ -24,6 +25,19 @@ internal class ChainRepository(private val client: ModuleApiClient) {
         decode(client.put("/chain", buildJsonObject {
             put("mode", mode)
             put("manual", manual)
+        }).data)
+
+    /** 设置链式前置；front 为空表示跟随节点页的选择。 */
+    suspend fun saveFront(front: ChainFront?): ChainState =
+        decode(client.put("/chain/front", buildJsonObject {
+            when {
+                front == null -> Unit
+                front.smartId.isNotEmpty() -> put("smart_id", front.smartId)
+                else -> {
+                    put("group_id", front.groupId)
+                    if (front.node.isNotEmpty()) put("node", front.node)
+                }
+            }
         }).data)
 
     suspend fun importLandings(content: String, type: String): ChainImportResponse =

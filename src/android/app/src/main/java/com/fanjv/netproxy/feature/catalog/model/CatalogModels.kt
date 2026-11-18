@@ -62,7 +62,10 @@ internal data class CurrentNodeSelection(
     @SerialName("selector_mode") val selectorMode: String = "urltest",
     val selected: String = "",
     @SerialName("active_group_runtime_tag") val activeGroupRuntimeTag: String = "",
-    @SerialName("runtime_selected") val runtimeSelected: String = ""
+    @SerialName("runtime_selected") val runtimeSelected: String = "",
+    /** 节点页使用智能分组的自动选择时不为空；selectorMode 为 smart。 */
+    @SerialName("smart_group_id") val smartGroupId: String = "",
+    @SerialName("smart_group_name") val smartGroupName: String = ""
 )
 
 @Serializable

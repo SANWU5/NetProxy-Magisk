@@ -78,6 +78,15 @@ class CatalogDashboardNodeNameTest {
         assertEquals("测试订阅/日本 02", dashboardNodeName(status))
     }
 
+    @Test
+    fun `smart group shows group name and the node its automatic selection uses`() {
+        val status = status(selectorMode = "smart", runtimeSelected = "机场/🇭🇰 香港 01")
+            .copy(smartGroupId = "smart-hk", smartGroupName = "🇭🇰 香港")
+
+        assertEquals("🇭🇰 香港 · 🇭🇰 香港 01", dashboardNodeName(status))
+        assertEquals("🇭🇰 香港", dashboardNodeName(status.copy(state = "stopped")))
+    }
+
     private fun status(
         selectorMode: String,
         runtimeSelected: String,

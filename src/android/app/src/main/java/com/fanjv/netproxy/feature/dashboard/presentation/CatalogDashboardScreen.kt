@@ -1,5 +1,6 @@
 package com.fanjv.netproxy.feature.dashboard.presentation
 
+import dev.aiingjie.coui.CouiMenuRow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,7 +20,6 @@ import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiInfoRow
 import dev.aiingjie.coui.CouiJumpRow
 import dev.aiingjie.coui.CouiLargeTitlePage
-import dev.aiingjie.coui.CouiRadioRow
 import dev.aiingjie.coui.CouiStatus
 import dev.aiingjie.coui.CouiTipsAction
 import dev.aiingjie.coui.CouiTopTips
@@ -92,7 +92,11 @@ internal fun CatalogDashboardScreen(
         }
 
         item {
-            CouiGroup(title = stringResource(R.string.dashboard_current_node)) {
+            // 当前节点、链式代理与出站模式放在同一张卡片里；出站模式是一行，点开后在选择框里切换。
+            val modes = state.availableOutboundModes
+            val modeLabels = modes.map { modeLabel(it) }
+            val modeIndex = modes.indexOf(state.outboundMode)
+            CouiGroup {
                 CouiJumpRow(
                     title = stringResource(R.string.dashboard_current_node),
                     value = state.currentNode.ifBlank { stringResource(R.string.dashboard_not_selected) },
@@ -107,19 +111,14 @@ internal fun CatalogDashboardScreen(
                         onClick = onNavigateToChain,
                     )
                 }
-            }
-        }
-
-        item {
-            CouiGroup(title = stringResource(R.string.dashboard_outbound_mode)) {
-                state.availableOutboundModes.forEach { mode ->
-                    CouiRadioRow(
-                        title = modeLabel(mode),
-                        selected = mode == state.outboundMode,
-                        onClick = { if (mode != state.outboundMode) viewModel.setMode(mode) },
-                        enabled = availability?.available == true && !state.loading,
-                    )
-                }
+                CouiMenuRow(
+                    title = stringResource(R.string.dashboard_outbound_mode),
+                    options = modeLabels,
+                    selected = modeIndex,
+                    onSelect = { index -> modes.getOrNull(index)?.let { if (it != state.outboundMode) viewModel.setMode(it) } },
+                    enabled = availability?.available == true && !state.loading && modes.isNotEmpty(),
+                    value = modeLabels.getOrNull(modeIndex) ?: stringResource(R.string.dashboard_mode_unknown),
+                )
             }
         }
 

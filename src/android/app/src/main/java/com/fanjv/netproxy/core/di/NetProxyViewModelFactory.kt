@@ -1,5 +1,6 @@
 package com.fanjv.netproxy.core.di
 
+import com.fanjv.netproxy.feature.smart.presentation.SmartGroupsViewModel
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
@@ -75,7 +76,10 @@ internal class NetProxyViewModelFactory(
             )
 
             LogsViewModel::class.java -> LogsViewModel(container.logRepository)
-            ChainViewModel::class.java -> ChainViewModel(container.chainRepository, container.appPackageRepository)
+            ChainViewModel::class.java -> ChainViewModel(
+                container.chainRepository, container.appPackageRepository, container.nodeRepository, container.smartGroupRepository,
+            )
+            SmartGroupsViewModel::class.java -> SmartGroupsViewModel(container.smartGroupRepository, container.nodeRepository)
             ThemeViewModel::class.java -> ThemeViewModel(container.themeManager)
             else -> error("不支持的 ViewModel: ${modelClass.name}")
         } as T

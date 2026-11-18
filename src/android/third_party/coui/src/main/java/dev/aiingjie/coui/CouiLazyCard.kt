@@ -1,5 +1,7 @@
 package dev.aiingjie.coui
 
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,8 +47,10 @@ fun <T> LazyListScope.couiCardItems(
             bottomStart = if (bottom) r else 0.dp, bottomEnd = if (bottom) r else 0.dp,
         )
         val colors = Coui.colors
+        val bounds = remember { CouiCardBounds() }
         Box(
             Modifier.padding(horizontal = CouiDimens.cardMargin).fillMaxWidth().clip(shape).background(colors.card)
+                .onPlaced { bounds.coordinates = it }
                 .padding(top = if (top) CouiDimens.cardEdgeExtra else 0.dp, bottom = if (bottom) CouiDimens.cardEdgeExtra else 0.dp)
                 .drawWithContent {
                     drawContent()
@@ -58,7 +62,7 @@ fun <T> LazyListScope.couiCardItems(
                     }
                 },
         ) {
-            CompositionLocalProvider(LocalCouiCardEdge provides CouiDimens.cardEdgeExtra) { row(item) }
+            CompositionLocalProvider(LocalCouiCardEdge provides CouiDimens.cardEdgeExtra, LocalCouiCardBounds provides bounds) { row(item) }
         }
     }
 }

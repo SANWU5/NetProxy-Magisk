@@ -311,6 +311,11 @@ internal fun shouldApplyDashboardSnapshot(
 
 /** 将持久选择状态转换为适合仪表盘展示的节点名称。 */
 internal fun dashboardNodeName(service: ServiceStatusSnapshot): String {
+    if (service.selectorMode == "smart") {
+        // 智能分组：显示分组名与自动选择当前使用的节点（运行时标签形如「分组/节点」）。
+        val node = if (service.state == "ready") service.runtimeSelected.substringAfter('/', service.runtimeSelected) else ""
+        return listOf(service.smartGroupName.ifBlank { service.smartGroupId }, node).filter(String::isNotBlank).joinToString(" · ")
+    }
     if (service.activeGroupNodeCount <= 0) return ""
 
     val groupName = service.activeGroupName.ifBlank { service.activeGroupId }

@@ -1,5 +1,9 @@
 package com.fanjv.netproxy.feature.catalog.presentation.subscriptions
 
+import com.fanjv.netproxy.core.ui.component.showActionSheet
+import com.fanjv.netproxy.core.ui.component.SheetAction
+import com.fanjv.netproxy.core.ui.component.MenuAction
+import com.fanjv.netproxy.core.ui.component.CouiBarMenuButton
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.foundation.layout.Arrangement
@@ -48,10 +52,8 @@ import dev.aiingjie.coui.CouiSubPage
 import dev.aiingjie.coui.CouiSwitchRow
 import com.fanjv.netproxy.feature.chain.presentation.TextArea
 import dev.aiingjie.coui.CouiActionRow
-import dev.aiingjie.coui.CouiBarButton
 import dev.aiingjie.coui.CouiDialogButton
 import dev.aiingjie.coui.CouiDockSpace
-import dev.aiingjie.coui.CouiGlyph
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiLargeTitlePage
 import dev.aiingjie.coui.CouiLoading
@@ -100,33 +102,24 @@ internal fun SubscriptionsScreen(
     val subscriptionDetailsText = stringResource(R.string.subscription_details)
     val localDetailsText = stringResource(R.string.local_config_details)
 
-    fun showActions() = overlay.showDialog(
-        title = null,
-        buttons = buildList {
-            add(CouiDialogButton(addText, CouiDialogButton.Kind.Primary) { navigator.push(Route.SubscriptionEdit("")) })
-            if (hasSubscriptions && !busy) add(CouiDialogButton(updateAllText) { viewModel.updateAll() })
-            add(CouiDialogButton(cancelText))
-        },
-    )
-
     fun showGroupActions(group: CatalogGroupSummary) {
         val isSubscription = group.type == "subscription"
-        overlay.showDialog(
+        overlay.showActionSheet(
             title = group.name,
-            buttons = buildList {
-                if (!group.active) add(CouiDialogButton(useText, CouiDialogButton.Kind.Primary) { viewModel.activate(group.id) })
-                if (isSubscription && !busy) add(CouiDialogButton(updateText) { viewModel.updateSubscription(group.id) })
-                add(CouiDialogButton(if (isSubscription) subscriptionDetailsText else localDetailsText) {
+            actions = buildList {
+                if (!group.active) add(SheetAction(useText) { viewModel.activate(group.id) })
+                if (isSubscription && !busy) add(SheetAction(updateText) { viewModel.updateSubscription(group.id) })
+                add(SheetAction(if (isSubscription) subscriptionDetailsText else localDetailsText) {
                     navigator.push(Route.SubscriptionDetails(group.id))
                 })
-                if (isSubscription && !busy) add(CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) {
+                if (isSubscription && !busy) add(SheetAction(deleteText, danger = true) {
                     overlay.showDialog(deleteTitle, String.format(deleteMessage, group.name), listOf(
                         CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) { viewModel.remove(group.id) },
                         CouiDialogButton(cancelText),
                     ))
                 })
-                add(CouiDialogButton(cancelText))
             },
+            cancel = cancelText,
         )
     }
 
@@ -138,7 +131,12 @@ internal fun SubscriptionsScreen(
     CouiLargeTitlePage(
         title = stringResource(R.string.subscriptions),
         bottomSpace = CouiDockSpace,
-        actions = { CouiBarButton(CouiGlyph.More, moreText, onClick = ::showActions) },
+        actions = {
+            CouiBarMenuButton(moreText, listOf(
+                MenuAction(addText) { navigator.push(Route.SubscriptionEdit("")) },
+                MenuAction(updateAllText, enabled = hasSubscriptions && !busy) { viewModel.updateAll() },
+            ))
+        },
     ) {
         if (updating) {
             item {
@@ -240,15 +238,21 @@ internal fun SubscriptionDetailsScreen(
     val deleteText = stringResource(R.string.common_delete)
     val deleteTitle = stringResource(R.string.subscription_delete_title)
     val deleteMessage = stringResource(R.string.subscription_delete_details_message)
-    fun showNodeActions(node: CatalogNode) = overlay.showDialog(
+    val nodeDeleteConfirm = stringResource(R.string.node_delete_confirm)
+    fun showNodeActions(node: CatalogNode) = overlay.showActionSheet(
         title = node.tag,
-        buttons = listOf(
-            CouiDialogButton(testText, CouiDialogButton.Kind.Primary) { viewModel.testNode(id, node.tag) },
-            CouiDialogButton(editNodeText) { viewModel.editNode(id, node.tag) },
-            CouiDialogButton(exportText) { viewModel.exportNode(id, node.tag) },
-            CouiDialogButton(deleteNodeText, CouiDialogButton.Kind.Danger) { viewModel.removeNode(id, node.tag) },
-            CouiDialogButton(cancelText),
+        actions = listOf(
+            SheetAction(testText) { viewModel.testNode(id, node.tag) },
+            SheetAction(editNodeText) { viewModel.editNode(id, node.tag) },
+            SheetAction(exportText) { viewModel.exportNode(id, node.tag) },
+            SheetAction(deleteNodeText, danger = true) {
+                overlay.showDialog(deleteNodeText, String.format(nodeDeleteConfirm, node.tag), listOf(
+                    CouiDialogButton(deleteNodeText, CouiDialogButton.Kind.Danger) { viewModel.removeNode(id, node.tag) },
+                    CouiDialogButton(cancelText),
+                ))
+            },
         ),
+        cancel = cancelText,
     )
     fun confirmDelete() = overlay.showDialog(deleteTitle, deleteMessage, listOf(
         CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) { viewModel.remove(id, onBack) },

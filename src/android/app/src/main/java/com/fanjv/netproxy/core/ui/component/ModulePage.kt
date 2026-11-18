@@ -10,15 +10,17 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.fanjv.netproxy.R
 import com.fanjv.netproxy.core.module.ModuleAvailability
+import dev.aiingjie.coui.CouiGroup
+import dev.aiingjie.coui.CouiLoading
+import dev.aiingjie.coui.CouiRow
+import dev.aiingjie.coui.CouiSubPage
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 internal val LocalModuleAvailability = staticCompositionLocalOf<ModuleAvailability?> { null }
@@ -51,16 +53,13 @@ internal fun ModulePage(
     if (availability?.available == true) {
         holder.SaveableStateProvider("content", content)
     } else {
-        val backdrop = rememberBlurBackdrop()
-        Scaffold(topBar = {
-            BlurredBar(backdrop) {
-                AdaptiveTopAppBar(title = stringResource(title),
-                    color = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface,
-                    navigationIcon = { BackIconButton(onClick = onBack) })
+        CouiSubPage(title = stringResource(title), onBack = onBack) {
+            item {
+                CouiGroup(first = true) {
+                    if (availability == null) CouiRow(stringResource(R.string.loading), leading = { CouiLoading() })
+                    else CouiRow(stringResource(unavailable))
+                }
             }
-        }) { padding ->
-            ContentStatus(padding, stringResource(unavailable), loading = availability == null,
-                modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
         }
     }
 }

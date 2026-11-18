@@ -6,16 +6,12 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.Composable
@@ -102,7 +98,6 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
-import dev.aiingjie.coui.CouiDockSpace
 import dev.aiingjie.coui.CouiDockTab
 import dev.aiingjie.coui.CouiOverlayHost
 import dev.aiingjie.coui.CouiTabs
@@ -226,10 +221,7 @@ internal fun NetProxyApp(themeViewModel: ThemeViewModel) {
                 }
                 entry<InboundSettings> {
                     ModulePage(R.string.inbound_settings, R.string.inbound_read_failed, { navigator.pop() }) {
-                        InboundSettingsScreen(
-                            onBack = { navigator.pop() },
-                            bottomPadding = 0.dp
-                        )
+                        InboundSettingsScreen(onBack = { navigator.pop() })
                     }
                 }
                 entry<NetworkMatching> {

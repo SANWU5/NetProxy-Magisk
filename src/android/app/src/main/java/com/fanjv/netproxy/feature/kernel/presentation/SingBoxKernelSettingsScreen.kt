@@ -1,204 +1,83 @@
 package com.fanjv.netproxy.feature.kernel.presentation
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Code
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fanjv.netproxy.R
-import com.fanjv.netproxy.core.ui.component.AdaptiveTopAppBar
-import com.fanjv.netproxy.core.ui.component.AppSnackbarHost
-import com.fanjv.netproxy.core.ui.component.BackIconButton
-import com.fanjv.netproxy.core.ui.component.BlurredBar
-import com.fanjv.netproxy.core.ui.component.CardItem
-import com.fanjv.netproxy.core.ui.component.ContentStatus
-import com.fanjv.netproxy.core.ui.component.TopBarMenuAction
-import com.fanjv.netproxy.core.ui.component.TopBarMoreMenu
-import com.fanjv.netproxy.core.ui.component.groupedCardSection
-import com.fanjv.netproxy.core.ui.component.rememberAppSnackbarHostState
-import com.fanjv.netproxy.core.ui.component.rememberBlurBackdrop
+import com.fanjv.netproxy.core.di.netProxyViewModel
 import com.fanjv.netproxy.navigation.LocalNavigator
 import com.fanjv.netproxy.navigation.Route
-import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.SnackbarDuration
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import dev.aiingjie.coui.CouiBarButton
+import dev.aiingjie.coui.CouiDialogButton
+import dev.aiingjie.coui.CouiGlyph
+import dev.aiingjie.coui.CouiGroup
+import dev.aiingjie.coui.CouiJumpRow
+import dev.aiingjie.coui.CouiLoading
+import dev.aiingjie.coui.CouiRow
+import dev.aiingjie.coui.CouiSubPage
+import dev.aiingjie.coui.LocalCouiOverlay
+import dev.aiingjie.coui.couiCardItems
 
 /** 主配置分区、本地规则和只读运行时共用配置工作台。 */
 @Composable
 internal fun SingBoxKernelSettingsScreen(
-    viewModel: SingBoxConfigViewModel = com.fanjv.netproxy.core.di.netProxyViewModel(),
+    viewModel: SingBoxConfigViewModel = netProxyViewModel(),
     onBack: () -> Unit,
 ) {
     val navigator = LocalNavigator.current
-    val snackbarHostState = rememberAppSnackbarHostState()
-    val coroutineScope = rememberCoroutineScope()
+    val overlay = LocalCouiOverlay.current
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val scrollBehavior = MiuixScrollBehavior()
-    val backdrop = rememberBlurBackdrop()
-    val barColor = if (backdrop != null) Color.Transparent else colorScheme.surface
 
     LaunchedEffect(Unit) { viewModel.refreshDocuments() }
 
-    val configDocuments = state.documents.filter {
-        it.category == SingBoxDocumentCategory.Config
-    }
-    val localRuleDocuments = state.documents.filter {
-        it.category == SingBoxDocumentCategory.LocalRule
-    }
-    val runtimeDocuments = state.documents.filter {
-        it.category == SingBoxDocumentCategory.Runtime
-    }
     val checkSuccess = stringResource(R.string.singbox_check_success)
     val checkFailed = stringResource(R.string.singbox_check_failed)
+    val restartText = stringResource(R.string.restart_core)
+    val checkText = stringResource(R.string.singbox_check_all)
+    val cancelText = stringResource(android.R.string.cancel)
+    val sections = listOf(
+        SingBoxDocumentCategory.Config to stringResource(R.string.singbox_main_config),
+        SingBoxDocumentCategory.LocalRule to stringResource(R.string.singbox_rule_files),
+        SingBoxDocumentCategory.Runtime to stringResource(R.string.singbox_runtime_configs),
+    )
 
-    Scaffold(
-        snackbarHost = { AppSnackbarHost(snackbarHostState) },
-        topBar = {
-            BlurredBar(backdrop) {
-                AdaptiveTopAppBar(
-                    color = barColor,
-                    title = stringResource(R.string.kernel_settings),
-                    navigationIcon = { BackIconButton(onClick = onBack) },
-                    scrollBehavior = scrollBehavior,
-                    actions = {
-                        var showMoreMenu by remember { mutableStateOf(false) }
-                        TopBarMoreMenu(
-                            expanded = showMoreMenu,
-                            onExpandedChange = { showMoreMenu = it },
-                            actions = listOf(
-                                TopBarMenuAction(
-                                    text = stringResource(R.string.restart_core),
-                                    enabled = state.documents.isNotEmpty(),
-                                    onClick = viewModel::restartService,
-                                ),
-                                TopBarMenuAction(
-                                    text = stringResource(R.string.singbox_check_all),
-                                    enabled = state.documents.isNotEmpty(),
-                                    onClick = {
-                                        viewModel.checkConfig { success ->
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar(
-                                                    message = if (success) checkSuccess else checkFailed,
-                                                    withDismissAction = !success,
-                                                    duration = if (success) {
-                                                        SnackbarDuration.Short
-                                                    } else {
-                                                        SnackbarDuration.Long
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    },
-                                ),
-                            ),
-                            contentDescription = stringResource(R.string.more_actions),
-                        )
+    CouiSubPage(
+        title = stringResource(R.string.kernel_settings),
+        onBack = onBack,
+        actions = {
+            CouiBarButton(CouiGlyph.More, stringResource(R.string.more_actions), enabled = state.documents.isNotEmpty(), onClick = {
+                overlay.showDialog(title = null, buttons = listOf(
+                    CouiDialogButton(restartText) { viewModel.restartService() },
+                    CouiDialogButton(checkText) {
+                        viewModel.checkConfig { success -> overlay.showSnack(if (success) checkSuccess else checkFailed) }
                     },
-                )
-            }
+                    CouiDialogButton(cancelText),
+                ))
+            })
         },
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
-        ) {
-            if (state.documents.isEmpty()) {
-                ContentStatus(innerPadding, stringResource(
-                    if (state.documentsError) R.string.singbox_documents_load_failed else R.string.singbox_documents_empty),
-                    loading = state.isLoadingDocuments)
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .scrollEndHaptic()
-                        .overScrollVertical()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
-                        .padding(horizontal = 12.dp),
-                    contentPadding = innerPadding,
-                    overscrollEffect = null,
-                ) {
-                    if (configDocuments.isNotEmpty()) {
-                        documentSection(
-                            keyPrefix = "singbox_config",
-                            title = { stringResource(R.string.singbox_main_config) },
-                            documents = configDocuments,
-                            onOpen = { navigator.push(Route.JsonEdit(it.id)) },
-                        )
-                    }
-                    if (localRuleDocuments.isNotEmpty()) {
-                        documentSection(
-                            keyPrefix = "singbox_local_rules",
-                            title = { stringResource(R.string.singbox_rule_files) },
-                            documents = localRuleDocuments,
-                            onOpen = { navigator.push(Route.JsonEdit(it.id)) },
-                        )
-                    }
-                    if (runtimeDocuments.isNotEmpty()) {
-                        documentSection(
-                            keyPrefix = "singbox_runtime",
-                            title = { stringResource(R.string.singbox_runtime_configs) },
-                            documents = runtimeDocuments,
-                            onOpen = { navigator.push(Route.JsonEdit(it.id)) },
-                        )
-                    }
-                    item { Spacer(Modifier.height(80.dp)) }
+    ) {
+        if (state.documents.isEmpty()) {
+            item {
+                CouiGroup(first = true) {
+                    if (state.isLoadingDocuments) CouiRow(stringResource(R.string.loading), leading = { CouiLoading() })
+                    else CouiRow(stringResource(
+                        if (state.documentsError) R.string.singbox_documents_load_failed else R.string.singbox_documents_empty))
                 }
             }
+            return@CouiSubPage
+        }
+        var first = true
+        sections.forEach { (category, title) ->
+            val documents = state.documents.filter { it.category == category }
+            couiCardItems(documents, key = { "${category.name}:${it.id}" }, title = title, first = first) { document ->
+                CouiJumpRow(documentTitle(document), { navigator.push(Route.JsonEdit(document.id)) },
+                    summary = documentSummary(document))
+            }
+            if (documents.isNotEmpty()) first = false
         }
     }
-}
-
-private fun androidx.compose.foundation.lazy.LazyListScope.documentSection(
-    keyPrefix: String,
-    title: @Composable () -> String,
-    documents: List<SingBoxDocument>,
-    onOpen: (SingBoxDocument) -> Unit,
-) {
-    groupedCardSection(
-        keyPrefix = keyPrefix,
-        title = title,
-        items = documents.map { document ->
-            CardItem(document.id) {
-                ArrowPreference(
-                    title = documentTitle(document),
-                    summary = documentSummary(document),
-                    startAction = {
-                        Icon(
-                            imageVector = Icons.Rounded.Code,
-                            contentDescription = null,
-                            modifier = Modifier.padding(end = 6.dp),
-                            tint = colorScheme.onBackground,
-                        )
-                    },
-                    onClick = { onOpen(document) },
-                )
-            }
-        },
-    )
 }
 
 @Composable

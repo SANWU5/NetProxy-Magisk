@@ -14,13 +14,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -31,22 +28,31 @@ import com.fanjv.netproxy.core.ui.component.*
 import com.fanjv.netproxy.feature.inbound.data.*
 import com.fanjv.netproxy.navigation.LocalNavigator
 import com.fanjv.netproxy.navigation.Route
+import dev.aiingjie.coui.Coui
+import dev.aiingjie.coui.CouiActionRow
+import dev.aiingjie.coui.CouiBarButton
+import dev.aiingjie.coui.CouiDialogButton
+import dev.aiingjie.coui.CouiFooter
+import dev.aiingjie.coui.CouiGlyph
+import dev.aiingjie.coui.CouiGroup
+import dev.aiingjie.coui.CouiJumpRow
+import dev.aiingjie.coui.CouiLoading
+import dev.aiingjie.coui.CouiMenuRow
+import dev.aiingjie.coui.CouiRow
+import dev.aiingjie.coui.CouiSubPage
+import dev.aiingjie.coui.CouiSwitchRow
+import dev.aiingjie.coui.LocalCouiOverlay
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.CheckboxLocation
 import top.yukonga.miuix.kmp.preference.CheckboxPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 private enum class InputKind { Text, List, Ports, Number, Duration, Cidr, RuleSet, Interface, Mac }
 private data class FieldEdit(
@@ -64,14 +70,12 @@ private data class FieldEdit(
 @Composable
 internal fun InboundSettingsScreen(
     onBack: () -> Unit,
-    bottomPadding: Dp = 0.dp,
     viewModel: InboundViewModel = netProxyViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
     val context = LocalContext.current
-    val scrollBehavior = MiuixScrollBehavior()
-    val backdrop = rememberBlurBackdrop()
+    val overlay = LocalCouiOverlay.current
     var editing by remember { mutableStateOf<FieldEdit?>(null) }
     var showField by remember { mutableStateOf(false) }
     var advanced by remember { mutableStateOf(false) }
@@ -89,7 +93,7 @@ internal fun InboundSettingsScreen(
     val commitOnLeave = rememberCommitOnLeave(viewModel::requestFlush)
     val commitAction = rememberCommitAction(viewModel::flush)
     val leave: () -> Unit = { commitOnLeave(onBack) }
-    BackHandler(enabled = !showField && state.pendingBackend == null && !showDraft &&
+    BackHandler(enabled = !showField && state.pendingBackend == null && !showDraft && !overlay.isCovering &&
         (state.hasPendingChanges || state.isSaving)) { leave() }
     fun openField(field: FieldEdit) {
         if (!state.editable) return
@@ -100,121 +104,105 @@ internal fun InboundSettingsScreen(
         viewModel.refresh()
         onPauseOrDispose {}
     }
+    val restartText = stringResource(R.string.restart_core)
+    val diagnoseText = stringResource(R.string.ebpf_diagnostics)
+    val fullJsonText = stringResource(R.string.inbound_full_json)
+    val cancelText = stringResource(android.R.string.cancel)
+    fun showActions() = overlay.showDialog(title = null, buttons = buildList {
+        if (state.editable) add(CouiDialogButton(restartText) { viewModel.restart() })
+        if (state.hasConfiguration && !state.isDiagnosing) add(CouiDialogButton(diagnoseText) { viewModel.diagnose() })
+        if (state.editable) add(CouiDialogButton(fullJsonText) { commitAction { navigator.push(Route.JsonEdit("inbound")) } })
+        add(CouiDialogButton(cancelText))
+    })
 
-    Scaffold(
-        topBar = {
-            BlurredBar(backdrop) {
-                AdaptiveTopAppBar(
-                    title = stringResource(R.string.inbound_settings),
-                    color = if (backdrop != null) Color.Transparent else colorScheme.surface,
-                    scrollBehavior = scrollBehavior,
-                    navigationIcon = { BackIconButton(onClick = leave) },
-                    actions = {
-                        var more by remember { mutableStateOf(false) }
-                        if (applyingField == "restart") {
-                            CircularProgressIndicator(Modifier.padding(end = 8.dp), size = 20.dp, strokeWidth = 2.dp)
-                        }
-                        TopBarMoreMenu(
-                            expanded = more,
-                            onExpandedChange = { more = it },
-                            contentDescription = stringResource(R.string.more_actions),
-                            actions = listOf(
-                                TopBarMenuAction(stringResource(R.string.restart_core), enabled = state.editable, onClick = viewModel::restart),
-                                TopBarMenuAction(stringResource(R.string.ebpf_diagnostics), enabled = state.hasConfiguration && !state.isDiagnosing, onClick = viewModel::diagnose),
-                                TopBarMenuAction(stringResource(R.string.inbound_full_json), enabled = state.editable,
-                                    onClick = { commitAction { navigator.push(Route.JsonEdit("inbound")) } })
-                            )
-                        )
-                    }
-                )
-            }
+    CouiSubPage(
+        title = stringResource(R.string.inbound_settings),
+        onBack = leave,
+        actions = {
+            if (applyingField == "restart") CouiLoading()
+            CouiBarButton(CouiGlyph.More, stringResource(R.string.more_actions), ::showActions)
         },
-    ) { padding ->
-        Box(Modifier.then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)) {
-            if (state.snapshot == null && !state.hasPendingChanges) {
-                ContentStatus(padding, stringResource(R.string.inbound_read_failed), loading = state.isInitialLoading)
-            } else LazyColumn(
-                modifier = Modifier.fillMaxHeight().scrollEndHaptic().overScrollVertical()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection).padding(horizontal = 12.dp),
-                contentPadding = padding,
-                overscrollEffect = null
-            ) {
-                if (state.error.isNotBlank() || state.errorCode.isNotBlank()) item("error") {
+    ) {
+        if (state.snapshot == null && !state.hasPendingChanges) {
+            item {
+                CouiGroup(first = true) {
+                    if (state.isInitialLoading) CouiRow(stringResource(R.string.loading), leading = { CouiLoading() })
+                    else CouiRow(stringResource(R.string.inbound_read_failed))
+                }
+            }
+            return@CouiSubPage
+        }
+        val hasError = state.error.isNotBlank() || state.errorCode.isNotBlank()
+        if (hasError || state.requiresReload) item("error") {
+            CouiGroup(first = true) {
+                if (hasError) {
                     val error = when (state.errorCode) {
                         "config.conflict" -> stringResource(R.string.inbound_conflict)
                         "inbound.not_confirmed" -> stringResource(R.string.inbound_apply_unconfirmed)
                         "inbound.restart_required" -> stringResource(R.string.inbound_restart_required)
                         else -> state.error
                     }
-                    Text(
-                        error,
-                        modifier = Modifier.padding(14.dp),
-                        color = colorScheme.error
+                    CouiRow(error, titleColor = Coui.colors.error)
+                }
+                if (state.requiresReload) CouiActionRow(stringResource(
+                    if (state.hasPendingChanges) R.string.routing_reload_draft else R.string.inbound_reload),
+                    viewModel::discardAndReload)
+            }
+        }
+        if (state.canReviewDraft) item("draft") {
+            CouiGroup(first = !hasError && !state.requiresReload) {
+                CouiJumpRow(stringResource(R.string.inbound_draft), {
+                    reviewingDraft = state.draftForReview()
+                    showDraft = true
+                }, summary = stringResource(R.string.inbound_draft_hint))
+            }
+        }
+        if (state.snapshot != null) {
+            couiSection("general", { stringResource(R.string.inbound_general) }, (listOf(
+                CardItem("backend") {
+                    CouiMenuRow(
+                        title = stringResource(R.string.inbound_backend),
+                        options = listOf("eBPF", "TUN"),
+                        selected = if (state.backend == "tun") 1 else 0,
+                        enabled = enabled,
+                        onSelect = { viewModel.requestBackend(if (it == 1) "tun" else "ebpf") }
+                    )
+                },
+                CardItem("root_policy") {
+                    val policies = listOf("default", "include", "exclude")
+                    CouiMenuRow(
+                        title = stringResource(R.string.inbound_root_processes),
+                        options = listOf(stringResource(R.string.inbound_root_default),
+                            stringResource(R.string.inbound_root_include), stringResource(R.string.inbound_root_exclude)),
+                        selected = policies.indexOf(state.snapshot!!.rootPolicy),
+                        enabled = enabled,
+                        onSelect = { viewModel.setRootPolicy(policies[it]) }
+                    )
+                },
+                CardItem("apps") {
+                    CouiJumpRow(
+                        title = stringResource(R.string.proxy_apps),
+                        enabled = enabled,
+                        onClick = { if (state.editable) commitAction { navigator.push(Route.Apps) } }
                     )
                 }
-                if (state.requiresReload) {
-                    item("reload") { TextButton(stringResource(
-                        if (state.hasPendingChanges) R.string.routing_reload_draft else R.string.inbound_reload),
-                        onClick = viewModel::discardAndReload) }
+            ) + if (state.snapshot?.status?.requiresBackendSwitch(state.backend) == true) listOf(
+                CardItem("apply_backend") {
+                    CouiJumpRow(
+                        title = stringResource(R.string.inbound_apply_backend),
+                        summary = stringResource(R.string.inbound_restart_required),
+                        enabled = enabled,
+                        onClick = { viewModel.requestBackend(state.backend) }
+                    )
                 }
-                if (state.canReviewDraft) groupedCardItems("draft", listOf(
-                    CardItem("review") {
-                        ArrowPreference(title = stringResource(R.string.inbound_draft),
-                            summary = stringResource(R.string.inbound_draft_hint), onClick = {
-                                reviewingDraft = state.draftForReview()
-                                showDraft = true
-                            })
-                    }
-                ))
-                if (state.snapshot != null) {
-                    groupedCardSection("general", { stringResource(R.string.inbound_general) }, (listOf(
-                        CardItem("backend") {
-                            OverlayDropdownPreference(
-                                title = stringResource(R.string.inbound_backend),
-                                items = listOf("eBPF", "TUN"),
-                                selectedIndex = if (state.backend == "tun") 1 else 0,
-                                enabled = enabled,
-                                onSelectedIndexChange = { viewModel.requestBackend(if (it == 1) "tun" else "ebpf") }
-                            )
-                        },
-                        CardItem("root_policy") {
-                            val policies = listOf("default", "include", "exclude")
-                            OverlayDropdownPreference(
-                                title = stringResource(R.string.inbound_root_processes),
-                                items = listOf(stringResource(R.string.inbound_root_default),
-                                    stringResource(R.string.inbound_root_include), stringResource(R.string.inbound_root_exclude)),
-                                selectedIndex = policies.indexOf(state.snapshot!!.rootPolicy),
-                                enabled = enabled,
-                                onSelectedIndexChange = { viewModel.setRootPolicy(policies[it]) }
-                            )
-                        },
-                        CardItem("apps") {
-                            ArrowPreference(
-                                title = stringResource(R.string.proxy_apps),
-                                enabled = enabled,
-                                onClick = { if (state.editable) commitAction { navigator.push(Route.Apps) } }
-                            )
-                        }
-                    ) + if (state.snapshot?.status?.requiresBackendSwitch(state.backend) == true) listOf(
-                        CardItem("apply_backend") {
-                            ArrowPreference(
-                                title = stringResource(R.string.inbound_apply_backend),
-                                summary = stringResource(R.string.inbound_restart_required),
-                                enabled = enabled,
-                                onClick = { viewModel.requestBackend(state.backend) }
-                            )
-                        }
-                    ) else emptyList()).withProgress(applyingField))
-                    if (state.backend == "ebpf") {
-                        ebpfForm(state.native, enabled, applyingField, advanced, { advanced = !advanced }, viewModel, ::openField)
-                    } else {
-                        tunForm(state.native, enabled, applyingField, advanced, { advanced = !advanced }, viewModel, ::openField)
-                    }
-                    if (state.choicesError) item("choices_error") {
-                        Text(stringResource(R.string.inbound_choices_failed), Modifier.padding(14.dp))
-                    }
-                }
-                item { Spacer(Modifier.height(80.dp + bottomPadding)) }
+            ) else emptyList()).withProgress(applyingField), first = !hasError && !state.requiresReload && !state.canReviewDraft)
+            if (state.backend == "ebpf") {
+                ebpfForm(state.native, enabled, applyingField, advanced, { advanced = !advanced }, viewModel, ::openField)
+            } else {
+                tunForm(state.native, enabled, applyingField, advanced, { advanced = !advanced }, viewModel, ::openField)
+            }
+            if (state.choicesError) item("choices_error") {
+                CouiFooter(stringResource(R.string.inbound_choices_failed))
             }
         }
     }
@@ -285,28 +273,28 @@ private fun LazyListScope.ebpfForm(
 ) {
     val local = native.objectAt("local")
     val shared = native.objectAt("shared")
-    groupedCardSection("ebpf_core", { stringResource(R.string.ebpf_core_settings) }, listOf(
+    couiSection("ebpf_core", { stringResource(R.string.ebpf_core_settings) }, listOf(
         CardItem("paths") {
             val selected = if (local.flagAt("enabled") && shared.flagAt("enabled")) 2 else if (shared.flagAt("enabled")) 1 else 0
-            OverlayDropdownPreference(
+            CouiMenuRow(
                 title = stringResource(R.string.ebpf_data_paths),
-                items = listOf(stringResource(R.string.ebpf_data_paths_local), stringResource(R.string.ebpf_data_paths_shared), stringResource(R.string.ebpf_data_paths_both)),
-                selectedIndex = selected, enabled = enabled,
-                onSelectedIndexChange = { vm.setDataPaths(listOf("local", "shared", "both")[it]) }
+                options = listOf(stringResource(R.string.ebpf_data_paths_local), stringResource(R.string.ebpf_data_paths_shared), stringResource(R.string.ebpf_data_paths_both)),
+                selected = selected, enabled = enabled,
+                onSelect = { vm.setDataPaths(listOf("local", "shared", "both")[it]) }
             )
         },
         CardItem("network") {
             val networks = native.listAt("network")
-            OverlayDropdownPreference(
+            CouiMenuRow(
                 title = stringResource(R.string.ebpf_network),
-                items = listOf(stringResource(R.string.ebpf_network_all), stringResource(R.string.ebpf_network_tcp), stringResource(R.string.ebpf_network_udp)),
-                selectedIndex = if (networks == listOf("tcp")) 1 else if (networks == listOf("udp")) 2 else 0,
+                options = listOf(stringResource(R.string.ebpf_network_all), stringResource(R.string.ebpf_network_tcp), stringResource(R.string.ebpf_network_udp)),
+                selected = if (networks == listOf("tcp")) 1 else if (networks == listOf("udp")) 2 else 0,
                 enabled = enabled,
-                onSelectedIndexChange = { vm.setField("network", if (it == 0) null else JsonPrimitive(if (it == 1) "tcp" else "udp")) }
+                onSelect = { vm.setField("network", if (it == 0) null else JsonPrimitive(if (it == 1) "tcp" else "udp")) }
             )
         },
         CardItem("advanced") {
-            SwitchPreference(title = stringResource(R.string.inbound_advanced), checked = advanced, onCheckedChange = { toggleAdvanced() })
+            CouiSwitchRow(title = stringResource(R.string.inbound_advanced), checked = advanced, onCheckedChange = { toggleAdvanced() })
         }
     ).withProgress(applyingField))
     for ((path, part, title) in listOf(Triple("local", local, R.string.ebpf_local_settings), Triple("shared", shared, R.string.ebpf_shared_settings))) {
@@ -343,11 +331,11 @@ private fun LazyListScope.ebpfForm(
             textItem("shared.include_mac_address", R.string.ebpf_shared_include_mac_addresses, part, enabled, InputKind.Mac, edit),
             textItem("shared.exclude_mac_address", R.string.ebpf_shared_exclude_mac_addresses, part, enabled, InputKind.Mac, edit)
         )
-        groupedCardSection("ebpf_$path", { stringResource(title) }, items.withProgress(applyingField))
+        couiSection("ebpf_$path", { stringResource(title) }, items.withProgress(applyingField))
     }
-    if (advanced) groupedCardSection("ebpf_advanced", { stringResource(R.string.inbound_advanced) }, listOf(
+    if (advanced) couiSection("ebpf_advanced", { stringResource(R.string.inbound_advanced) }, listOf(
         CardItem("shared.default_interface") {
-            SwitchPreference(title = stringResource(R.string.ebpf_shared_default_interface),
+            CouiSwitchRow(title = stringResource(R.string.ebpf_shared_default_interface),
                 summary = stringResource(R.string.ebpf_shared_default_interface_hint),
                 checked = shared.flagAt("default_interface"), enabled = enabled,
                 onCheckedChange = { vm.setField("shared.default_interface", JsonPrimitive(it)) })
@@ -359,7 +347,7 @@ private fun LazyListScope.tunForm(
     native: JsonObject, enabled: Boolean, applyingField: String?, advanced: Boolean, toggleAdvanced: () -> Unit,
     vm: InboundViewModel, edit: (FieldEdit) -> Unit
 ) {
-    groupedCardSection("tun", { stringResource(R.string.tun_settings) }, listOf(
+    couiSection("tun", { stringResource(R.string.tun_settings) }, listOf(
         CardItem("dns_mode") {
             NativeDropdown(R.string.tun_dns, native.tunDnsMode(),
                 listOf("hijack", "disabled", "native"),
@@ -367,22 +355,22 @@ private fun LazyListScope.tunForm(
                 enabled, selectableCount = 2) { vm.setField("dns_mode", JsonPrimitive(it)) }
         },
         CardItem("ipv6") {
-            SwitchPreference(title = stringResource(R.string.tun_ipv6), summary = stringResource(R.string.tun_ipv6_hint),
+            CouiSwitchRow(title = stringResource(R.string.tun_ipv6), summary = stringResource(R.string.tun_ipv6_hint),
                 checked = native.listAt("address").any { ':' in it }, enabled = enabled, onCheckedChange = vm::setTunIpv6)
         },
         filterItem("include_interface", "exclude_interface", R.string.tun_interfaces, native, enabled, InputKind.Interface, edit),
         textItem("route_exclude_address", R.string.tun_exclude_addresses, native, enabled, InputKind.Cidr, edit),
         textItem("route_exclude_address_set", R.string.tun_exclude_rule_sets, native, enabled, InputKind.RuleSet, edit),
         CardItem("strict_route") {
-            SwitchPreference(title = stringResource(R.string.tun_strict_route), summary = stringResource(R.string.tun_strict_route_hint),
+            CouiSwitchRow(title = stringResource(R.string.tun_strict_route), summary = stringResource(R.string.tun_strict_route_hint),
                 checked = native.flagAt("strict_route"), enabled = enabled,
                 onCheckedChange = { vm.setField("strict_route", JsonPrimitive(it)) })
         },
         CardItem("advanced") {
-            SwitchPreference(title = stringResource(R.string.inbound_advanced), checked = advanced, onCheckedChange = { toggleAdvanced() })
+            CouiSwitchRow(title = stringResource(R.string.inbound_advanced), checked = advanced, onCheckedChange = { toggleAdvanced() })
         }
     ).withProgress(applyingField))
-    if (advanced) groupedCardSection("tun_advanced", { stringResource(R.string.inbound_advanced) }, listOf(
+    if (advanced) couiSection("tun_advanced", { stringResource(R.string.inbound_advanced) }, listOf(
         textItem("address", R.string.tun_address, native, enabled, InputKind.Cidr, edit),
         textItem("interface_name", R.string.tun_interface_name, native, enabled, InputKind.Text, edit),
         textItem("mtu", R.string.tun_mtu, native, enabled, InputKind.Number, edit),
@@ -391,6 +379,17 @@ private fun LazyListScope.tunForm(
         textItem("route_address_set", R.string.tun_route_rule_sets, native, enabled, InputKind.RuleSet, edit),
         filterItem("include_mac_address", "exclude_mac_address", R.string.tun_mac, native, enabled, InputKind.Mac, edit)
     ).withProgress(applyingField))
+}
+
+private fun LazyListScope.couiSection(
+    sectionKey: String, title: @Composable () -> String, items: List<CardItem>, first: Boolean = false,
+) {
+    if (items.isEmpty()) return
+    item(sectionKey) {
+        CouiGroup(title = title(), first = first) {
+            items.forEach { item -> key(item.key) { Column(content = item.content) } }
+        }
+    }
 }
 
 private fun List<CardItem>.withProgress(applyingField: String?) = map { preference ->
@@ -410,7 +409,7 @@ private fun List<CardItem>.withProgress(applyingField: String?) = map { preferen
 }
 
 private fun toggleItem(key: String, @StringRes title: Int, checked: Boolean, enabled: Boolean, change: (Boolean) -> Unit) =
-    CardItem(key) { SwitchPreference(title = stringResource(title), checked = checked, enabled = enabled, onCheckedChange = change) }
+    CardItem(key) { CouiSwitchRow(title = stringResource(title), checked = checked, enabled = enabled, onCheckedChange = change) }
 
 private fun textItem(path: String, @StringRes title: Int, native: JsonObject, enabled: Boolean, kind: InputKind, edit: (FieldEdit) -> Unit) =
     CardItem(path) {
@@ -418,7 +417,7 @@ private fun textItem(path: String, @StringRes title: Int, native: JsonObject, en
         val scalar = kind in setOf(InputKind.Text, InputKind.Number, InputKind.Duration)
         val values = if (scalar) emptyList() else native.listAt(path.substringAfterLast('.'))
         val value = if (scalar) native.textAt(path.substringAfterLast('.')) else values.joinToString("\n")
-        ArrowPreference(label, summary = value.ifBlank { stringResource(R.string.not_set) }, enabled = enabled,
+        CouiJumpRow(label, summary = value.ifBlank { stringResource(R.string.not_set) }, enabled = enabled,
             onClick = { edit(FieldEdit(path, label, value, kind, values = values)) })
     }
 
@@ -433,7 +432,7 @@ private fun filterItem(include: String, exclude: String, @StringRes title: Int, 
             "exclude" -> stringResource(R.string.inbound_filter_exclude)
             else -> stringResource(R.string.inbound_filter_all)
         }
-        ArrowPreference(label, summary = listOf(summary, value).filter(String::isNotBlank).joinToString(": "),
+        CouiJumpRow(label, summary = listOf(summary, value).filter(String::isNotBlank).joinToString(": "),
             enabled = enabled, onClick = { edit(FieldEdit(include, label, value, kind, exclude, mode, values = values)) })
     }
 
@@ -443,11 +442,11 @@ private fun NativeDropdown(
     selectableCount: Int = values.size, change: (String) -> Unit
 ) {
     val visibleValues = values.take(selectableCount).let { if (value in it) it else it + value }
-    OverlayDropdownPreference(
+    CouiMenuRow(
         title = stringResource(title),
-        items = visibleValues.map { candidate -> labels.getOrNull(values.indexOf(candidate))?.let { stringResource(it) } ?: candidate },
-        selectedIndex = visibleValues.indexOf(value).coerceAtLeast(0), enabled = enabled,
-        onSelectedIndexChange = { if (it < selectableCount) change(visibleValues[it]) }
+        options = visibleValues.map { candidate -> labels.getOrNull(values.indexOf(candidate))?.let { stringResource(it) } ?: candidate },
+        selected = visibleValues.indexOf(value).coerceAtLeast(0), enabled = enabled,
+        onSelect = { if (it < selectableCount) change(visibleValues[it]) }
     )
 }
 

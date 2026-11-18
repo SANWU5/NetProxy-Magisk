@@ -6,17 +6,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
@@ -32,48 +25,35 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fanjv.netproxy.R
 import com.fanjv.netproxy.core.di.netProxyViewModel
-import com.fanjv.netproxy.core.ui.component.AdaptiveTopAppBar
-import com.fanjv.netproxy.core.ui.component.BackIconButton
-import com.fanjv.netproxy.core.ui.component.BlurredBar
-import com.fanjv.netproxy.core.ui.component.CardItem
-import com.fanjv.netproxy.core.ui.component.ContentStatus
-import com.fanjv.netproxy.core.ui.component.groupedCardSection
-import com.fanjv.netproxy.core.ui.component.rememberBlurBackdrop
 import com.fanjv.netproxy.feature.routing.model.LocalRuleSet
 import com.fanjv.netproxy.feature.routing.model.RuleField
 import com.fanjv.netproxy.feature.routing.model.RuleInputError
 import com.fanjv.netproxy.feature.routing.model.simpleRule
 import com.fanjv.netproxy.navigation.LocalNavigator
 import com.fanjv.netproxy.navigation.Route
+import dev.aiingjie.coui.Coui
+import dev.aiingjie.coui.CouiActionRow
+import dev.aiingjie.coui.CouiGroup
+import dev.aiingjie.coui.CouiJumpRow
+import dev.aiingjie.coui.CouiLoading
+import dev.aiingjie.coui.CouiRow
+import dev.aiingjie.coui.CouiSubPage
+import dev.aiingjie.coui.couiCardItems
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
-import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 @Composable
 internal fun RoutingRulesScreen(
@@ -83,99 +63,47 @@ internal fun RoutingRulesScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val rules = remember(state.files) { state.rules }
     val navigator = LocalNavigator.current
-    val scrollBehavior = MiuixScrollBehavior()
-    val backdrop = rememberBlurBackdrop()
-    val barColor = if (backdrop != null) Color.Transparent else MiuixTheme.colorScheme.surface
     val rawEdit: (LocalRuleSet) -> Unit = { target -> viewModel.dismiss(); navigator.push(Route.JsonEdit(target.target)) }
+    val reload: () -> Unit = { viewModel.refresh(discardDraft = true) }
     LifecycleResumeEffect(Unit) {
         viewModel.refresh()
         onPauseOrDispose { }
     }
     BackHandler(state.isSaving) { }
+    val matchesTitle = stringResource(R.string.routing_matches)
 
-    Scaffold(
-        topBar = {
-            BlurredBar(backdrop) {
-                AdaptiveTopAppBar(
-                    title = stringResource(R.string.routing_rules),
-                    color = barColor,
-                    navigationIcon = { BackIconButton { if (!state.isSaving) onBack() } },
-                    scrollBehavior = scrollBehavior,
-                    actions = {
-                        IconButton(onClick = viewModel::add, enabled = state.canAdd) {
-                            Icon(MiuixIcons.Add, stringResource(R.string.routing_add), tint = MiuixTheme.colorScheme.onSurface)
-                        }
-                    },
-                )
-            }
-        },
-    ) { padding ->
-        val layoutDirection = LocalLayoutDirection.current
+    CouiSubPage(title = stringResource(R.string.routing_rules), onBack = { if (!state.isSaving) onBack() }) {
         if (!state.hasDocuments && (state.isLoading || state.files.values.none { it.requiresReload })) {
-            ContentStatus(padding, stringResource(R.string.routing_read_failed), loading = true)
-        } else if (!state.hasDocuments) {
-            Box(
-                Modifier.fillMaxSize()
-                    .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
-                    .padding(padding).padding(horizontal = 26.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ContentStatus(PaddingValues(0.dp), stringResource(R.string.routing_read_failed), modifier = Modifier.heightIn(min = 64.dp))
-                    LocalRuleSet.entries.forEach { target ->
-                        RuleFileError(target, state, reload = { viewModel.refresh(discardDraft = true) }, rawEdit = rawEdit)
-                    }
-                }
+            item {
+                CouiGroup(first = true) { CouiRow(stringResource(R.string.loading), leading = { CouiLoading() }) }
             }
-        } else if (state.isEmpty) {
-            Column(
-                Modifier.fillMaxSize()
-                    .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
-                    .padding(padding).padding(horizontal = 26.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
-            ) {
-                Text(stringResource(R.string.routing_empty), style = MiuixTheme.textStyles.body1,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary, textAlign = TextAlign.Center)
-                Text(stringResource(R.string.routing_empty_hint), style = MiuixTheme.textStyles.footnote1,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary, textAlign = TextAlign.Center)
+            return@CouiSubPage
+        }
+        val errors = LocalRuleSet.entries.filter { !state.hasDocuments || state.showPageError(it) }
+        errors.forEachIndexed { index, target ->
+            item("error:${target.tag}") { RuleFileError(target, state, reload, rawEdit, first = index == 0) }
+        }
+        if (!state.hasDocuments) return@CouiSubPage
+        if (state.isEmpty) item("empty") {
+            CouiGroup(first = errors.isEmpty()) {
+                CouiRow(stringResource(R.string.routing_empty), summary = stringResource(R.string.routing_empty_hint))
             }
-        } else LazyColumn(
-            modifier = Modifier.fillMaxSize()
-                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
-                .scrollEndHaptic().overScrollVertical().nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(
-                top = padding.calculateTopPadding() + 6.dp,
-                start = padding.calculateStartPadding(layoutDirection) + 12.dp,
-                end = padding.calculateEndPadding(layoutDirection) + 12.dp,
-                bottom = padding.calculateBottomPadding(),
-            ),
-            overscrollEffect = null,
-        ) {
-            LocalRuleSet.entries.forEach { target ->
-                if (state.showPageError(target)) item("error:${target.tag}") {
-                    RuleFileError(target, state, reload = { viewModel.refresh(discardDraft = true) }, rawEdit = rawEdit)
-                }
-            }
-            if (rules.isNotEmpty()) groupedCardSection(
-                "routing_rules",
-                { stringResource(R.string.routing_matches) },
-                rules.map { identity -> CardItem("${identity.target.tag}:${identity.index}") {
-                    val rule = state.files.getValue(identity.target).document!!.rules[identity.index]
-                    val simple = remember(rule) { rule.simpleRule() }
-                    ArrowPreference(
-                        title = simple?.values?.first()?.take(100) ?: stringResource(R.string.routing_advanced),
-                        summary = stringResource(identity.target.title()) + " · " + (simple?.let {
-                            stringResource(it.field.title()) + if (it.values.size > 1) " · " + stringResource(R.string.routing_values_count, it.values.size) else ""
-                        } ?: stringResource(R.string.routing_advanced_hint)),
-                        onClick = { viewModel.edit(identity) },
-                        enabled = state.editable(identity.target),
-                        holdDownState = state.draft?.let { it.target == identity.target && it.index == identity.index } == true,
-                    )
-                } },
-                titleTopPadding = 8.dp,
+        } else couiCardItems(rules, key = { "${it.target.tag}:${it.index}" }, title = matchesTitle, first = errors.isEmpty()) { identity ->
+            val rule = state.files.getValue(identity.target).document!!.rules[identity.index]
+            val simple = remember(rule) { rule.simpleRule() }
+            CouiJumpRow(
+                title = simple?.values?.first()?.take(100) ?: stringResource(R.string.routing_advanced),
+                onClick = { viewModel.edit(identity) },
+                summary = stringResource(identity.target.title()) + " · " + (simple?.let {
+                    stringResource(it.field.title()) + if (it.values.size > 1) " · " + stringResource(R.string.routing_values_count, it.values.size) else ""
+                } ?: stringResource(R.string.routing_advanced_hint)),
+                enabled = state.editable(identity.target),
             )
-            item("bottom") { Spacer(Modifier.height(24.dp).navigationBarsPadding()) }
+        }
+        item("add") {
+            CouiGroup {
+                CouiActionRow(stringResource(R.string.routing_add), viewModel::add, enabled = state.canAdd)
+            }
         }
     }
 
@@ -254,26 +182,34 @@ internal fun RoutingRulesScreen(
 }
 
 @Composable
-private fun RuleFileError(target: LocalRuleSet, state: RoutingRulesState, reload: () -> Unit, rawEdit: (LocalRuleSet) -> Unit) {
+private fun RuleFileError(
+    target: LocalRuleSet, state: RoutingRulesState, reload: () -> Unit, rawEdit: (LocalRuleSet) -> Unit, first: Boolean,
+) {
     val file = state.files.getValue(target)
-    Column(Modifier.padding(vertical = 8.dp)) {
-        Text(stringResource(target.title()), style = MiuixTheme.textStyles.body1)
-        RuleError(file, state, reload)
-        if (file.invalidDocument) TextButton(stringResource(R.string.routing_raw), { rawEdit(target) },
-            Modifier.fillMaxWidth(), enabled = !state.isLoading && !state.isSaving)
+    val idle = !state.isLoading && !state.isSaving
+    CouiGroup(title = stringResource(target.title()), first = first) {
+        CouiRow(file.errorText(), titleColor = Coui.colors.error)
+        if (file.requiresReload) CouiActionRow(stringResource(
+            if (state.draft != null || state.deleting != null) R.string.routing_reload_draft else R.string.inbound_reload),
+            reload, enabled = idle)
+        if (file.invalidDocument) CouiActionRow(stringResource(R.string.routing_raw), { rawEdit(target) }, enabled = idle)
     }
+}
+
+@Composable
+private fun RuleFileState.errorText(): String {
+    val message = when {
+        invalidDocument -> stringResource(R.string.routing_invalid_document)
+        error.isNotEmpty() -> error
+        else -> stringResource(R.string.routing_read_failed)
+    }
+    return listOf(message, error).filter(String::isNotBlank).distinct().joinToString("\n")
 }
 
 @Composable
 private fun RuleError(file: RuleFileState, state: RoutingRulesState, reload: () -> Unit) {
     Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        val message = when {
-            file.invalidDocument -> stringResource(R.string.routing_invalid_document)
-            file.error.isNotEmpty() -> file.error
-            else -> stringResource(R.string.routing_read_failed)
-        }
-        Text(listOf(message, file.error).filter(String::isNotBlank).distinct().joinToString("\n"),
-            style = MiuixTheme.textStyles.body2, color = MiuixTheme.colorScheme.error)
+        Text(file.errorText(), style = MiuixTheme.textStyles.body2, color = MiuixTheme.colorScheme.error)
         if (file.requiresReload) TextButton(stringResource(if (state.draft != null || state.deleting != null) R.string.routing_reload_draft else R.string.inbound_reload),
             reload, Modifier.fillMaxWidth(), enabled = !state.isLoading && !state.isSaving)
     }

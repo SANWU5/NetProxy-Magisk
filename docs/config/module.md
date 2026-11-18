@@ -6,13 +6,14 @@
 /data/adb/modules/netproxy/config/module.json
 ```
 
-它保存模块级启动、节点选择和 Wi-Fi 自动策略。推荐通过 Android 管理器或配置命令修改。默认出站模式位于 [sing-box 主配置](./singbox#出站模式)。
+它保存模块级启动、日志记录、节点选择和 Wi-Fi 自动策略。推荐通过 Android 管理器或配置命令修改。默认出站模式位于 [sing-box 主配置](./singbox#出站模式)。
 
 默认内容：
 
 ```json
 {
   "auto_start": false,
+  "logging": false,
   "selection": {
     "group_id": "default",
     "node_tag": ""
@@ -32,6 +33,12 @@
 ### `auto_start`
 
 开机是否自动启动服务：`true` 启用，`false` 禁用。默认值为 `false`。只影响下次开机，单独保存不会启动、停止或重载当前服务。
+
+### `logging`
+
+是否记录核心日志：`true` 时核心按[主配置的日志级别](./singbox)写入 `logs/sing-box.log`，默认 `info` 会逐条记录连接；`false` 时关闭核心日志，只保留启动失败这类致命错误。默认值为 `false`。模块自身的操作与错误仍写入 `logs/service.log`，不受这个开关影响。
+
+服务运行时修改会重新生成运行时配置并重载核心，立即生效。关闭时模块额外生成 `runtime/log.json`（`{"log":{"disabled":true}}`）传给核心。
 
 ### 节点选择
 
@@ -55,9 +62,9 @@ Wi-Fi 自动策略只改变运行时实际模式和 DNS 接管参数，不覆盖
 
 ## 修改与检查
 
-`config read/apply/validate module` 读取或替换整份 JSON。只修改 Wi-Fi 或开机自启时，使用 `module/wifi` 或 `module/auto_start`，候选内容分别为 `{"wifi": {...}}` 与 `{"auto_start": true}`。分区必需，不能用 `{}` 删除或携带其他顶层字段；没有 `module/selection` 目标，选节点使用 `node use`。
+`config read/apply/validate module` 读取或替换整份 JSON。只修改 Wi-Fi、开机自启或日志记录时，使用 `module/wifi`、`module/auto_start` 或 `module/logging`，候选内容分别为 `{"wifi": {...}}`、`{"auto_start": true}` 与 `{"logging": true}`。分区必需，不能用 `{}` 删除或携带其他顶层字段；没有 `module/selection` 目标，选节点使用 `node use`。
 
-`config read` 返回 `content` 和 `revision`。两个模块分区各自使用独立 revision；保存时在同一个 `module.json.lock` 内合并最新文件，保留 `selection` 和其他字段，不会用旧快照覆盖并发节点选择。同分区冲突返回 `config.conflict`，需要重新读取，不能借用新 revision 重试旧草稿。
+`config read` 返回 `content` 和 `revision`。每个模块分区各自使用独立 revision；保存时在同一个 `module.json.lock` 内合并最新文件，保留 `selection` 和其他字段，不会用旧快照覆盖并发节点选择。同分区冲突返回 `config.conflict`，需要重新读取，不能借用新 revision 重试旧草稿。
 
 ```sh
 su -c '/data/adb/modules/netproxy/netproxyctl config read module'

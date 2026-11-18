@@ -1,5 +1,6 @@
 {
   "auto_start": false,
+  "logging": false,
   "selection": {
     "group_id": "default",
     "node_tag": ""

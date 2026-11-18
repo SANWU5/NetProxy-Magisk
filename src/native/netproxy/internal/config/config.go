@@ -20,6 +20,9 @@ import (
 
 type ModuleConfig struct {
 	AutoStart bool `json:"auto_start"`
+	// Logging 为 true 时核心按主配置的日志级别写入 logs/sing-box.log（默认 info 会逐条记录连接）；
+	// 为 false 时关闭核心日志，只保留启动失败这类致命错误。模块自身的操作与错误记录不受影响。
+	Logging   bool `json:"logging"`
 	Selection `json:"selection"`
 	WiFi      WiFiPolicy  `json:"wifi"`
 	Chain     ChainConfig `json:"chain"`

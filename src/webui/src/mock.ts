@@ -28,6 +28,7 @@ let runtimePrepared = false
 
 const MODULE_CONFIG = {
   auto_start: false,
+  logging: false,
   selection: { group_id: 'default', node_tag: '' },
   wifi: { enabled: false, mode: 'blacklist', blacklist: [] as string[], whitelist: [] as string[], proxy_on_non_wifi: true },
 }
@@ -66,7 +67,7 @@ const STATIC_CONFIG: Record<string, unknown> = {
 
 const MODULE_DOCUMENTS = [
   { id: 'module', filename: 'module.json', category: 'module', editable: true },
-  ...['wifi', 'auto_start'].map(section => ({
+  ...['wifi', 'auto_start', 'logging'].map(section => ({
     id: `module/${section}`, filename: section, category: 'module', editable: true, section,
   })),
 ]

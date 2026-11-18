@@ -509,11 +509,15 @@ func newSingBoxCommand(options Options, prepared PrepareResult) (*exec.Cmd, *os.
 	if err != nil {
 		return nil, nil, err
 	}
+	configArgs, err := preparedConfigArgs(options, prepared)
+	if err != nil {
+		return nil, nil, err
+	}
 	logFile, err := logfile.OpenForProcess(logPath)
 	if err != nil {
 		return nil, nil, err
 	}
-	args := append([]string{"run", "--disable-color"}, preparedConfigArgs(options, prepared)...)
+	args := append([]string{"run", "--disable-color"}, configArgs...)
 	command := exec.Command(options.SingBoxPath, args...)
 	command.Dir = options.SingBoxDir
 	command.Stdout = logFile
@@ -522,18 +526,43 @@ func newSingBoxCommand(options Options, prepared PrepareResult) (*exec.Cmd, *os.
 	return command, logFile, nil
 }
 
-// preparedConfigArgs 返回传给 sing-box 的配置文件参数。策略路由片段必须排在主配置之前，
-// sing-box 按 -c 顺序拼接 route.rules，片段放在后面会被主配置的兜底规则抢先命中。
-func preparedConfigArgs(options Options, prepared PrepareResult) []string {
+// preparedConfigArgs 返回传给 sing-box 的配置文件参数。
+// sing-box 合并多个配置前按路径字符串排序（与 -c 顺序无关）：数组按排序依次拼接，标量以先出现的文件为准。
+// 日志覆盖与策略路由必须先于主配置：前者覆盖主配置的日志设置，后者让按应用策略排在主配置的兜底规则之前。
+// 它们以相对核心工作目录（主配置目录）、以 "." 开头的路径传入；"." 排在绝对路径开头的 "/" 之前。
+func preparedConfigArgs(options Options, prepared PrepareResult) ([]string, error) {
 	var args []string
-	if prepared.Route != "" {
-		args = append(args, "-c", prepared.Route)
+	for _, path := range []string{prepared.Log, prepared.Route} {
+		if path == "" {
+			continue
+		}
+		leading, err := leadingConfigPath(options.SingBoxDir, path)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, "-c", leading)
 	}
-	return append(args, "-c", paths.SingBoxConfig(options.SingBoxDir), "-c", prepared.Providers, "-c", prepared.Outbounds, "-c", prepared.Inbound)
+	return append(args, "-c", paths.SingBoxConfig(options.SingBoxDir), "-c", prepared.Providers, "-c", prepared.Outbounds, "-c", prepared.Inbound), nil
+}
+
+// leadingConfigPath 把 path 改写为相对 dir、以 "." 开头的路径。
+func leadingConfigPath(dir, path string) (string, error) {
+	relative, err := filepath.Rel(dir, path)
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(relative, ".") {
+		relative = "." + string(filepath.Separator) + relative
+	}
+	return relative, nil
 }
 
 func checkPreparedConfiguration(ctx context.Context, options Options, prepared PrepareResult) error {
-	args := append([]string{"check", "--disable-color"}, preparedConfigArgs(options, prepared)...)
+	configArgs, err := preparedConfigArgs(options, prepared)
+	if err != nil {
+		return err
+	}
+	args := append([]string{"check", "--disable-color"}, configArgs...)
 	command := exec.CommandContext(ctx, options.SingBoxPath, args...)
 	command.Dir = options.SingBoxDir
 	command.Stdout = os.Stderr

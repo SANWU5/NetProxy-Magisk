@@ -77,7 +77,7 @@ assert.deepEqual(documents.filter(item => item.category === 'inbound').map(item 
 assert.equal(new Set(documents.map(item => item.id)).size, documents.length);
 const modulePath = join(moduleDir, 'config', 'module.json');
 const moduleConfig = JSON.parse(readFileSync(modulePath, 'utf8'));
-const moduleTargets = ['module', 'module/wifi', 'module/auto_start'];
+const moduleTargets = ['module', 'module/wifi', 'module/auto_start', 'module/logging'];
 for (const target of moduleTargets) {
   const read = success('config', 'read', target);
   assert.equal(read.target, target);

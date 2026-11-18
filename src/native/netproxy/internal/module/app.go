@@ -83,12 +83,14 @@ func NewOptions(moduleDir string) Options {
 // PrepareResult 描述一次运行时准备结果。
 type PrepareResult struct {
 	catalog.RuntimeResult
-	Providers string             `json:"providers"`
-	Outbounds string             `json:"outbounds"`
-	Inbound   string             `json:"inbound"`
-	Route     string             `json:"route,omitempty"`
-	Backend   string             `json:"backend"`
-	Network   *NetworkEvaluation `json:"-"`
+	Providers string `json:"providers"`
+	Outbounds string `json:"outbounds"`
+	Inbound   string `json:"inbound"`
+	Route     string `json:"route,omitempty"`
+	// Log 是关闭「记录日志」时覆盖主配置日志设置的片段；记录日志时为空。
+	Log     string             `json:"log,omitempty"`
+	Backend string             `json:"backend"`
+	Network *NetworkEvaluation `json:"-"`
 }
 
 // AppPolicy 描述分应用代理的持久设置。
@@ -170,8 +172,7 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 	if err != nil {
 		return PrepareResult{}, err
 	}
-	// 策略路由作为第一个 -c 传入：sing-box 按传入顺序拼接 route.rules，
-	// 片段必须排在主配置规则之前才能先于兜底规则命中。
+	// 策略路由必须排在主配置规则之前才能先于兜底规则命中，排序方式见 preparedConfigArgs。
 	routePath := filepath.Join(options.RuntimeDir, "route.json")
 	if chainRuntime != nil && chainRuntime.Route != nil {
 		if err := provider.WriteAtomic(routePath, chainRuntime.Route, 0o600); err != nil {
@@ -181,6 +182,10 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 		return PrepareResult{}, err
 	} else {
 		routePath = ""
+	}
+	logPath, err := prepareLogOverride(options)
+	if err != nil {
+		return PrepareResult{}, err
 	}
 	network, err := configuredNetwork(ctx, options)
 	if err != nil {
@@ -202,7 +207,26 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 	for _, ref := range missingPackages {
 		logService(options, "WARN", "inbound.package", "skipped", "分应用代理跳过未安装应用: %s", ref.String())
 	}
-	return PrepareResult{RuntimeResult: runtime, Providers: providers, Outbounds: outbounds, Inbound: inboundPath, Route: routePath, Backend: config.Backend, Network: &network}, nil
+	return PrepareResult{RuntimeResult: runtime, Providers: providers, Outbounds: outbounds, Inbound: inboundPath, Route: routePath, Log: logPath, Backend: config.Backend, Network: &network}, nil
+}
+
+// logOverride 关闭核心日志；启动失败这类致命错误由 sing-box 命令行直接写到标准错误，仍会记录。
+const logOverride = "{\"log\":{\"disabled\":true}}\n"
+
+// prepareLogOverride 按「记录日志」开关写入或删除日志覆盖片段，返回需要传给核心的片段路径。
+func prepareLogOverride(options Options) (string, error) {
+	module, err := moduleconfig.LoadModule(options.ModuleConfig)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(options.RuntimeDir, "log.json")
+	if module.Logging {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		return "", nil
+	}
+	return path, provider.WriteAtomic(path, []byte(logOverride), 0o600)
 }
 
 func (options Options) chainDir() string {

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -56,6 +57,73 @@ func selectionFixture(t *testing.T) Options {
 		}
 	}
 	return options
+}
+
+// assertLeadingFragments 按 sing-box 的方式（路径字符串排序）排列配置，确认 fragments 排在主配置之前，
+// 并且从核心工作目录（主配置目录）能找到它们。
+func assertLeadingFragments(t *testing.T, options Options, prepared PrepareResult, fragments ...string) {
+	t.Helper()
+	configArgs, err := preparedConfigArgs(options, prepared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var configs []string
+	for index := 1; index < len(configArgs); index += 2 {
+		configs = append(configs, configArgs[index])
+	}
+	sorted := slices.Sorted(slices.Values(configs))
+	main := slices.Index(sorted, filepath.Join(options.SingBoxDir, "config.json"))
+	for _, fragment := range fragments {
+		leading, err := leadingConfigPath(options.SingBoxDir, fragment)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if index := slices.Index(sorted, leading); index < 0 || index > main {
+			t.Fatalf("%s 必须排在主配置之前: %v", fragment, sorted)
+		}
+		if _, err := os.Stat(filepath.Join(options.SingBoxDir, leading)); err != nil {
+			t.Fatalf("从核心工作目录找不到 %s: %v", leading, err)
+		}
+	}
+}
+
+func TestPrepareLogOverrideFollowsLoggingSwitch(t *testing.T) {
+	options := selectionFixture(t)
+	if err := os.MkdirAll(options.SingBoxDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(options.SingBoxDir, "config.json"), []byte(`{"log":{"level":"info"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(options.InboundConfig), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(options.InboundConfig, []byte(testInboundConfig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// 默认不记录：日志覆盖片段关闭核心日志，并排在主配置之前，使它的设置优先。
+	prepared, err := Prepare(t.Context(), options, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(prepared.Log)
+	if err != nil || string(content) != logOverride {
+		t.Fatalf("关闭记录日志时必须生成日志覆盖: %q %v", content, err)
+	}
+	assertLeadingFragments(t, options, prepared, prepared.Log)
+	if err := os.WriteFile(options.ModuleConfig, []byte(`{"logging":true,"selection":{"group_id":"default","node_tag":""}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err = Prepare(t.Context(), options, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.Log != "" {
+		t.Fatalf("记录日志时不应覆盖主配置的日志设置: %s", prepared.Log)
+	}
+	if _, err := os.Stat(filepath.Join(options.RuntimeDir, "log.json")); !os.IsNotExist(err) {
+		t.Fatalf("旧日志覆盖未清理: %v", err)
+	}
 }
 
 func TestSelectNodeStoppedKeepsTwoFieldStateAndPublicResult(t *testing.T) {
@@ -132,9 +200,7 @@ func TestPrepareWritesChainRuntime(t *testing.T) {
 	if err != nil || !strings.Contains(string(outbounds), `"detour": "链式前置"`) || !strings.Contains(string(outbounds), `"default": "链式代理"`) {
 		t.Fatalf("链式出站未生成: %s %v", outbounds, err)
 	}
-	if args := strings.Join(preparedConfigArgs(options, prepared), " "); !strings.HasPrefix(args, "-c "+prepared.Route+" -c ") {
-		t.Fatalf("策略路由必须排在主配置之前: %s", args)
-	}
+	assertLeadingFragments(t, options, prepared, prepared.Log, prepared.Route)
 	if _, _, _, err := chain.Update(t.Context(), options.chainDir(), func(state *chain.State) error {
 		state.Mode = chain.ModeManual
 		return nil
@@ -208,6 +274,27 @@ func TestLoadSelectionTargetsUsesSmartGroupsAndFixedFront(t *testing.T) {
 	if err != nil || targets.main != "Smart/游戏" || targets.proxy != "Smart/游戏" || targets.front != "Smart/游戏" || targets.fallback != "Auto/本地配置" {
 		t.Fatalf("智能分组没有成为主选择: %+v %v", targets, err)
 	}
+	if len(targets.smart) != 1 || targets.smart[0].group != "Smart/游戏" || !slices.Equal(targets.smart[0].candidates, []string{"SmartAuto/游戏"}) {
+		t.Fatalf("从未在分组内手动选择时必须使用分组的自动选择: %+v", targets.smart)
+	}
+	for _, test := range []struct {
+		manual *smartgroup.NodeRef
+		want   []string
+	}{
+		{&smartgroup.NodeRef{GroupID: "default", Node: "NODE"}, []string{"本地配置/NODE", "SmartAuto/游戏"}},
+		{nil, []string{"SmartAuto/游戏"}},
+	} {
+		if _, _, err := smartgroup.Update(t.Context(), options.smartDir(), func(document *smartgroup.Document) error {
+			document.Groups[document.Find("custom-game")].Manual = test.manual
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		targets, err := loadSelectionTargets(t.Context(), options, smart, "Auto/本地配置")
+		if err != nil || len(targets.smart) != 1 || !slices.Equal(targets.smart[0].candidates, test.want) {
+			t.Fatalf("分组内选择 %+v 的候选错误: %+v %v", test.manual, targets.smart, err)
+		}
+	}
 	for _, test := range []struct {
 		front chain.Front
 		want  string
@@ -228,6 +315,10 @@ func TestLoadSelectionTargetsUsesSmartGroupsAndFixedFront(t *testing.T) {
 		targets, err := loadSelectionTargets(t.Context(), options, moduleconfig.Selection{ActiveGroupID: "default"}, "Select/本地配置")
 		if err != nil || targets.front != test.want || targets.proxy != "Select/本地配置" {
 			t.Fatalf("前置 %+v 的目标错误: %+v %v", test.front, targets, err)
+		}
+		// 前置使用智能分组时，同样先设置分组内部的选择。
+		if (test.front.SmartID != "") != (len(targets.smart) == 1 && targets.smart[0].group == "Smart/游戏") {
+			t.Fatalf("前置 %+v 的分组内部选择错误: %+v", test.front, targets.smart)
 		}
 	}
 }

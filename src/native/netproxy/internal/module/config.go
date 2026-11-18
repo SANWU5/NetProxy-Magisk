@@ -51,7 +51,7 @@ var configSections = []string{
 }
 
 func configSection(target string) string {
-	if section, found := strings.CutPrefix(target, "module/"); found && (section == "wifi" || section == "auto_start") {
+	if section, found := strings.CutPrefix(target, "module/"); found && (section == "wifi" || section == "auto_start" || section == "logging") {
 		return section
 	}
 	if section, found := strings.CutPrefix(target, "inbound/"); found && (section == "backend" || section == "root_policy" || section == "app" || section == "ebpf" || section == "tun") {
@@ -346,6 +346,8 @@ func applyConfigLocked(ctx context.Context, options Options, target, destination
 	}
 	applyRuntime := true
 	selectionChanged := false
+	// reloadCore 表示修改需要重新生成运行时配置并重载核心：节点选择变化，或日志开关变化。
+	reloadCore := false
 	switchBackend := false
 	transactionOptions := options
 	var repairedBackend string
@@ -353,7 +355,8 @@ func applyConfigLocked(ctx context.Context, options Options, target, destination
 		previous, previousErr := moduleconfig.LoadModule(destination)
 		if previousErr == nil {
 			selectionChanged = previous.Selection != moduleConfig.Selection
-			applyRuntime = selectionChanged || !previous.WiFi.Equal(moduleConfig.WiFi)
+			reloadCore = selectionChanged || previous.Logging != moduleConfig.Logging
+			applyRuntime = reloadCore || !previous.WiFi.Equal(moduleConfig.WiFi)
 		}
 	}
 	if inboundTarget {
@@ -457,7 +460,7 @@ func applyConfigLocked(ctx context.Context, options Options, target, destination
 	}
 	var applyErr error
 	if moduleTarget {
-		if !selectionChanged {
+		if !reloadCore {
 			previousMode, modeErr := service.ReadRuntimeMode(ctx, networkControlOptions(options))
 			if modeErr != nil {
 				return "", rollbackConfigApply(options, transaction, modeErr)
@@ -734,7 +737,7 @@ func copyDirectory(source, destination string) error {
 // ResolveConfig 将客户端配置 ID 安全解析为模块内文件。
 func ResolveConfig(options Options, target string) (string, error) {
 	switch target {
-	case "module", "module/wifi", "module/auto_start":
+	case "module", "module/wifi", "module/auto_start", "module/logging":
 		return options.ModuleConfig, nil
 	case "inbound", "inbound/backend", "inbound/root_policy", "inbound/app", "inbound/ebpf", "inbound/tun":
 		return options.InboundConfig, nil

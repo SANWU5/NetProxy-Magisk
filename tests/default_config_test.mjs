@@ -15,6 +15,7 @@ test('模块设置只有 module.json 默认文件，字段使用 JSON 原生类�
   assert.equal(existsSync(new URL('src/module/config/module.conf', root)), false)
   assert.deepEqual(readJSON('src/module/config/module.json'), {
     auto_start: false,
+    logging: false,
     selection: { group_id: 'default', node_tag: '' },
     wifi: { enabled: false, mode: 'blacklist', blacklist: [], whitelist: [], proxy_on_non_wifi: true },
   })

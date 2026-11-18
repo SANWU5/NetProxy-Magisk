@@ -6,6 +6,7 @@
     <string name="nodes_read_failed">无法读取节点</string>
     <string name="subscriptions_read_failed">无法读取订阅</string>
     <string name="apps_read_failed">无法读取分应用代理配置</string>
+    <string name="apps_refresh">刷新应用列表</string>
 
     <!-- 通用 -->
     <string name="app_name">NetProxy</string>
@@ -256,10 +257,6 @@
     <string name="settings_enable_predictive_back_summary">启用 Android 14 及以上的预测性返回动画</string>
     <string name="settings_page_scale">界面缩放</string>
     <string name="settings_page_scale_summary">调整整个应用的界面缩放比例</string>
-    <string name="refresh_pulling">下拉可以刷新</string>
-    <string name="refresh_release">释放开始刷新</string>
-    <string name="refresh_refresh">正在刷新</string>
-    <string name="refresh_complete">刷新完成</string>
 
     <!-- Kernel Settings -->
     <string name="kernel_settings">内核配置</string>
@@ -677,7 +674,7 @@
     <string name="chain_policy_needs_landing">请先导入后置代理</string>
     <string name="chain_policy_delete">删除策略</string>
     <string name="chain_policy_delete_message">删除策略“%1$s”？</string>
-    <string name="chain_policy_search">搜索应用</string>
+    <string name="app_search">搜索应用</string>
     <string name="chain_policy_name_hint">例如：海外应用</string>
     <string name="chain_policy_enabled">启用</string>
     <string name="chain_policy_landing">后置代理</string>

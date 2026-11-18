@@ -116,7 +116,7 @@ internal fun ChainPolicyScreen(
         title = stringResource(if (existing == null) R.string.chain_policy_new else R.string.chain_policy_edit),
         onBack = onBack,
         listState = listState,
-        header = { CouiSearchField(query, { query = it }, stringResource(R.string.chain_policy_search)) },
+        header = { CouiSearchField(query, { query = it }, stringResource(R.string.app_search)) },
     ) {
         item {
             CouiGroup(first = true) {

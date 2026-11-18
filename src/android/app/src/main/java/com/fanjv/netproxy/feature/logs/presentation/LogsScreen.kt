@@ -1,5 +1,8 @@
 package com.fanjv.netproxy.feature.logs.presentation
 
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.layout
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
@@ -56,7 +59,6 @@ import com.fanjv.netproxy.core.ui.component.BackIconButton
 import com.fanjv.netproxy.core.ui.component.ContentStatus
 import com.fanjv.netproxy.core.ui.component.BlurredBar
 import com.fanjv.netproxy.core.ui.component.CardItem
-import com.fanjv.netproxy.core.ui.component.deferredTopPadding
 import com.fanjv.netproxy.core.ui.component.groupedCardItems
 import com.fanjv.netproxy.core.ui.component.rememberAppSnackbarHostState
 import com.fanjv.netproxy.core.ui.component.rememberBlurBackdrop
@@ -768,3 +770,22 @@ private fun LazyListScope.rawLogItems(logs: List<LogItem>) {
         }
     )
 }
+
+private fun Modifier.deferredTopPadding(top: () -> Dp): Modifier =
+    layout { measurable, constraints ->
+        val topPx = top().roundToPx().coerceAtLeast(0)
+        val placeable = measurable.measure(
+            constraints.copy(
+                minHeight = (constraints.minHeight - topPx).coerceAtLeast(0),
+                maxHeight = if (constraints.maxHeight == Constraints.Infinity) Constraints.Infinity else (constraints.maxHeight - topPx).coerceAtLeast(
+                    0
+                )
+            )
+        )
+        val width = placeable.width.coerceIn(constraints.minWidth, constraints.maxWidth)
+        val height =
+            (placeable.height + topPx).coerceIn(constraints.minHeight, constraints.maxHeight)
+        layout(width, height) {
+            placeable.place(0, topPx)
+        }
+    }

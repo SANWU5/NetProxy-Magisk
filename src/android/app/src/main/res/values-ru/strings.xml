@@ -6,6 +6,7 @@
     <string name="nodes_read_failed">Не удалось прочитать узлы</string>
     <string name="subscriptions_read_failed">Не удалось прочитать подписки</string>
     <string name="apps_read_failed">Не удалось прочитать настройки прокси для приложений</string>
+    <string name="apps_refresh">Обновить список приложений</string>
     <string name="app_name">NetProxy</string>
     <string name="settings">Настройки</string>
     <string name="about">О приложении</string>
@@ -234,10 +235,6 @@
     <string name="settings_enable_predictive_back_summary">Анимация предиктивного возврата в Android 14 и новее</string>
     <string name="settings_page_scale">Масштаб интерфейса</string>
     <string name="settings_page_scale_summary">Изменить масштаб всего интерфейса</string>
-    <string name="refresh_pulling">Потяните для обновления</string>
-    <string name="refresh_release">Отпустите для обновления</string>
-    <string name="refresh_refresh">Обновление</string>
-    <string name="refresh_complete">Обновление завершено</string>
     <string name="kernel_settings">Конфигурация ядра</string>
     <string name="kernel_settings_summary">Редактирование и проверка конфигурации sing-box</string>
     <string name="singbox_main_config">Основная конфигурация</string>
@@ -647,7 +644,7 @@
     <string name="chain_policy_needs_landing">Сначала импортируйте выходной прокси</string>
     <string name="chain_policy_delete">Удалить правило</string>
     <string name="chain_policy_delete_message">Удалить правило «%1$s»?</string>
-    <string name="chain_policy_search">Поиск приложений</string>
+    <string name="app_search">Поиск приложений</string>
     <string name="chain_policy_name_hint">Например: зарубежные приложения</string>
     <string name="chain_policy_enabled">Включено</string>
     <string name="chain_policy_landing">Выходной прокси</string>

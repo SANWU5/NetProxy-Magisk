@@ -1,38 +1,23 @@
 package com.fanjv.netproxy.core.ui.component
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.fanjv.netproxy.core.ui.theme.LocalEnableBlur
-import com.fanjv.netproxy.core.ui.theme.isInDarkTheme
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurColors
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
@@ -41,10 +26,7 @@ import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.shader.isRenderEffectSupported
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
-import top.yukonga.miuix.kmp.theme.MiuixTheme.isDynamicColor
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 /**
  * 跨屏幕复用的通用小组件：返回按钮、模糊栏容器、状态标签、警告卡片。
@@ -132,74 +114,5 @@ fun BlurredBar(
         }
     ) {
         content()
-    }
-}
-
-/** 小号状态标签（带背景色的圆角文字）。 */
-@Composable
-fun StatusTag(
-    label: String,
-    modifier: Modifier = Modifier,
-    backgroundColor: Color,
-    contentColor: Color
-) {
-    Box(
-        modifier = modifier
-            .background(
-                color = backgroundColor,
-                shape = RoundedCornerShape(6.dp)
-            )
-    ) {
-        Text(
-            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-            text = label,
-            color = contentColor,
-            style = MiuixTheme.textStyles.footnote2.copy(
-                fontSize = 9.sp,
-                fontWeight = FontWeight(750)
-            ),
-            maxLines = 1,
-            softWrap = false
-        )
-    }
-}
-
-/** 警告卡片：可选点击与右侧操作区。 */
-@Composable
-fun WarningCard(
-    message: String,
-    modifier: Modifier = Modifier,
-    color: Color? = null,
-    onClick: (() -> Unit)? = null,
-    action: (@Composable () -> Unit)? = null,
-) {
-    Card(
-        modifier = modifier,
-        onClick = { onClick?.invoke() },
-        colors = CardDefaults.defaultColors(
-            color = color ?: when {
-                isDynamicColor -> colorScheme.errorContainer
-                isInDarkTheme() -> Color(0XFF310808)
-                else -> Color(0xFFF8E2E2)
-            }
-        ),
-        showIndication = onClick != null,
-        pressFeedbackType = PressFeedbackType.Tilt
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = message,
-                color = if (isDynamicColor) colorScheme.onErrorContainer else Color(0xFFF72727),
-                style = MiuixTheme.textStyles.body2,
-                modifier = Modifier.weight(1f)
-            )
-            action?.invoke()
-        }
     }
 }

@@ -13,7 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.squircle.squircleSurface
 import top.yukonga.miuix.kmp.theme.LocalContentColor
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -92,29 +91,4 @@ fun LazyListScope.groupedCardItems(
             )
         }
     }
-}
-
-fun LazyListScope.groupedCardSection(
-    keyPrefix: String,
-    title: @Composable () -> String,
-    items: List<CardItem>,
-    titleTopPadding: Dp = 20.dp,
-    outerBottomPadding: Dp = 0.dp,
-) {
-    item(key = "$keyPrefix:title") {
-        SmallTitle(
-            text = title(),
-            insideMargin = PaddingValues(
-                start = 14.dp,
-                top = titleTopPadding,
-                end = 14.dp,
-                bottom = 8.dp,
-            ),
-        )
-    }
-    groupedCardItems(
-        keyPrefix = keyPrefix,
-        items = items,
-        outerBottomPadding = outerBottomPadding,
-    )
 }

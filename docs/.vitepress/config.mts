@@ -108,6 +108,7 @@ export default defineConfig({
             { text: 'Android 管理器', link: '/guide/android-manager' },
             { text: '节点与订阅', link: '/guide/nodes-subscriptions' },
             { text: '链式代理', link: '/guide/chain-proxy' },
+            { text: '智能分组', link: '/guide/smart-groups' },
             { text: '透明代理与分应用策略', link: '/guide/transparent-proxy' },
             { text: 'Wi-Fi 自动策略', link: '/guide/wifi-policy' },
             { text: '控制面板与 API', link: '/guide/control-panel' }

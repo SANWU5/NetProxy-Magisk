@@ -14,6 +14,8 @@ Android 管理器自动取得可信连接资料，通过 HTTPS API 管理模块�
 
 它适合无 Android 管理器的临时操作和排障，不维护另一份节点或订阅数据库。
 
+链式代理与智能分组同样可以在 WebUI 中操作：`chain status`、`chain mode`、`chain landing`、`chain front` 管理前置与后置，`smart list`、`smart generate`、`smart use`、`smart select`、`smart test` 管理智能分组。命令说明见 [CLI](/guide/cli#链式代理与智能分组)，输入 `help chain` 或 `help smart` 查看完整用法。
+
 ## Service API Dashboard
 
 sing-box Dashboard 使用 Service API，展示原生服务状态、节点组、连接与可观测性数据：

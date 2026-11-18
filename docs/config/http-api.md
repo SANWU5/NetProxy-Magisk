@@ -110,7 +110,19 @@ HTTP 保存必须提供读取时的 revision。发生 `config.conflict` 时重�
 | `DELETE /nodes?group_id=...&node_tag=...` | 删除节点 |
 | `POST /nodes/import` | 导入文本，正文含 `content/allow_insecure` |
 | `POST /nodes/delay` | 测速，正文含 `group_id/node_tag`；空 tag 测整个分组 |
-| `GET/PUT /selection` | 查询或保存节点选择 |
+| `GET/PUT /selection` | 查询或保存节点选择；保存时可传 `smart_group_id` 改用智能分组或自建分组 |
+| `GET/PUT /chain` | 读取链式代理状态（模式、前置、后置、策略），或保存后置模式与手动后置，正文为 `{"mode":"manual","manual":"<后置标签>"}`；模式为 `off/manual/policy/manual_policy` |
+| `PUT /chain/front` | 指定链式前置：`{"group_id":"..."}` 使用该分组的自动选择，再加 `node` 固定为某个节点，`{"smart_id":"..."}` 使用智能或自建分组；空对象恢复为跟随节点页 |
+| `POST /chain/landings` | 导入后置代理，正文含 `content/type`；`type` 是无协议头的行使用的 `socks` 或 `http` |
+| `PUT /chain/landings` | 重命名后置代理，正文含 `tag/name` |
+| `DELETE /chain/landings?tag=...` | 删除后置代理；被手动后置或策略使用时拒绝 |
+| `POST /chain/landings/delay` | 链路测速，正文含 `tag`；同时测试前置节点 |
+| `POST /chain/policies`、`PUT/DELETE /chain/policies/{id}` | 新增、修改、删除按应用策略 |
+| `GET/POST /smart-groups` | 读取智能分组与自建分组，或新建自建分组 |
+| `POST /smart-groups/generate` | 重新智能分组，保留地区分组的手动修改 |
+| `POST /smart-groups/delay` | 分组成员测速，正文含分组 `id`；失败或超时的成员延迟为 `-1` |
+| `PUT/DELETE /smart-groups/{id}` | 修改分组名称与成员，或删除分组 |
+| `PUT /smart-groups/{id}/selection` | 在分组内选择节点，正文 `manual` 为节点引用，省略时改回自动选择；同时让节点页改用这个分组 |
 | `GET/PUT /mode` | 查询或保存内核原生模式；正文为 `{"mode":"Rule"}` 等 |
 | `GET/POST /subscriptions` | 本地与订阅分组列表，或添加 URL 订阅 |
 | `GET/PUT/DELETE /subscriptions/{id}` | 查询分组详情，或编辑、删除 URL 订阅；`?private=true` 仅读取 URL 订阅私有设置 |

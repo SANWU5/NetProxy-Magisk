@@ -1,18 +1,16 @@
 package com.fanjv.netproxy.feature.catalog.presentation.nodes.edit.components
 
+import dev.aiingjie.coui.CouiCard
+import dev.aiingjie.coui.CouiCategory
+import dev.aiingjie.coui.CouiMenuRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.fanjv.netproxy.R
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 
 /** 传输层配置区。 */
 @Composable
@@ -29,21 +27,15 @@ internal fun TransportSection(
 ) {
     val types = listOf("none", "ws", "grpc", "http", "httpupgrade")
     Column(verticalArrangement = Arrangement.Top) {
-        SmallTitle(
-            text = stringResource(R.string.transport_settings),
-            insideMargin = PaddingValues(start = 26.dp, top = 8.dp, bottom = 8.dp, end = 26.dp)
-        )
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp)
-                .padding(bottom = 12.dp)
+        CouiCategory(stringResource(R.string.transport_settings))
+        CouiCard(
+            modifier = Modifier.padding(bottom = 12.dp)
         ) {
-            OverlayDropdownPreference(
+            CouiMenuRow(
                 title = stringResource(R.string.transport_protocol),
-                items = types.map { if (it == "none") "DIRECT (TCP)" else it.uppercase() },
-                selectedIndex = types.indexOf(transportType).coerceAtLeast(0),
-                onSelectedIndexChange = { index -> onTransportTypeChange(types[index]) }
+                options = types.map { if (it == "none") "DIRECT (TCP)" else it.uppercase() },
+                selected = types.indexOf(transportType).coerceAtLeast(0),
+                onSelect = { index -> onTransportTypeChange(types[index]) }
             )
         }
         if (transportType in setOf("ws", "httpupgrade", "http", "h2")) {

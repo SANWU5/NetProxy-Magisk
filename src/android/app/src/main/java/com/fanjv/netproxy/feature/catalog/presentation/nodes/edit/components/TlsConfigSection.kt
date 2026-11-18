@@ -1,20 +1,17 @@
 package com.fanjv.netproxy.feature.catalog.presentation.nodes.edit.components
 
+import dev.aiingjie.coui.CouiCard
+import dev.aiingjie.coui.CouiCategory
+import dev.aiingjie.coui.CouiMenuRow
+import dev.aiingjie.coui.CouiSwitchRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.fanjv.netproxy.R
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 /** TLS、uTLS、Reality 和 ECH 配置区。 */
 @Composable
@@ -52,17 +49,11 @@ internal fun TlsConfigSection(
     onImeDone: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.Top) {
-        SmallTitle(
-            text = stringResource(R.string.security_tls_config_security),
-            insideMargin = PaddingValues(start = 26.dp, top = 8.dp, bottom = 8.dp, end = 26.dp)
-        )
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp)
-                .padding(bottom = 12.dp)
+        CouiCategory(stringResource(R.string.security_tls_config_security))
+        CouiCard(
+            modifier = Modifier.padding(bottom = 12.dp)
         ) {
-            SwitchPreference(
+            CouiSwitchRow(
                 title = stringResource(R.string.enable_tls),
                 checked = enabled,
                 onCheckedChange = onEnabledChange
@@ -75,38 +66,32 @@ internal fun TlsConfigSection(
                 onServerNameChange,
                 onImeDone
             )
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 12.dp)
+            CouiCard(
+                modifier = Modifier.padding(bottom = 12.dp)
             ) {
-                SwitchPreference(
+                CouiSwitchRow(
                     title = stringResource(R.string.allow_insecure),
                     checked = insecure,
                     onCheckedChange = onInsecureChange
                 )
-                SwitchPreference(
+                CouiSwitchRow(
                     title = stringResource(R.string.disable_sni),
                     checked = disableSni,
                     onCheckedChange = onDisableSniChange
                 )
             }
             EditorField(alpn, alpnLabel, onAlpnChange, onImeDone)
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 12.dp)
+            CouiCard(
+                modifier = Modifier.padding(bottom = 12.dp)
             ) {
                 val fingerprints = listOf("chrome", "firefox", "safari", "randomised", "none")
-                OverlayDropdownPreference(
+                CouiMenuRow(
                     title = utlsFingerprintLabel,
-                    items = fingerprints,
-                    selectedIndex = fingerprints.indexOf(fingerprint).coerceAtLeast(0),
-                    onSelectedIndexChange = { index -> onFingerprintChange(fingerprints[index]) }
+                    options = fingerprints,
+                    selected = fingerprints.indexOf(fingerprint).coerceAtLeast(0),
+                    onSelect = { index -> onFingerprintChange(fingerprints[index]) }
                 )
-                SwitchPreference(
+                CouiSwitchRow(
                     title = stringResource(R.string.enable_reality),
                     checked = realityEnabled,
                     onCheckedChange = onRealityEnabledChange
@@ -121,26 +106,23 @@ internal fun TlsConfigSection(
                 )
                 EditorField(realityShortId, realityShortIdLabel, onRealityShortIdChange, onImeDone)
             }
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 12.dp)
+            CouiCard(
+                modifier = Modifier.padding(bottom = 12.dp)
             ) {
-                SwitchPreference(
+                CouiSwitchRow(
                     title = stringResource(R.string.enable_ech),
                     checked = echEnabled,
                     onCheckedChange = onEchEnabledChange
                 )
             }
             if (echEnabled) {
-                TextField(
+                NodeTextField(
                     value = echConfig,
                     onValueChange = onEchConfigChange,
                     label = echConfigLabel,
                     minLines = 2,
                     maxLines = 4,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp)
+                    modifier = Modifier.padding(bottom = 12.dp)
                 )
                 EditorField(
                     echQueryServerName,

@@ -1,8 +1,10 @@
 package com.fanjv.netproxy.feature.catalog.presentation.nodes.edit.components
 
+import dev.aiingjie.coui.CouiCard
+import dev.aiingjie.coui.CouiCategory
+import dev.aiingjie.coui.CouiMenuRow
+import dev.aiingjie.coui.CouiSwitchRow
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -13,11 +15,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.fanjv.netproxy.R
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 @Composable
 internal fun ServerConfigSection(
@@ -74,26 +71,15 @@ internal fun ServerConfigSection(
     Column {
         // ==================== 1. 常规设置 ====================
         Column {
-            SmallTitle(
-                text = stringResource(R.string.basic_settings),
-                insideMargin = PaddingValues(
-                    start = 26.dp,
-                    top = 12.dp,
-                    bottom = 8.dp,
-                    end = 26.dp
-                )
-            )
+            CouiCategory(stringResource(R.string.basic_settings))
         }
         Column {
-            TextField(
+            NodeTextField(
                 value = tag,
                 onValueChange = { onTagChange(it) },
                 label = stringResource(R.string.node_tag),
                 singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 12.dp),
+                modifier = Modifier.padding(bottom = 12.dp),
                 keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
             )
@@ -114,29 +100,23 @@ internal fun ServerConfigSection(
             )
         }
         Column {
-            TextField(
+            NodeTextField(
                 value = server,
                 onValueChange = { onServerChange(it) },
                 label = stringResource(R.string.server_address_label),
                 singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 12.dp),
+                modifier = Modifier.padding(bottom = 12.dp),
                 keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
             )
         }
         Column {
-            TextField(
+            NodeTextField(
                 value = serverPort,
                 onValueChange = { onServerPortChange(it) },
                 label = stringResource(R.string.server_port_label),
                 singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 12.dp),
+                modifier = Modifier.padding(bottom = 12.dp),
                 keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                 keyboardOptions = KeyboardOptions(
                     imeAction = ImeAction.Done,
@@ -147,45 +127,31 @@ internal fun ServerConfigSection(
 
         // ==================== 2. 协议专属设置 ====================
         Column {
-            SmallTitle(
-                text = stringResource(R.string.protocol_specific_config, type.uppercase()),
-                insideMargin = PaddingValues(
-                    start = 26.dp,
-                    top = 8.dp,
-                    bottom = 8.dp,
-                    end = 26.dp
-                )
-            )
+            CouiCategory(stringResource(R.string.protocol_specific_config, type.uppercase()))
         }
         when (type) {
             "vless" -> {
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = uuid,
                         onValueChange = { onUuidChange(it) },
                         label = stringResource(R.string.user_id),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
                     )
                 }
                 Column {
                     val flowOptions = listOf("none", "xtls-rprx-vision")
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp)
+                    CouiCard(
+                        modifier = Modifier.padding(bottom = 12.dp)
                     ) {
-                        OverlayDropdownPreference(
+                        CouiMenuRow(
                             title = stringResource(R.string.flow_control),
-                            items = flowOptions,
-                            selectedIndex = flowOptions.indexOf(flow).coerceAtLeast(0),
-                            onSelectedIndexChange = { index -> onFlowChange(flowOptions[index]) }
+                            options = flowOptions,
+                            selected = flowOptions.indexOf(flow).coerceAtLeast(0),
+                            onSelect = { index -> onFlowChange(flowOptions[index]) }
                         )
                     }
                 }
@@ -193,15 +159,12 @@ internal fun ServerConfigSection(
 
             "vmess" -> {
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = uuid,
                         onValueChange = { onUuidChange(it) },
                         label = stringResource(R.string.user_id),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
                     )
@@ -209,33 +172,27 @@ internal fun ServerConfigSection(
                 Column {
                     val vmessSecurities =
                         listOf("auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305")
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp)
+                    CouiCard(
+                        modifier = Modifier.padding(bottom = 12.dp)
                     ) {
-                        OverlayDropdownPreference(
+                        CouiMenuRow(
                             title = stringResource(R.string.security_label),
-                            items = vmessSecurities,
-                            selectedIndex = vmessSecurities.indexOf(security)
+                            options = vmessSecurities,
+                            selected = vmessSecurities.indexOf(security)
                                 .coerceAtLeast(0),
-                            onSelectedIndexChange = { index ->
+                            onSelect = { index ->
                                 onSecurityChange(vmessSecurities[index])
                             }
                         )
                     }
                 }
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = alterId,
                         onValueChange = { onAlterIdChange(it) },
                         label = alterIdLabel,
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(
                             imeAction = ImeAction.Done,
@@ -255,58 +212,46 @@ internal fun ServerConfigSection(
                         "2022-blake3-aes-256-gcm",
                         "2022-blake3-chacha20-poly1305"
                     )
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp)
+                    CouiCard(
+                        modifier = Modifier.padding(bottom = 12.dp)
                     ) {
-                        OverlayDropdownPreference(
+                        CouiMenuRow(
                             title = stringResource(R.string.method_label),
-                            items = ssMethods,
-                            selectedIndex = ssMethods.indexOf(method).coerceAtLeast(0),
-                            onSelectedIndexChange = { index -> onMethodChange(ssMethods[index]) }
+                            options = ssMethods,
+                            selected = ssMethods.indexOf(method).coerceAtLeast(0),
+                            onSelect = { index -> onMethodChange(ssMethods[index]) }
                         )
                     }
                 }
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = password,
                         onValueChange = { onPasswordChange(it) },
                         label = stringResource(R.string.password_key_label),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
                     )
                 }
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = plugin,
                         onValueChange = { onPluginChange(it) },
                         label = stringResource(R.string.plugin_label),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
                     )
                 }
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = pluginOpts,
                         onValueChange = { onPluginOptsChange(it) },
                         label = stringResource(R.string.plugin_options),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
                     )
@@ -315,15 +260,12 @@ internal fun ServerConfigSection(
 
             "trojan", "anytls" -> {
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = password,
                         onValueChange = { onPasswordChange(it) },
                         label = stringResource(R.string.password_only),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
                     )
@@ -332,29 +274,23 @@ internal fun ServerConfigSection(
 
             "hysteria2" -> {
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = password,
                         onValueChange = { onPasswordChange(it) },
                         label = stringResource(R.string.password_label),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
                     )
                 }
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = upMbps,
                         onValueChange = { onUpMbpsChange(it) },
                         label = stringResource(R.string.up_mbps),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(
                             imeAction = ImeAction.Done,
@@ -363,15 +299,12 @@ internal fun ServerConfigSection(
                     )
                 }
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = downMbps,
                         onValueChange = { onDownMbpsChange(it) },
                         label = stringResource(R.string.down_mbps),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(
                             imeAction = ImeAction.Done,
@@ -381,17 +314,14 @@ internal fun ServerConfigSection(
                 }
                 Column {
                     val obfsTypeList = listOf("none", "salamander")
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp)
+                    CouiCard(
+                        modifier = Modifier.padding(bottom = 12.dp)
                     ) {
-                        OverlayDropdownPreference(
+                        CouiMenuRow(
                             title = stringResource(R.string.obfs_type),
-                            items = obfsTypeList,
-                            selectedIndex = obfsTypeList.indexOf(obfsType).coerceAtLeast(0),
-                            onSelectedIndexChange = { index ->
+                            options = obfsTypeList,
+                            selected = obfsTypeList.indexOf(obfsType).coerceAtLeast(0),
+                            onSelect = { index ->
                                 onObfsTypeChange(obfsTypeList[index])
                             }
                         )
@@ -399,30 +329,24 @@ internal fun ServerConfigSection(
                 }
                 if (obfsType != "none") {
                     Column {
-                        TextField(
+                        NodeTextField(
                             value = obfsPassword,
                             onValueChange = { onObfsPasswordChange(it) },
                             label = stringResource(R.string.obfs_password),
                             singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp)
-                                .padding(bottom = 12.dp),
+                            modifier = Modifier.padding(bottom = 12.dp),
                             keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
                         )
                     }
                 }
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = serverPorts,
                         onValueChange = { onServerPortsChange(it) },
                         label = stringResource(R.string.server_ports_hop),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(
                             imeAction = ImeAction.Done,
@@ -431,15 +355,12 @@ internal fun ServerConfigSection(
                     )
                 }
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = hopInterval,
                         onValueChange = { onHopIntervalChange(it) },
                         label = stringResource(R.string.hop_interval_seconds),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(
                             imeAction = ImeAction.Done,
@@ -451,29 +372,23 @@ internal fun ServerConfigSection(
 
             "tuic" -> {
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = uuid,
                         onValueChange = { onUuidChange(it) },
                         label = stringResource(R.string.user_id_uuid),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
                     )
                 }
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = password,
                         onValueChange = { onPasswordChange(it) },
                         label = stringResource(R.string.password_label),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
                     )
@@ -481,36 +396,33 @@ internal fun ServerConfigSection(
                 Column {
                     val ccOptions = listOf("cubic", "bbr", "new_reno")
                     val urmOptions = listOf("quic", "native")
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp)
+                    CouiCard(
+                        modifier = Modifier.padding(bottom = 12.dp)
                     ) {
-                        OverlayDropdownPreference(
+                        CouiMenuRow(
                             title = stringResource(R.string.congestion_control),
-                            items = ccOptions,
-                            selectedIndex = ccOptions.indexOf(congestionControl)
+                            options = ccOptions,
+                            selected = ccOptions.indexOf(congestionControl)
                                 .coerceAtLeast(0),
-                            onSelectedIndexChange = { index ->
+                            onSelect = { index ->
                                 onCongestionControlChange(ccOptions[index])
                             }
                         )
-                        OverlayDropdownPreference(
+                        CouiMenuRow(
                             title = udpRelayModeTitle,
-                            items = urmOptions,
-                            selectedIndex = urmOptions.indexOf(udpRelayMode)
+                            options = urmOptions,
+                            selected = urmOptions.indexOf(udpRelayMode)
                                 .coerceAtLeast(0),
-                            onSelectedIndexChange = { index ->
+                            onSelect = { index ->
                                 onUdpRelayModeChange(urmOptions[index])
                             }
                         )
-                        SwitchPreference(
+                        CouiSwitchRow(
                             title = stringResource(R.string.udp_over_stream),
                             checked = udpOverStream,
                             onCheckedChange = { onUdpOverStreamChange(it) }
                         )
-                        SwitchPreference(
+                        CouiSwitchRow(
                             title = stringResource(R.string.zero_rtt_handshake),
                             checked = zeroRttHandshake,
                             onCheckedChange = { onZeroRttHandshakeChange(it) }
@@ -518,15 +430,12 @@ internal fun ServerConfigSection(
                     }
                 }
                 Column {
-                    TextField(
+                    NodeTextField(
                         value = heartbeat,
                         onValueChange = { onHeartbeatChange(it) },
                         label = stringResource(R.string.heartbeat_interval_seconds),
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 12.dp),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         keyboardOptions = KeyboardOptions(
                             imeAction = ImeAction.Done,

@@ -17,7 +17,7 @@ import dev.aiingjie.coui.CouiSubPage
 import dev.aiingjie.coui.CouiSwitchRow
 import kotlin.math.roundToInt
 
-/** 主题页：明暗模式、页面缩放、预测式返回，以及仍作用于 Miuix 子页面的模糊与平滑圆角。 */
+/** 主题页：明暗模式、页面缩放、预测式返回，以及仍作用于 Miuix 对话框与卡片的平滑圆角。 */
 @Composable
 internal fun ThemeSettingsScreen(viewModel: ThemeViewModel) {
     val theme by viewModel.state.collectAsStateWithLifecycle()
@@ -59,12 +59,6 @@ internal fun ThemeSettingsScreen(viewModel: ThemeViewModel) {
         }
         item {
             CouiGroup {
-                CouiSwitchRow(
-                    title = stringResource(R.string.settings_enable_blur),
-                    checked = theme.enableBlur,
-                    onCheckedChange = viewModel::setEnableBlur,
-                    summary = stringResource(R.string.settings_enable_blur_summary),
-                )
                 CouiSwitchRow(
                     title = stringResource(R.string.settings_smooth_corner),
                     checked = theme.enableSmoothCorner,

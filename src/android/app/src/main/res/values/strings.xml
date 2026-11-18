@@ -226,8 +226,6 @@
     <string name="settings_theme_mode_system">Follow system</string>
     <string name="settings_theme_mode_light">Light</string>
     <string name="settings_theme_mode_dark">Dark</string>
-    <string name="settings_enable_blur">Enable blur</string>
-    <string name="settings_enable_blur_summary">Blur the top bar and translucent surfaces</string>
     <string name="settings_smooth_corner">Smooth corners</string>
     <string name="settings_smooth_corner_summary">Use Miuix smooth corners throughout the interface</string>
     <string name="settings_enable_predictive_back">Predictive back gesture</string>

@@ -136,7 +136,6 @@ class MainActivity : ComponentActivity() {
             val appThemeSettings = AppThemeSettings(
                 colorMode = ColorMode.fromValue(themeState.colorMode),
                 enableSmoothCorner = themeState.enableSmoothCorner,
-                enableBlur = themeState.enableBlur,
                 enablePredictiveBack = themeState.enablePredictiveBack,
             )
             val darkMode = appThemeSettings.colorMode.isDark ||

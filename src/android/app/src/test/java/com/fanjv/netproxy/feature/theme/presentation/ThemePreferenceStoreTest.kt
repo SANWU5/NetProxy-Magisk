@@ -14,7 +14,6 @@ class ThemePreferenceStoreTest {
         val settings = ThemePreferenceStore(preferences()).read()
 
         assertEquals(ColorMode.SYSTEM.value, settings.colorMode)
-        assertTrue(settings.enableBlur)
         assertTrue(settings.enableSmoothCorner)
         assertFalse(settings.enablePredictiveBack)
         assertEquals(1.0f, settings.pageScale, 0f)
@@ -26,7 +25,6 @@ class ThemePreferenceStoreTest {
         val state = ThemeUiState()
 
         assertEquals(settings.colorMode, state.colorMode)
-        assertEquals(settings.enableBlur, state.enableBlur)
         assertEquals(settings.enablePredictiveBack, state.enablePredictiveBack)
         assertEquals(settings.enableSmoothCorner, state.enableSmoothCorner)
         assertEquals(settings.pageScale, state.pageScale, 0f)
@@ -37,7 +35,6 @@ class ThemePreferenceStoreTest {
         val settings = ThemePreferenceStore(
             preferences(
                 "color_mode" to ColorMode.DARK.value,
-                "enable_blur" to false,
                 "enable_smooth_corner" to false,
                 "enable_predictive_back" to true,
                 "page_scale" to 0.9f,
@@ -45,7 +42,6 @@ class ThemePreferenceStoreTest {
         ).read()
 
         assertEquals(ColorMode.DARK.value, settings.colorMode)
-        assertFalse(settings.enableBlur)
         assertFalse(settings.enableSmoothCorner)
         assertTrue(settings.enablePredictiveBack)
         assertEquals(0.9f, settings.pageScale, 0f)

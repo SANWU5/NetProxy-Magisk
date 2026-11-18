@@ -23,7 +23,6 @@ class ThemeManager(prefs: SharedPreferences) {
         _state = MutableStateFlow(
             ThemeUiState(
                 colorMode = p.colorMode,
-                enableBlur = p.enableBlur,
                 enablePredictiveBack = p.enablePredictiveBack,
                 enableSmoothCorner = p.enableSmoothCorner,
                 pageScale = p.pageScale,
@@ -35,11 +34,6 @@ class ThemeManager(prefs: SharedPreferences) {
     fun setThemeMode(mode: Int) {
         store.setThemeMode(mode)
         _state.update { it.copy(colorMode = mode) }
-    }
-
-    fun setEnableBlur(enabled: Boolean) {
-        store.setEnableBlur(enabled)
-        _state.update { it.copy(enableBlur = enabled) }
     }
 
     fun setEnablePredictiveBack(enabled: Boolean) {

@@ -248,8 +248,6 @@
     <string name="settings_theme_mode_system">跟随系统</string>
     <string name="settings_theme_mode_light">浅色</string>
     <string name="settings_theme_mode_dark">深色</string>
-    <string name="settings_enable_blur">启用页面模糊</string>
-    <string name="settings_enable_blur_summary">控制顶部模糊和页面毛玻璃效果</string>
     <string name="settings_smooth_corner">平滑圆角</string>
     <string name="settings_smooth_corner_summary">为界面启用 Miuix 平滑圆角效果</string>
     <string name="settings_enable_predictive_back">预测性返回手势</string>

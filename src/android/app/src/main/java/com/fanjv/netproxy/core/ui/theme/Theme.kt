@@ -50,11 +50,10 @@ object AppThemeDefaults {
     val colorMode = ColorMode.SYSTEM
 }
 
-/** 应用主题设置快照（明暗、圆角、模糊与预测式返回）。 */
+/** 应用主题设置快照（明暗、圆角与预测式返回）。 */
 data class AppThemeSettings(
     val colorMode: ColorMode,
     val enableSmoothCorner: Boolean,
-    val enableBlur: Boolean,
     val enablePredictiveBack: Boolean,
 )
 
@@ -82,7 +81,6 @@ fun NetProxyTheme(
     ) {
         CompositionLocalProvider(
             LocalColorMode provides appThemeSettings.colorMode.value,
-            LocalEnableBlur provides appThemeSettings.enableBlur,
             LocalEnablePredictiveBack provides appThemeSettings.enablePredictiveBack,
             LocalSquircleEnabled provides appThemeSettings.enableSmoothCorner,
             content = content,
@@ -133,7 +131,5 @@ fun isInDarkTheme(): Boolean {
 }
 
 val LocalColorMode = staticCompositionLocalOf { ColorMode.SYSTEM.value }
-
-val LocalEnableBlur = staticCompositionLocalOf { true }
 
 val LocalEnablePredictiveBack = staticCompositionLocalOf { false }

@@ -10,14 +10,12 @@ internal class ThemePreferenceStore(
 ) {
     fun read() = ThemePreferencesSnapshot(
         colorMode = prefs.getInt("color_mode", AppThemeDefaults.colorMode.value),
-        enableBlur = prefs.getBoolean("enable_blur", true),
         enablePredictiveBack = prefs.getBoolean("enable_predictive_back", false),
         enableSmoothCorner = prefs.getBoolean("enable_smooth_corner", true),
         pageScale = prefs.getFloat("page_scale", 1.0f)
     )
 
     fun setThemeMode(mode: Int) = prefs.edit { putInt("color_mode", mode) }
-    fun setEnableBlur(enabled: Boolean) = prefs.edit { putBoolean("enable_blur", enabled) }
     fun setEnablePredictiveBack(enabled: Boolean) =
         prefs.edit { putBoolean("enable_predictive_back", enabled) }
 
@@ -29,7 +27,6 @@ internal class ThemePreferenceStore(
 
 internal data class ThemePreferencesSnapshot(
     val colorMode: Int,
-    val enableBlur: Boolean,
     val enablePredictiveBack: Boolean,
     val enableSmoothCorner: Boolean,
     val pageScale: Float,

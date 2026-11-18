@@ -226,8 +226,6 @@
     <string name="settings_theme_mode_system">Как в системе</string>
     <string name="settings_theme_mode_light">Светлая</string>
     <string name="settings_theme_mode_dark">Тёмная</string>
-    <string name="settings_enable_blur">Включить размытие</string>
-    <string name="settings_enable_blur_summary">Размытие верхней панели и полупрозрачных элементов</string>
     <string name="settings_smooth_corner">Плавные углы</string>
     <string name="settings_smooth_corner_summary">Использовать плавные углы Miuix</string>
     <string name="settings_enable_predictive_back">Предиктивный жест «Назад»</string>

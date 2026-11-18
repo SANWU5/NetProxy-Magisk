@@ -100,6 +100,8 @@ reset_modules() {
   printf '%s\n' 'subscription-provider' > "$LIVE/data/catalog/subscription/provider.json"
   mkdir -p "$LIVE/data/chain"
   printf '%s\n' 'current-chain' > "$LIVE/data/chain/chain.json"
+  mkdir -p "$LIVE/data/smart"
+  printf '%s\n' 'current-smart' > "$LIVE/data/smart/groups.json"
   : > "$LIVE/update"
   : > "$CALL_LOG"
   MODPATH="$STAGE"
@@ -225,11 +227,13 @@ test_snapshot_modes() (
       assert_value "$STAGE/data/catalog/default/provider.json" package-provider
       assert_value "$STAGE/logs/service.log" package-log
       [ ! -e "$STAGE/data/chain/chain.json" ]
+      [ ! -e "$STAGE/data/smart/groups.json" ]
     else
       assert_value "$STAGE/data/catalog/default/provider.json" current-provider
       assert_value "$STAGE/data/catalog/subscription/provider.json" subscription-provider
       assert_value "$STAGE/data/catalog/default/history.jsonl" current-history
       assert_value "$STAGE/data/chain/chain.json" current-chain
+      assert_value "$STAGE/data/smart/groups.json" current-smart
       assert_value "$STAGE/logs/service.log" current-log
     fi
     if [ "$mode" = preserve ]; then

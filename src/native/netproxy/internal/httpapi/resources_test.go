@@ -21,6 +21,7 @@ import (
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/module"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/paths"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/service"
+	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/smartgroup"
 )
 
 const resourceTestModule = `{
@@ -248,6 +249,75 @@ func TestResourcesChainLandingsModesAndPolicies(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(server.options.ModuleDir, "data", "chain", "landing.json")); err != nil {
 		t.Fatalf("后置列表未写入 data/chain: %v", err)
+	}
+}
+
+func TestResourcesSmartGroupsAndChainFront(t *testing.T) {
+	server := resourceFixture(t)
+	var view module.SmartGroupsView
+	resourceAssertSuccess(t, server, "GET", "/api/v1/smart-groups", "", "smart.list", &view)
+	if len(view.Groups) != 0 || view.Active != "" {
+		t.Fatalf("初始智能分组错误: %+v", view)
+	}
+	for _, input := range []string{"socks://127.0.0.1:1081#" + url.PathEscape("🇭🇰香港 01"), "socks://127.0.0.1:1082#" + url.PathEscape("剩余流量 10GB")} {
+		if _, err := catalog.AppendNode(t.Context(), catalog.MutationOptions{
+			GroupDir: filepath.Join(server.options.CatalogRoot, "default"), GroupID: "default", Type: "local", Input: input,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var generated struct {
+		Smart   module.SmartGroupsView `json:"smart"`
+		Summary smartgroup.Summary     `json:"summary"`
+	}
+	resourceAssertSuccess(t, server, "POST", "/api/v1/smart-groups/generate", `{"english":false}`, "smart.generated", &generated)
+	if generated.Summary != (smartgroup.Summary{Regions: 2, Nodes: 2, Unclassified: 1, Informational: 1}) ||
+		len(generated.Smart.Groups) != 2 || generated.Smart.Groups[0].ID != "smart-hk" || generated.Smart.Groups[0].Available != 1 {
+		t.Fatalf("智能分组结果错误: %+v", generated)
+	}
+	resourceAssertSuccess(t, server, "PUT", "/api/v1/selection", `{"smart_group_id":"smart-hk"}`, "node.selected", nil)
+	var selection service.Selection
+	resourceAssertSuccess(t, server, "GET", "/api/v1/selection", "", "node.current", &selection)
+	if selection.SelectorMode != "smart" || selection.SmartGroupName != "🇭🇰 香港" || selection.Selected != "Smart/🇭🇰 香港" {
+		t.Fatalf("智能分组未成为节点选择: %+v", selection)
+	}
+	var saved struct {
+		Smart module.SmartGroupsView `json:"smart"`
+		ID    string                 `json:"id"`
+	}
+	resourceAssertSuccess(t, server, "POST", "/api/v1/smart-groups", `{"name":"自选","members":[{"group_id":"default","node":"节点 / 02"}]}`, "smart.created", &saved)
+	if !strings.HasPrefix(saved.ID, "custom-") || len(saved.Smart.Groups) != 3 {
+		t.Fatalf("自建分组创建结果错误: %+v", saved)
+	}
+	var chainView module.ChainView
+	resourceAssertSuccess(t, server, "PUT", "/api/v1/chain/front", `{"smart_id":"`+saved.ID+`"}`, "chain.front_saved", &chainView)
+	if chainView.FrontSetting == nil || chainView.FrontSetting.SmartID != saved.ID {
+		t.Fatalf("前置未保存: %+v", chainView)
+	}
+	response, result := resourceRequest(t, server, "PUT", "/api/v1/chain/front", `{"group_id":"default","node":"不存在"}`)
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(result.Message, "前置") {
+		t.Fatalf("不存在的前置节点应被拒绝: %s", response.Body.String())
+	}
+	resourceAssertSuccess(t, server, "PUT", "/api/v1/smart-groups/"+saved.ID, `{"name":"自选 2","members":[{"group_id":"default","node":"节点 / 02"}]}`, "smart.saved", &saved)
+	resourceAssertSuccess(t, server, "DELETE", "/api/v1/smart-groups/smart-hk", "", "smart.deleted", &view)
+	selection = service.Selection{}
+	resourceAssertSuccess(t, server, "GET", "/api/v1/selection", "", "node.current", &selection)
+	if selection.SelectorMode != "urltest" || selection.SmartGroupID != "" {
+		t.Fatalf("删除正在使用的分组后应回到普通分组: %+v", selection)
+	}
+	resourceAssertSuccess(t, server, "DELETE", "/api/v1/smart-groups/"+saved.ID, "", "smart.deleted", &view)
+	chainView = module.ChainView{}
+	resourceAssertSuccess(t, server, "GET", "/api/v1/chain", "", "chain.current", &chainView)
+	if chainView.FrontSetting != nil {
+		t.Fatalf("删除前置使用的分组后应跟随节点页: %+v", chainView.FrontSetting)
+	}
+	response, result = resourceRequest(t, server, "PUT", "/api/v1/smart-groups/missing", `{"name":"x","members":[]}`)
+	if response.Code != http.StatusNotFound || result.Code != "smart.not_found" {
+		t.Fatalf("不存在的分组应返回 404: %s", response.Body.String())
+	}
+	response, result = resourceRequest(t, server, "POST", "/api/v1/smart-groups", `{"name":"空","members":[]}`)
+	if response.Code != http.StatusUnprocessableEntity || result.Code != "smart.invalid" {
+		t.Fatalf("空的自建分组应被拒绝: %s", response.Body.String())
 	}
 }
 

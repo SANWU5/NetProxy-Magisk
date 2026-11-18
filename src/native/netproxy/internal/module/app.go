@@ -21,6 +21,7 @@ import (
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/provider"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/service"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/serviceapi"
+	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/smartgroup"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/subscription"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/telemetry"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/worker"
@@ -160,6 +161,11 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 			Manual: chainRuntime.Manual, ProxyOption: chainRuntime.ProxyOption, ProxyChain: chainRuntime.ProxyChain,
 		}
 	}
+	smartDocument, err := smartgroup.Load(ctx, options.smartDir())
+	if err != nil {
+		return PrepareResult{}, err
+	}
+	runtimeOptions.Smart = smartRuntime(smartDocument)
 	runtime, err := catalog.BuildRuntime(ctx, runtimeOptions)
 	if err != nil {
 		return PrepareResult{}, err
@@ -201,6 +207,10 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 
 func (options Options) chainDir() string {
 	return paths.New(options.ModuleDir).Chain()
+}
+
+func (options Options) smartDir() string {
+	return paths.New(options.ModuleDir).Smart()
 }
 
 func (options Options) updateSelection(ctx context.Context, selection moduleconfig.Selection) error {
@@ -274,7 +284,7 @@ func SelectNode(ctx context.Context, options Options, target, group string) (dat
 	}
 	data = map[string]string{"group_id": selection.ActiveGroupID, "mode": selection.Mode(), "selected": selected}
 	if service.ProcessRunning(options.SingBoxPath) {
-		if err := syncRuntimeSelector(ctx, options, active, inner); err != nil {
+		if err := syncRuntimeSelector(ctx, options, selection, active, inner); err != nil {
 			return data, &service.Error{Code: "node.runtime_sync_failed", Message: fmt.Sprintf("节点选择已保存，但运行时切换失败: %v", err),
 				Data: map[string]any{"persisted": true, "runtime_synced": false, "group_id": selection.ActiveGroupID, "mode": selection.Mode(), "selected": selected, "cause": err.Error()}}
 		}
@@ -295,11 +305,13 @@ func syncSelection(ctx context.Context, options Options) error {
 		return err
 	}
 	active, inner := module.Selection.RuntimeTargets(runtimeTag)
-	return syncRuntimeSelector(ctx, options, active, inner)
+	return syncRuntimeSelector(ctx, options, module.Selection, active, inner)
 }
 
-func syncRuntimeSelector(ctx context.Context, options Options, active, inner string) error {
-	targets, err := loadChainTargets(ctx, options, active)
+// syncRuntimeSelector 把持久选择同步到运行实例：active/inner 是普通分组的选择器与节点，
+// selection 中的智能分组与链式代理设置决定顶层 Proxy 与链式前置的选择。
+func syncRuntimeSelector(ctx context.Context, options Options, selection moduleconfig.Selection, active, inner string) error {
+	targets, err := loadSelectionTargets(ctx, options, selection, active)
 	if err != nil {
 		return err
 	}
@@ -630,7 +642,7 @@ func applyCatalogChange(ctx, localContext context.Context, options Options, save
 		err = ReloadService(ctx, options)
 	} else {
 		active, inner := selection.RuntimeTargets(runtimeTag)
-		err = syncRuntimeSelector(ctx, options, active, inner)
+		err = syncRuntimeSelector(ctx, options, selection, active, inner)
 	}
 	return subscription.RuntimeSyncApplied, true, err
 }

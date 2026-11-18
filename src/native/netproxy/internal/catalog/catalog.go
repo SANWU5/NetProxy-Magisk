@@ -83,6 +83,21 @@ type RuntimeOptions struct {
 	Selection       moduleconfig.Selection
 	AllowEmpty      bool
 	Chain           *ChainOutbounds
+	// Smart 是智能分组与自建分组；每个至少有一个可用成员的分组生成一个自动选择出站。
+	Smart []SmartGroup
+}
+
+// SmartGroup 是智能分组或自建分组的运行时定义，由 smartgroup 包提供。
+type SmartGroup struct {
+	ID      string
+	Tag     string
+	Members []SmartMember
+}
+
+// SmartMember 按来源分组 id 与节点名引用一个节点。
+type SmartMember struct {
+	GroupID string
+	Node    string
 }
 
 // ChainOutbounds 是链式代理需要编入出站图的片段，由 chain 包生成。
@@ -317,7 +332,7 @@ func normalizeSelection(ctx context.Context, groups []*loadedGroup, selection mo
 			continue
 		}
 		if selection.ActiveGroupID != group.ID {
-			selection = moduleconfig.Selection{ActiveGroupID: group.ID}
+			selection = moduleconfig.Selection{ActiveGroupID: group.ID, SmartGroupID: selection.SmartGroupID}
 		}
 		if selection.SelectedNodeTag != "" {
 			present, err := provider.FileContainsTag(ctx, group.ProviderPath, selection.SelectedNodeTag)
@@ -431,8 +446,15 @@ func BuildRuntime(ctx context.Context, options RuntimeOptions) (RuntimeResult, e
 	if err := writeRuntimeProviders(options.ProvidersOutput, groups); err != nil {
 		return RuntimeResult{}, err
 	}
-	activeTag, _ := selection.RuntimeTargets(runtimeTag)
-	if err := writeRuntimeOutbounds(options.OutboundsOutput, groups, activeTag, options.Chain); err != nil {
+	smart, smartTags, err := buildSmartOutbounds(ctx, groups, options.Smart)
+	if err != nil {
+		return RuntimeResult{}, err
+	}
+	mainTag, _ := selection.RuntimeTargets(runtimeTag)
+	if tag, ok := smartTags[selection.SmartGroupID]; ok {
+		mainTag = tag
+	}
+	if err := writeRuntimeOutbounds(options.OutboundsOutput, groups, mainTag, smart, options.Chain); err != nil {
 		return RuntimeResult{}, err
 	}
 
@@ -550,12 +572,79 @@ func writeRuntimeProviders(path string, groups []*loadedGroup) error {
 	}{Providers: items})
 }
 
-func writeRuntimeOutbounds(path string, groups []*loadedGroup, defaultTag string, chain *ChainOutbounds) error {
+// buildSmartOutbounds 为每个至少有一个可用成员的智能分组生成自动选择出站，返回分组 id 到运行时标签的映射。
+// 成员按来源 Provider 与精确的节点出站标签过滤；已被订阅移除的节点直接忽略。
+func buildSmartOutbounds(ctx context.Context, groups []*loadedGroup, smart []SmartGroup) ([]option.Outbound, map[string]string, error) {
+	if len(smart) == 0 {
+		return nil, nil, nil
+	}
+	byID := make(map[string]*loadedGroup, len(groups))
+	for _, group := range groups {
+		byID[group.ID] = group
+	}
+	present := make(map[string]map[string]struct{})
+	nodeTags := func(group *loadedGroup) (map[string]struct{}, error) {
+		if tags, ok := present[group.ID]; ok {
+			return tags, nil
+		}
+		summaries, err := provider.InspectFile(ctx, group.ProviderPath)
+		if err != nil {
+			return nil, err
+		}
+		tags := make(map[string]struct{}, len(summaries))
+		for _, summary := range summaries {
+			tags[summary.Tag] = struct{}{}
+		}
+		present[group.ID] = tags
+		return tags, nil
+	}
+	var outbounds []option.Outbound
+	emitted := make(map[string]string, len(smart))
+	for _, definition := range smart {
+		var providers, patterns []string
+		for _, member := range definition.Members {
+			group := byID[member.GroupID]
+			if group == nil {
+				continue
+			}
+			tags, err := nodeTags(group)
+			if err != nil {
+				return nil, nil, err
+			}
+			if _, ok := tags[member.Node]; !ok {
+				continue
+			}
+			if !slices.Contains(providers, group.RuntimeTag) {
+				providers = append(providers, group.RuntimeTag)
+			}
+			patterns = append(patterns, regexp.QuoteMeta(group.RuntimeTag+"/"+member.Node))
+		}
+		if len(patterns) == 0 {
+			continue
+		}
+		include := (*badoption.Regexp)(regexp.MustCompile("^(?:" + strings.Join(patterns, "|") + ")$"))
+		outbounds = append(outbounds, option.Outbound{
+			Type: C.TypeURLTest,
+			Tag:  definition.Tag,
+			Options: &option.URLTestOutboundOptions{
+				GroupCommonOption:         option.GroupCommonOption{Providers: providers, Include: include},
+				URL:                       "https://www.gstatic.com/generate_204",
+				Interval:                  badoption.Duration(3 * time.Minute),
+				Tolerance:                 50,
+				InterruptExistConnections: true,
+			},
+		})
+		emitted[definition.ID] = definition.Tag
+	}
+	return outbounds, emitted, nil
+}
+
+func writeRuntimeOutbounds(path string, groups []*loadedGroup, defaultTag string, smart []option.Outbound, chain *ChainOutbounds) error {
 	outbounds := []option.Outbound{
 		{Type: C.TypeDirect, Tag: "direct", Options: new(option.DirectOutboundOptions)},
 		{Type: C.TypeBlock, Tag: "block", Options: new(option.StubOptions)},
 	}
-	options := make([]string, 0, len(groups)*2)
+	options := make([]string, 0, len(groups)*2+len(smart))
 	for _, group := range groups {
 		autoTag := "Auto/" + group.RuntimeTag
 		selectTag := "Select/" + group.RuntimeTag
@@ -582,17 +671,21 @@ func writeRuntimeOutbounds(path string, groups []*loadedGroup, defaultTag string
 		)
 		options = append(options, autoTag, selectTag)
 	}
+	for _, outbound := range smart {
+		outbounds = append(outbounds, outbound)
+		options = append(options, outbound.Tag)
+	}
 	proxyOptions, proxyDefault := options, defaultTag
 	var landings []map[string]jsontext.Value
 	if chain != nil && len(chain.LandingTags) > 0 {
-		// 链式前置与 Proxy 使用同一组节点选项，并由选择同步保持在同一个分组目标上，
-		// 这样手动后置接管 Proxy 后，前置仍然是用户在节点页选择的节点。
+		// 链式前置与 Proxy 使用同一组分组选项，默认由选择同步保持在节点页的选择上；
+		// 全部 Provider 节点也列入选项，用户可以把前置固定为某个节点或某个分组的自动选择。
 		outbounds = append(outbounds,
 			option.Outbound{
 				Type: C.TypeSelector,
 				Tag:  chain.FrontTag,
 				Options: &option.SelectorOutboundOptions{
-					GroupCommonOption:         option.GroupCommonOption{Outbounds: options},
+					GroupCommonOption:         option.GroupCommonOption{Outbounds: options, UseAllProviders: true},
 					Default:                   defaultTag,
 					InterruptExistConnections: true,
 				},

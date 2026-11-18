@@ -24,6 +24,7 @@ import (
 	moduleconfig "github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/config"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/provider"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/serviceapi"
+	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/smartgroup"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/subscription"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/worker"
 	"google.golang.org/protobuf/encoding/protowire"
@@ -152,10 +153,10 @@ func TestPrepareWritesChainRuntime(t *testing.T) {
 	}
 }
 
-func TestLoadChainTargetsFollowsNodeSelection(t *testing.T) {
+func TestLoadSelectionTargetsFollowsNodeSelection(t *testing.T) {
 	options := selectionFixture(t)
-	targets, err := loadChainTargets(t.Context(), options, "Auto/本地配置")
-	if err != nil || targets.enabled || targets.proxy != "Auto/本地配置" {
+	targets, err := loadSelectionTargets(t.Context(), options, moduleconfig.Selection{}, "Auto/本地配置")
+	if err != nil || targets.chain || targets.proxy != "Auto/本地配置" {
 		t.Fatalf("没有后置时只能同步 Proxy: %+v %v", targets, err)
 	}
 	document, _, err := chain.ParseLandings(t.Context(), "socks5://203.0.113.6:1080#A", chain.DefaultTypeSOCKS)
@@ -175,9 +176,58 @@ func TestLoadChainTargetsFollowsNodeSelection(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		targets, err := loadChainTargets(t.Context(), options, "Select/本地配置")
-		if err != nil || !targets.enabled || targets.landing != "落地/A" || targets.proxy != test.proxy {
+		targets, err := loadSelectionTargets(t.Context(), options, moduleconfig.Selection{}, "Select/本地配置")
+		if err != nil || !targets.chain || targets.landing != "落地/A" || targets.proxy != test.proxy || targets.front != "Select/本地配置" {
 			t.Fatalf("%s 模式的选择目标错误: %+v %v", test.mode, targets, err)
+		}
+	}
+}
+
+func TestLoadSelectionTargetsUsesSmartGroupsAndFixedFront(t *testing.T) {
+	options := selectionFixture(t)
+	landings, _, err := chain.ParseLandings(t.Context(), "socks5://203.0.113.6:1080#A", chain.DefaultTypeSOCKS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := chain.Update(t.Context(), options.chainDir(), func(state *chain.State) error {
+		state.AppendLandings(landings)
+		state.Mode, state.Manual = chain.ModePolicy, "A"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := smartgroup.Update(t.Context(), options.smartDir(), func(document *smartgroup.Document) error {
+		document.Groups = append(document.Groups, smartgroup.Group{ID: "custom-game", Name: "游戏", Kind: smartgroup.KindCustom,
+			Members: []smartgroup.NodeRef{{GroupID: "default", Node: "NODE"}}})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	smart := moduleconfig.Selection{ActiveGroupID: "default", SmartGroupID: "custom-game"}
+	targets, err := loadSelectionTargets(t.Context(), options, smart, "Auto/本地配置")
+	if err != nil || targets.main != "Smart/游戏" || targets.proxy != "Smart/游戏" || targets.front != "Smart/游戏" || targets.fallback != "Auto/本地配置" {
+		t.Fatalf("智能分组没有成为主选择: %+v %v", targets, err)
+	}
+	for _, test := range []struct {
+		front chain.Front
+		want  string
+	}{
+		{chain.Front{GroupID: "default"}, "Auto/本地配置"},
+		{chain.Front{GroupID: "default", Node: "NODE"}, "本地配置/NODE"},
+		{chain.Front{SmartID: "custom-game"}, "Smart/游戏"},
+		// 指定的节点已被删除时跟随节点页的选择。
+		{chain.Front{GroupID: "default", Node: "GONE"}, "Select/本地配置"},
+	} {
+		if _, _, _, err := chain.Update(t.Context(), options.chainDir(), func(state *chain.State) error {
+			front := test.front
+			state.Front = &front
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		targets, err := loadSelectionTargets(t.Context(), options, moduleconfig.Selection{ActiveGroupID: "default"}, "Select/本地配置")
+		if err != nil || targets.front != test.want || targets.proxy != "Select/本地配置" {
+			t.Fatalf("前置 %+v 的目标错误: %+v %v", test.front, targets, err)
 		}
 	}
 }
@@ -619,7 +669,7 @@ func TestSyncRuntimeSelectorRetriesOnlyTemporaryFailures(t *testing.T) {
 			}))
 			defer server.Close()
 			options := Options{ServiceAddress: server.URL, RequestTimeout: 3 * time.Second}
-			err := syncRuntimeSelector(t.Context(), options, "Select/fixture", "fixture/NODE")
+			err := syncRuntimeSelector(t.Context(), options, moduleconfig.Selection{}, "Select/fixture", "fixture/NODE")
 			wantCalls := test.failAt
 			if test.retry {
 				wantCalls += 2
@@ -662,7 +712,7 @@ func TestSyncRuntimeSelectorHonorsTimeoutAndCancellation(t *testing.T) {
 				wantErr = context.Canceled
 			}
 			started := time.Now()
-			err := syncRuntimeSelector(ctx, options, "Auto/fixture", "")
+			err := syncRuntimeSelector(ctx, options, moduleconfig.Selection{}, "Auto/fixture", "")
 			if !errors.Is(err, wantErr) || calls.Load() != wantCalls || time.Since(started) > time.Second {
 				t.Fatalf("重试未遵循总时限或请求取消: calls=%d elapsed=%v err=%v", calls.Load(), time.Since(started), err)
 			}
@@ -811,7 +861,7 @@ func TestSelectionTargetCoreAppliesSavedChoice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := syncRuntimeSelector(ctx, options, "Select/本地配置", "本地配置/missing"); err == nil {
+	if err := syncRuntimeSelector(ctx, options, moduleconfig.Selection{}, "Select/本地配置", "本地配置/missing"); err == nil {
 		t.Fatal("真实核心接受了不存在的节点")
 	}
 	after, err := client.StartedAt(ctx)

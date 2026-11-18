@@ -20,6 +20,7 @@ import (
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/inbound"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/paths"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/serviceapi"
+	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/smartgroup"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/worker"
 )
 
@@ -43,6 +44,8 @@ type Options struct {
 	RequestTimeout time.Duration
 	// ChainDir 是链式代理设置目录；为空时按默认模块布局推导。
 	ChainDir string
+	// SmartDir 是智能分组目录；为空时按默认模块布局推导。
+	SmartDir string
 }
 
 // Status 是仪表盘使用的服务状态快照，字段与 netproxyctl schema=1 保持一致。
@@ -66,6 +69,10 @@ type Status struct {
 	ActiveGroupNodeCount   int      `json:"active_group_node_count"`
 	SelectedNodeRef        string   `json:"selected_node_ref"`
 	RuntimeSelected        string   `json:"runtime_selected"`
+	// SmartGroupID 与 SmartGroupName 不为空时，节点页使用的是该智能分组的自动选择。
+	SmartGroupID   string `json:"smart_group_id,omitempty"`
+	SmartGroupName string `json:"smart_group_name,omitempty"`
+	smartTag       string
 	// ChainMode 与 ChainLanding 来自链式代理设置：手动模式下顶层流量经由 ChainLanding 出网。
 	ChainMode       string `json:"chain_mode"`
 	ChainLanding    string `json:"chain_landing"`
@@ -108,6 +115,8 @@ type Selection struct {
 	SelectedNodeRef       string `json:"selected_node_ref"`
 	Selected              string `json:"selected"`
 	RuntimeSelected       string `json:"runtime_selected"`
+	SmartGroupID          string `json:"smart_group_id,omitempty"`
+	SmartGroupName        string `json:"smart_group_name,omitempty"`
 }
 
 // Snapshot 描述持久化节点与运行时节点组的合并快照。
@@ -189,6 +198,10 @@ func ReadStatus(ctx context.Context, options Options) (Status, error) {
 	}
 	if status.ActiveGroupName == "" {
 		status.ActiveGroupName = status.ActiveGroupID
+	}
+	if group, ok := activeSmartGroup(ctx, options, module); ok {
+		status.SelectorMode = "smart"
+		status.SmartGroupID, status.SmartGroupName, status.smartTag = group.ID, group.Name, group.RuntimeTag()
 	}
 
 	pid := serviceFindProcess(options.SingBoxPath, state.PID)
@@ -298,7 +311,7 @@ func ReadSelection(ctx context.Context, options Options) (Selection, error) {
 		return Selection{}, err
 	}
 	runtimeGroups, _ := readRuntimeGroups(ctx, options)
-	return SelectionFromRuntimeGroups(module, groups, runtimeGroups), nil
+	return SelectionFromRuntimeGroups(module, groups, runtimeGroups, readSmartDocument(ctx, options)), nil
 }
 
 // ReadSnapshot 读取持久化节点并尽力合并运行时 Service API 状态。
@@ -318,7 +331,7 @@ func ReadSnapshot(ctx context.Context, options Options, groupID string) (Snapsho
 		}
 	}
 	runtimeGroups, _ := readRuntimeGroups(ctx, options)
-	selection := SelectionFromRuntimeGroups(module, selectionGroups, runtimeGroups)
+	selection := SelectionFromRuntimeGroups(module, selectionGroups, runtimeGroups, readSmartDocument(ctx, options))
 	return Snapshot{Groups: groups, Selection: selection, RuntimeGroups: runtimeGroups}, nil
 }
 
@@ -529,6 +542,9 @@ func normalizeOptions(options Options) Options {
 	if options.ChainDir == "" {
 		options.ChainDir = layout.Chain()
 	}
+	if options.SmartDir == "" {
+		options.SmartDir = layout.Smart()
+	}
 	if options.ServiceSecret == "" {
 		options.ServiceSecret = "singbox"
 	}
@@ -631,7 +647,56 @@ func readModuleConfig(path string) moduleconfig.ModuleConfig {
 	return moduleconfig.DefaultModule()
 }
 
-func SelectionFromRuntimeGroups(module moduleconfig.ModuleConfig, groups []catalog.GroupSnapshot, runtimeGroups []serviceapi.Group) Selection {
+// SelectionFromRuntimeGroups 合并持久选择与运行时分组：使用智能分组时，Selected 是该分组的自动选择，
+// RuntimeSelected 是它当前选中的节点；普通分组字段始终保留，作为智能分组不可用时的回退。
+func SelectionFromRuntimeGroups(module moduleconfig.ModuleConfig, groups []catalog.GroupSnapshot, runtimeGroups []serviceapi.Group, smart smartgroup.Document) Selection {
+	selection := catalogSelection(module, groups, runtimeGroups)
+	index := smart.Find(module.SmartGroupID)
+	if module.SmartGroupID == "" || index < 0 {
+		return selection
+	}
+	group := smart.Groups[index]
+	selection.SelectorMode = "smart"
+	selection.SmartGroupID, selection.SmartGroupName = group.ID, group.Name
+	selection.Selected, selection.RuntimeSelected = group.RuntimeTag(), ""
+	for _, runtimeGroup := range runtimeGroups {
+		if runtimeGroup.Tag == group.RuntimeTag() {
+			selection.RuntimeSelected = runtimeGroup.Selected
+			break
+		}
+	}
+	return selection
+}
+
+// activeSmartGroup 返回节点页正在使用的智能分组；读取失败或分组已删除时按普通分组处理。
+func activeSmartGroup(ctx context.Context, options Options, module moduleconfig.ModuleConfig) (smartgroup.Group, bool) {
+	if module.SmartGroupID == "" {
+		return smartgroup.Group{}, false
+	}
+	document := readSmartDocument(ctx, options)
+	index := document.Find(module.SmartGroupID)
+	if index < 0 {
+		return smartgroup.Group{}, false
+	}
+	return document.Groups[index], true
+}
+
+// readSmartDocument 读取智能分组用于展示；读取失败时按没有智能分组处理，选择同步会回退到普通分组。
+func readSmartDocument(ctx context.Context, options Options) smartgroup.Document {
+	document, err := smartgroup.Load(ctx, options.SmartDir)
+	if err != nil {
+		return smartgroup.Document{}
+	}
+	return document
+}
+
+// ReadSmartDocument 读取智能分组供事件流展示，失败时返回空文档。
+func ReadSmartDocument(ctx context.Context, options Options) smartgroup.Document {
+	return readSmartDocument(ctx, normalizeOptions(options))
+}
+
+func catalogSelection(module moduleconfig.ModuleConfig, groups []catalog.GroupSnapshot, runtimeGroups []serviceapi.Group) Selection {
+	module.SmartGroupID = ""
 	selection := Selection{
 		ActiveGroupID:   module.ActiveGroupID,
 		SelectorMode:    module.Mode(),
@@ -773,7 +838,10 @@ func mergeRuntimeStatus(ctx context.Context, options Options, status *Status, ac
 		return
 	}
 	runtimeGroup := "Auto/" + runtimeTag
-	if status.SelectorMode == "manual" {
+	switch {
+	case status.smartTag != "":
+		runtimeGroup = status.smartTag
+	case status.SelectorMode == "manual":
 		runtimeGroup = "Select/" + runtimeTag
 	}
 	if groupsErr != nil {

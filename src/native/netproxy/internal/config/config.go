@@ -28,6 +28,9 @@ type ModuleConfig struct {
 type Selection struct {
 	ActiveGroupID   string `json:"group_id"`
 	SelectedNodeTag string `json:"node_tag"`
+	// SmartGroupID 不为空时，主选择是该智能分组的自动选择；ActiveGroupID 与 SelectedNodeTag
+	// 保留为节点页的普通分组，智能分组没有可用节点时回退到它们。
+	SmartGroupID string `json:"smart_group_id,omitzero"`
 }
 
 type WiFiPolicy struct {
@@ -51,6 +54,9 @@ func (policy WiFiPolicy) Equal(other WiFiPolicy) bool {
 }
 
 func (selection Selection) Mode() string {
+	if selection.SmartGroupID != "" {
+		return "smart"
+	}
 	if selection.SelectedNodeTag == "" {
 		return "urltest"
 	}
@@ -115,6 +121,9 @@ func (config ModuleConfig) validate() error {
 	}
 	if config.SelectedNodeTag != "" && (config.ActiveGroupID == "" || strings.TrimSpace(config.SelectedNodeTag) == "") {
 		return errors.New("手动选择必须指定活动分组和有效节点 tag")
+	}
+	if config.SmartGroupID != "" && strings.TrimSpace(config.SmartGroupID) != config.SmartGroupID {
+		return errors.New("智能分组 id 无效")
 	}
 	if config.WiFi.Mode != "blacklist" && config.WiFi.Mode != "whitelist" {
 		return errors.New("wifi.mode 只能是 blacklist 或 whitelist")

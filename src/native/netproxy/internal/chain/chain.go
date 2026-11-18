@@ -1,7 +1,7 @@
-// Package chain 管理链式代理：后置代理列表、后置模式与按应用策略。
+// Package chain 管理链式代理：后置代理列表、后置模式、前置选择与按应用策略。
 //
-// 链路固定为「当前节点（前置）→ 后置代理 → 目标」。前置始终跟随用户在节点页的选择，
-// 因此本包只保存后置相关的持久状态，并生成 sing-box 运行时片段。
+// 链路固定为「前置节点 → 后置代理 → 目标」。前置默认跟随用户在节点页的选择，也可以固定为
+// 某个分组的自动选择或某个节点；本包保存这些持久状态，并生成 sing-box 运行时片段。
 package chain
 
 import (
@@ -56,10 +56,20 @@ type Policy struct {
 	Packages []string `json:"packages"`
 }
 
+// Front 固定链式前置：SmartID 指定智能分组或自建分组的自动选择；否则 GroupID 指定节点分组，
+// Node 为空时使用该分组的自动选择（延迟最低的节点），不为空时固定为这个节点。
+type Front struct {
+	GroupID string `json:"group_id,omitzero"`
+	Node    string `json:"node,omitzero"`
+	SmartID string `json:"smart_id,omitzero"`
+}
+
 // Settings 是 chain.json 的持久结构。
 type Settings struct {
-	Mode     string   `json:"mode"`
-	Manual   string   `json:"manual"`
+	Mode   string `json:"mode"`
+	Manual string `json:"manual"`
+	// Front 为空时前置跟随节点页的选择。
+	Front    *Front   `json:"front,omitzero"`
 	Policies []Policy `json:"policies"`
 }
 
@@ -174,6 +184,18 @@ func (state State) Validate() error {
 	if UsesManual(state.Mode) && state.Manual == "" {
 		return errors.New("手动模式需要先选择一个后置代理")
 	}
+	if front := state.Front; front != nil {
+		switch {
+		case front.SmartID != "":
+			if front.GroupID != "" || front.Node != "" {
+				return errors.New("指定的前置只能是智能分组或节点分组之一")
+			}
+		case strings.TrimSpace(front.GroupID) == "":
+			return errors.New("指定的前置缺少分组")
+		case !utf8.ValidString(front.Node) || strings.ContainsFunc(front.Node, unicode.IsControl):
+			return errors.New("指定的前置节点名称无效")
+		}
+	}
 	if state.Mode != ModeOff && len(state.Landings.Outbounds) == 0 {
 		return errors.New("开启链式代理前需要先导入至少一个后置代理")
 	}
@@ -241,9 +263,21 @@ func (state State) Clone() State {
 		policy.Packages = slices.Clone(policy.Packages)
 		clone.Policies[index] = policy
 	}
+	if state.Front != nil {
+		front := *state.Front
+		clone.Front = &front
+	}
 	clone.Landings.Outbounds = slices.Clone(state.Landings.Outbounds)
 	clone.Landings.Endpoints = slices.Clone(state.Landings.Endpoints)
 	return clone
+}
+
+// SameFront 判断两个前置设置是否相同；都为空表示都跟随节点页。
+func SameFront(left, right *Front) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
 }
 
 // FindPolicy 返回指定 id 的策略下标。

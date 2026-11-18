@@ -16,6 +16,7 @@ import (
 	moduleapp "github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/module"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/service"
 	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/serviceapi"
+	"github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/smartgroup"
 )
 
 // 状态文件由同目录原子替换；缓存共享解析结果，但每次发送仍核对当前路径。
@@ -100,6 +101,7 @@ type coreFeed struct {
 	snapshot      service.Snapshot
 	snapshotReady bool
 	module        moduleconfig.ModuleConfig
+	smart         smartgroup.Document
 	status        service.Status
 	statusReady   bool
 	groupTimer    *time.Timer
@@ -304,6 +306,7 @@ func (f *coreFeed) refresh(topics int) {
 			}
 		} else {
 			f.module, f.snapshot = module, service.Snapshot{Groups: groups}
+			f.smart = service.ReadSmartDocument(ctx, f.h.server.controlOptions())
 			f.publishGroups(epoch)
 		}
 	}
@@ -326,7 +329,7 @@ func (f *coreFeed) publishGroups(epoch uint64) {
 	if f.identity > 0 && f.groupsReady {
 		f.snapshot.RuntimeGroups = f.groups
 	}
-	f.snapshot.Selection = service.SelectionFromRuntimeGroups(f.module, f.snapshot.Groups, f.snapshot.RuntimeGroups)
+	f.snapshot.Selection = service.SelectionFromRuntimeGroups(f.module, f.snapshot.Groups, f.snapshot.RuntimeGroups, f.smart)
 	topics := f.h.interests()
 	if topics&topicGroups != 0 {
 		f.h.emitAt(topicGroups, "groups", contract.Success("node.snapshot", "节点快照", f.snapshot), epoch)
@@ -340,6 +343,7 @@ func (f *coreFeed) publishGroups(epoch uint64) {
 		f.status.ActiveGroupNodeCount = selection.ActiveGroupNodeCount
 		f.status.SelectedNodeRef = selection.SelectedNodeRef
 		f.status.RuntimeSelected = selection.RuntimeSelected
+		f.status.SmartGroupID, f.status.SmartGroupName = selection.SmartGroupID, selection.SmartGroupName
 		f.h.emitAt(topicStatus, "status", contract.Success("service.status", "服务状态", f.status), epoch)
 	}
 }

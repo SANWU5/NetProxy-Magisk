@@ -345,6 +345,7 @@ func networkControlOptions(options Options) service.Options {
 		ServiceSecret:  options.ServiceSecret,
 		RequestTimeout: options.RequestTimeout,
 		ChainDir:       options.chainDir(),
+		SmartDir:       options.smartDir(),
 	}
 }
 

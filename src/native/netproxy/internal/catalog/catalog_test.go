@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -379,6 +380,65 @@ func TestBuildRuntimeChainOutbounds(t *testing.T) {
 	index, ok := byTag["落地/住宅"]
 	if !ok || document.Outbounds[index].Detour != "链式前置" {
 		t.Fatalf("后置代理必须经由链式前置连接: %#v", document.Outbounds)
+	}
+}
+
+func TestBuildRuntimeSmartGroups(t *testing.T) {
+	root := t.TempDir()
+	writeGroup(t, root, "default", "机场", "subscription", "香港 01")
+	writeGroup(t, root, "local", "本地", "local", "日本")
+	runtimeDir := t.TempDir()
+	if _, err := BuildRuntime(t.Context(), RuntimeOptions{
+		Root: root, ProvidersOutput: filepath.Join(runtimeDir, "providers.json"),
+		OutboundsOutput: filepath.Join(runtimeDir, "outbounds.json"),
+		Selection:       moduleconfig.Selection{ActiveGroupID: "default", SmartGroupID: "custom-asia"},
+		Smart: []SmartGroup{
+			{ID: "custom-asia", Tag: "Smart/亚洲", Members: []SmartMember{
+				{GroupID: "default", Node: "香港 01"}, {GroupID: "local", Node: "日本"},
+				{GroupID: "default", Node: "已删除"}, {GroupID: "missing", Node: "x"},
+			}},
+			{ID: "custom-empty", Tag: "Smart/空", Members: []SmartMember{{GroupID: "default", Node: "已删除"}}},
+		},
+		Chain: &ChainOutbounds{
+			FrontTag: "链式前置", SelectorTag: "链式代理",
+			Landings:    []map[string]jsontext.Value{{"type": jsontext.Value(`"http"`), "tag": jsontext.Value(`"落地/A"`), "server": jsontext.Value(`"203.0.113.1"`), "server_port": jsontext.Value(`8080`), "detour": jsontext.Value(`"链式前置"`)}},
+			LandingTags: []string{"落地/A"}, ProxyOption: true,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Outbounds []struct {
+			Type            string   `json:"type"`
+			Tag             string   `json:"tag"`
+			Outbounds       []string `json:"outbounds"`
+			Providers       []string `json:"providers"`
+			Include         string   `json:"include"`
+			Default         string   `json:"default"`
+			UseAllProviders bool     `json:"use_all_providers"`
+		} `json:"outbounds"`
+	}
+	if err := json.Unmarshal([]byte(readFile(t, filepath.Join(runtimeDir, "outbounds.json"))), &document, json.RejectUnknownMembers(false)); err != nil {
+		t.Fatal(err)
+	}
+	byTag := make(map[string]int, len(document.Outbounds))
+	for index, outbound := range document.Outbounds {
+		byTag[outbound.Tag] = index
+	}
+	if _, exists := byTag["Smart/空"]; exists {
+		t.Fatal("没有可用成员的分组不能生成出站")
+	}
+	smart := document.Outbounds[byTag["Smart/亚洲"]]
+	if smart.Type != "urltest" || strings.Join(smart.Providers, ",") != "机场,本地" || smart.Include != `^(?:机场/香港 01|本地/日本)$` {
+		t.Fatalf("智能分组出站错误: %#v", smart)
+	}
+	proxy := document.Outbounds[byTag["Proxy"]]
+	if proxy.Default != "Smart/亚洲" || !slices.Contains(proxy.Outbounds, "Smart/亚洲") {
+		t.Fatalf("选中的智能分组必须是 Proxy 的默认选择: %#v", proxy)
+	}
+	front := document.Outbounds[byTag["链式前置"]]
+	if !front.UseAllProviders || front.Default != "Smart/亚洲" || !slices.Contains(front.Outbounds, "Smart/亚洲") {
+		t.Fatalf("链式前置必须能选择全部节点与智能分组: %#v", front)
 	}
 }
 

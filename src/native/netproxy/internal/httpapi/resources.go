@@ -57,6 +57,13 @@ func (s *Server) registerResources() {
 	s.route("PUT /api/v1/chain/landings", resourceWriteTimeout, true, s.renameChainLanding)
 	s.route("DELETE /api/v1/chain/landings", resourceWriteTimeout, true, s.removeChainLanding)
 	s.route("POST /api/v1/chain/landings/delay", resourceWriteTimeout, true, s.testChainLandings)
+	s.route("PUT /api/v1/chain/front", resourceWriteTimeout, true, s.saveChainFront)
+	s.route("GET /api/v1/smart-groups", resourceReadTimeout, false, s.readSmartGroups)
+	s.route("POST /api/v1/smart-groups", resourceWriteTimeout, true, s.createSmartGroup)
+	s.route("POST /api/v1/smart-groups/generate", resourceWriteTimeout, true, s.generateSmartGroups)
+	s.route("POST /api/v1/smart-groups/delay", resourceWriteTimeout, true, s.testSmartGroups)
+	s.route("PUT /api/v1/smart-groups/{id}", resourceWriteTimeout, true, s.saveSmartGroup)
+	s.route("DELETE /api/v1/smart-groups/{id}", resourceWriteTimeout, true, s.deleteSmartGroup)
 	s.route("POST /api/v1/chain/policies", resourceWriteTimeout, true, s.addChainPolicy)
 	s.route("PUT /api/v1/chain/policies/{id}", resourceWriteTimeout, true, s.saveChainPolicy)
 	s.route("DELETE /api/v1/chain/policies/{id}", resourceWriteTimeout, true, s.deleteChainPolicy)
@@ -270,9 +277,15 @@ func (s *Server) saveSelection(ctx context.Context, r *http.Request) (contract.R
 	var input struct {
 		GroupID string `json:"group_id"`
 		NodeTag string `json:"node_tag"`
+		// SmartGroupID 不为空时选择智能分组的自动选择，忽略 group_id 与 node_tag。
+		SmartGroupID string `json:"smart_group_id"`
 	}
 	if err := resourceDecode(r, &input); err != nil {
 		return contract.Result{}, err
+	}
+	if input.SmartGroupID != "" {
+		data, err := module.SelectSmartGroup(ctx, s.options, input.SmartGroupID)
+		return contract.Success("node.selected", "节点选择已更新", data), smartError(err)
 	}
 	if err := resourceGroupID(input.GroupID, false); err != nil {
 		return contract.Result{}, err

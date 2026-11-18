@@ -1,40 +1,11 @@
 package catalog
 
-import "strings"
+import "github.com/Fanju6/NetProxy-Magisk/src/native/netproxy/internal/region"
 
-// RegionKey 返回与语言无关的稳定地区标识，供节点列表按地区展示。
+// RegionKey 返回与语言无关的稳定地区标识，供节点列表按地区展示；无法识别时返回 other。
 func RegionKey(tag string) string {
-	value := strings.ToLower(tag)
-	for _, region := range catalogRegions {
-		for _, token := range region.tokens {
-			if strings.Contains(value, token) {
-				return region.key
-			}
-		}
+	if detected, ok := region.Detect(tag); ok {
+		return detected.Key
 	}
 	return "other"
-}
-
-type regionRule struct {
-	key    string
-	tokens []string
-}
-
-var catalogRegions = []regionRule{
-	{key: "hk", tokens: []string{"🇭🇰", "香港", "hong kong", "hongkong"}},
-	{key: "mo", tokens: []string{"🇲🇴", "澳门", "macau"}},
-	{key: "tw", tokens: []string{"🇹🇼", "台湾", "taiwan"}},
-	{key: "jp", tokens: []string{"🇯🇵", "日本", "japan"}},
-	{key: "kr", tokens: []string{"🇰🇷", "韩国", "korea"}},
-	{key: "sg", tokens: []string{"🇸🇬", "新加坡", "singapore"}},
-	{key: "us", tokens: []string{"🇺🇸", "美国", "united states", "usa", "us-"}},
-	{key: "ca", tokens: []string{"🇨🇦", "加拿大", "canada"}},
-	{key: "gb", tokens: []string{"🇬🇧", "英国", "united kingdom", "uk-"}},
-	{key: "de", tokens: []string{"🇩🇪", "德国", "germany"}},
-	{key: "fr", tokens: []string{"🇫🇷", "法国", "france"}},
-	{key: "nl", tokens: []string{"🇳🇱", "荷兰", "netherlands"}},
-	{key: "au", tokens: []string{"🇦🇺", "澳大利亚", "australia"}},
-	{key: "in", tokens: []string{"🇮🇳", "印度", "india"}},
-	{key: "tr", tokens: []string{"🇹🇷", "土耳其", "turkey"}},
-	{key: "ru", tokens: []string{"🇷🇺", "俄罗斯", "russia"}},
 }

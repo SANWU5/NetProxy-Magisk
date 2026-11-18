@@ -106,6 +106,26 @@ func (s *Server) removeChainLanding(ctx context.Context, r *http.Request) (contr
 	return contract.Success("chain.landing_removed", "后置代理已删除", data), chainError(err)
 }
 
+// saveChainFront 设置链式前置：空对象表示跟随节点页的选择。
+func (s *Server) saveChainFront(ctx context.Context, r *http.Request) (contract.Result, error) {
+	var input chain.Front
+	if err := resourceDecode(r, &input); err != nil {
+		return contract.Result{}, err
+	}
+	var front *chain.Front
+	if input != (chain.Front{}) {
+		if err := module.CheckChainFront(ctx, s.options, input); err != nil {
+			return contract.Result{}, &contract.Error{Code: "chain.invalid", Message: "指定的前置不可用: " + err.Error(), HTTPStatus: http.StatusUnprocessableEntity}
+		}
+		front = &input
+	}
+	data, err := module.UpdateChain(ctx, s.options, func(state *chain.State) error {
+		state.Front = front
+		return nil
+	})
+	return contract.Success("chain.front_saved", "前置已保存", data), chainError(err)
+}
+
 func (s *Server) testChainLandings(ctx context.Context, r *http.Request) (contract.Result, error) {
 	var input struct {
 		Tag string `json:"tag"`

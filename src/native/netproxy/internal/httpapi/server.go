@@ -375,7 +375,7 @@ func (s *Server) controlOptions() service.Options {
 		StateFile: s.options.StateFile, ProgressDir: s.options.ProgressDir, DelayDir: layout.DelayDir(),
 		WorkerPIDFile: s.options.WorkerPIDFile, SingBoxPath: s.options.SingBoxPath,
 		ServiceAddress: s.options.ServiceAddress, ServiceSecret: s.options.ServiceSecret, RequestTimeout: s.options.RequestTimeout,
-		ChainDir: layout.Chain()}
+		ChainDir: layout.Chain(), SmartDir: layout.Smart()}
 }
 
 func (s *Server) info(context.Context, *http.Request) (contract.Result, error) {

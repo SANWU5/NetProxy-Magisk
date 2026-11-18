@@ -57,6 +57,9 @@ func (l Layout) Catalog() string { return filepath.Join(l.Data(), "catalog") }
 // Chain 返回链式代理（后置列表、模式与按应用策略）的持久化目录。
 func (l Layout) Chain() string { return filepath.Join(l.Data(), "chain") }
 
+// Smart 返回智能分组与自建分组的持久化目录。
+func (l Layout) Smart() string { return filepath.Join(l.Data(), "smart") }
+
 // ModuleConfig 返回模块配置文件路径。
 func (l Layout) ModuleConfig() string { return filepath.Join(l.Config(), "module.json") }
 

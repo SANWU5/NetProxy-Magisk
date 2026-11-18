@@ -61,7 +61,7 @@ func BuildRuntime(ctx context.Context, dir string, state State) (*Runtime, error
 		if err != nil {
 			return nil, err
 		}
-		// 前置跟随节点页的选择；后置自身不能再走别的 detour，否则链路会脱离前置。
+		// 前置由选择同步设置（跟随节点页或用户指定的节点）；后置自身不能再走别的 detour，否则链路会脱离前置。
 		object["detour"] = frontValue
 		result.Landings = append(result.Landings, object)
 		result.LandingTags = append(result.LandingTags, runtimeTag)

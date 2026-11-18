@@ -19,7 +19,7 @@ internal fun AboutScreen() {
         "<b><a href=\"https://t.me/NetProxy_Magisk\">Telegram</a></b>",
     )
 
-    AboutScreenMiuix(
+    AboutScreenCoui(
         state = AboutUiState(
             title = stringResource(R.string.about),
             appName = stringResource(R.string.app_name),

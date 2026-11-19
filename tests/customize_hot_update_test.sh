@@ -839,4 +839,13 @@ test_linux_locks
 test_native_catalog_lock
 test_install_version_matrix
 test_installer_entrypoints
+# 旧版固定的内置规则地址改为跟随分支；用户自己固定的其他提交保持不变，没有旧地址时不改写文件。
+rules_config="$WORKDIR/rules-config.json"
+printf '%s\n' '{"a":"https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/d9e3c4c09747d325d28e9bfe8829011135cfbbbf/geo/{tag}.srs","b":"https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/a5599253ba5240e1c8dc60dfc9ddade8e7b96c79/Filters/x.json","c":"https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/1111111111111111111111111111111111111111/geo/{tag}.srs"}' > "$rules_config"
+migrate_pinned_rule_urls "$rules_config"
+assert_value "$rules_config" '{"a":"https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/{tag}.srs","b":"https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/x.json","c":"https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/1111111111111111111111111111111111111111/geo/{tag}.srs"}'
+cp "$rules_config" "$rules_config.before"
+migrate_pinned_rule_urls "$rules_config"
+cmp -s "$rules_config" "$rules_config.before"
+
 printf '%s\n' 'customize hot update test passed'

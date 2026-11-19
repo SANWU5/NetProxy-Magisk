@@ -33,7 +33,7 @@ NetProxy 的分流行为由四层共同决定：
 └── remote/    # Ads_AWAvenue.json，geosite/ 与 geoip/ 下的 SRS 规则集
 ```
 
-`Rule` 模式会同时使用静态路由配置和规则集。远程 JSON/SRS 规则由 sing-box 自动更新，用户编辑器不应修改它们；需要自定义规则时修改 `rules/local/`。
+`Rule` 模式会同时使用静态路由配置和规则集。远程 JSON/SRS 规则跟随规则仓库的分支（MetaCubeX/meta-rules-dat 的 `sing`、TG-Twilight/AWAvenue-Ads-Rule 的 `main`），sing-box 每 24 小时检查一次更新；模块内置的文件只作为首次启动的初始副本，安装新版本时会换成新版内置文件。用户编辑器不应修改它们；需要自定义规则时修改 `rules/local/`。
 
 在管理器「设置 → 路由规则」查看全部本地匹配规则，卡片标明代理、直连或拦截。点击右上角「+」，选择规则类型与匹配条件后保存。已有规则保留所属规则集；多条件与高级规则使用 JSON 编辑器。
 

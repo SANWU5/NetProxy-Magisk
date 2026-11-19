@@ -11,6 +11,9 @@ umask 077
 readonly MODULE_ID=netproxy
 readonly CONFIG_ENTRIES="config/module.json config/inbound/inbound.json config/singbox/config.json config/singbox/rules/local"
 readonly EXECUTABLE_FILES="bin/sing-box bin/netproxyctl action.sh netproxyctl service.sh uninstall.sh"
+# 旧版内置远程规则地址固定在以下提交，核心每 24 小时只会重新下载同一份旧规则。
+readonly PINNED_META_RULES="0b3efbf6fc8076742c2dd36eddb8791c8121aa71 1bbe90f849505bcbcea530d8fbc127ad7877eb2a d9e3c4c09747d325d28e9bfe8829011135cfbbbf ff12703ce5252a6b54298a835729f3abdd61ba6e"
+readonly PINNED_AWAVENUE_RULES="a5599253ba5240e1c8dc60dfc9ddade8e7b96c79"
 
 INSTALL_MODE=fresh
 LIVE_DIR=/data/adb/modules/netproxy
@@ -311,6 +314,25 @@ cleanup_no_telemetry_state() {
 }
 
 #######################################
+# 把保留配置中的旧固定规则地址改为跟随分支（meta-rules-dat 的 sing、AWAvenue 的 main）。
+# 只替换上面列出的旧内置地址，用户自己改过的地址保持不变。
+# 参数: $1 sing-box 主配置路径。
+# 返回: 0=已迁移或无需迁移，1=写入失败。
+#######################################
+migrate_pinned_rule_urls() {
+  local config="$1" script="" commit
+  for commit in $PINNED_META_RULES; do
+    script="${script}s#MetaCubeX/meta-rules-dat/$commit/#MetaCubeX/meta-rules-dat/sing/#g;"
+  done
+  for commit in $PINNED_AWAVENUE_RULES; do
+    script="${script}s#TG-Twilight/AWAvenue-Ads-Rule/$commit/#TG-Twilight/AWAvenue-Ads-Rule/main/#g;"
+  done
+  grep -q -E "meta-rules-dat/($(printf '%s' "$PINNED_META_RULES" | tr ' ' '|'))/|AWAvenue-Ads-Rule/($(printf '%s' "$PINNED_AWAVENUE_RULES" | tr ' ' '|'))/" "$config" \
+    || return 0
+  sed "$script" "$config" > "$config.rules" && mv "$config.rules" "$config"
+}
+
+#######################################
 # 参数: $1 快照目录。
 # 返回: 0=回退成功，1=回退失败（保留快照）。
 #######################################
@@ -374,6 +396,9 @@ copy_user_data_locked() {
           grep -q '"fcm"' "$snapshot/current/config/singbox/config.json" \
             || { print_error "[module/preserve-fcm] 未找到旧版内置本地规则引用"; failed=true; break; }
         fi
+        # 内置远程规则改为跟随分支后，保留下来的旧配置也要改，否则手机上的规则永远停在旧版本。
+        migrate_pinned_rule_urls "$snapshot/current/config/singbox/config.json" \
+          || { print_error "[module/preserve-rules] 远程规则地址迁移失败"; failed=true; break; }
         if is_no_telemetry_build; then
           rm -rf "$snapshot/current/config/telemetry" || { failed=true; break; }
         fi

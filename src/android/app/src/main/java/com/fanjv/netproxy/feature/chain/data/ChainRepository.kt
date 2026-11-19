@@ -3,6 +3,7 @@ package com.fanjv.netproxy.feature.chain.data
 import com.fanjv.netproxy.feature.chain.model.ChainFront
 import com.fanjv.netproxy.core.api.ModuleApiClient
 import com.fanjv.netproxy.feature.chain.model.ChainImportResponse
+import com.fanjv.netproxy.feature.chain.model.ChainPolicy
 import com.fanjv.netproxy.feature.chain.model.ChainPolicyResponse
 import com.fanjv.netproxy.feature.chain.model.ChainState
 import kotlinx.coroutines.flow.Flow
@@ -58,21 +59,26 @@ internal class ChainRepository(private val client: ModuleApiClient) {
     suspend fun testLandings(tag: String): ChainState =
         decode(client.post("/chain/landings/delay", buildJsonObject { put("tag", tag) }).data)
 
-    suspend fun createPolicy(name: String, enabled: Boolean, landing: String, packages: List<String>): ChainState =
-        client.json.decodeFromJsonElement<ChainPolicyResponse>(
-            client.post("/chain/policies", policyBody(name, enabled, landing, packages)).data
-        ).chain
+    suspend fun createPolicy(policy: ChainPolicy): ChainState =
+        client.json.decodeFromJsonElement<ChainPolicyResponse>(client.post("/chain/policies", policyBody(policy)).data).chain
 
-    suspend fun savePolicy(id: String, name: String, enabled: Boolean, landing: String, packages: List<String>): ChainState =
-        decode(client.put("/chain/policies/$id", policyBody(name, enabled, landing, packages)).data)
+    suspend fun savePolicy(policy: ChainPolicy): ChainState =
+        decode(client.put("/chain/policies/${policy.id}", policyBody(policy)).data)
 
     suspend fun deletePolicy(id: String): ChainState = decode(client.delete("/chain/policies/$id").data)
 
-    private fun policyBody(name: String, enabled: Boolean, landing: String, packages: List<String>) = buildJsonObject {
-        put("name", name)
-        put("enabled", enabled)
-        put("landing", landing)
-        putJsonArray("packages") { packages.forEach(::add) }
+    /** 按给定顺序重排策略组；顺序决定匹配优先级。 */
+    suspend fun orderPolicies(ids: List<String>): ChainState =
+        decode(client.put("/chain/policies/order", buildJsonObject { putJsonArray("ids") { ids.forEach(::add) } }).data)
+
+    private fun policyBody(policy: ChainPolicy) = buildJsonObject {
+        put("name", policy.name)
+        put("enabled", policy.enabled)
+        put("match", policy.match)
+        put("exit", policy.exit)
+        put("landing", if (policy.exit == ChainPolicy.EXIT_LANDING) policy.landing else "")
+        put("domestic_direct", policy.domesticDirect)
+        putJsonArray("packages") { policy.packages.forEach(::add) }
     }
 
     private fun decode(data: JsonElement): ChainState = client.json.decodeFromJsonElement(data)

@@ -1,5 +1,8 @@
 package com.fanjv.netproxy.feature.chain.presentation
 
+import com.fanjv.netproxy.feature.chain.model.ChainPolicy
+import dev.aiingjie.coui.CouiSmallButton
+import dev.aiingjie.coui.CouiPanel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -71,6 +74,7 @@ internal fun ChainScreen(
     val mode = chain.chainMode
     val idle = state.busy.isEmpty()
     val testing = state.busy.startsWith("test")
+    var showOrder by remember { mutableStateOf(false) }
 
     LifecycleResumeEffect(isActive) {
         viewModel.setVisible(isActive)
@@ -281,9 +285,12 @@ internal fun ChainScreen(
                         checked = policy.enabled,
                         onCheckedChange = { viewModel.setPolicyEnabled(policy.id, it) },
                         onClick = { navigator.push(Route.ChainPolicy(policy.id)) },
-                        summary = stringResource(R.string.chain_policy_summary, policy.packages.size, policy.landing),
+                        summary = policySummary(policy),
                         enabled = idle,
                     )
+                }
+                if (chain.policies.size > 1) {
+                    CouiActionRow(stringResource(R.string.chain_policy_reorder), onClick = { showOrder = true }, enabled = idle)
                 }
                 CouiActionRow(
                     stringResource(R.string.chain_policy_new),
@@ -294,6 +301,36 @@ internal fun ChainScreen(
             }
         }
     }
+
+    CouiPanel(visible = showOrder, title = stringResource(R.string.chain_policy_reorder), onDismissRequest = { showOrder = false }) {
+        CouiGroup(first = true, footer = stringResource(R.string.chain_policies_footer)) {
+            chain.policies.forEachIndexed { index, policy ->
+                CouiRow(title = "${index + 1}. ${policy.name}", summary = policySummary(policy)) {
+                    CouiSmallButton(stringResource(R.string.chain_policy_move_up), { viewModel.movePolicy(policy.id, -1) },
+                        enabled = idle && index > 0)
+                    Spacer(Modifier.width(8.dp))
+                    CouiSmallButton(stringResource(R.string.chain_policy_move_down), { viewModel.movePolicy(policy.id, 1) },
+                        enabled = idle && index < chain.policies.lastIndex)
+                }
+            }
+        }
+    }
+}
+
+/** 策略组摘要：匹配范围 → 出口，开启国内直连时附注。 */
+@Composable
+private fun policySummary(policy: ChainPolicy): String {
+    val exit = when (policy.exit) {
+        ChainPolicy.EXIT_FRONT -> stringResource(R.string.chain_policy_exit_front)
+        ChainPolicy.EXIT_DIRECT -> stringResource(R.string.chain_policy_exit_direct)
+        else -> policy.landing
+    }
+    val scope = when {
+        !policy.isBlacklist -> stringResource(R.string.chain_policy_summary_whitelist, policy.packages.size, exit)
+        policy.packages.isEmpty() -> stringResource(R.string.chain_policy_summary_all, exit)
+        else -> stringResource(R.string.chain_policy_summary_blacklist, policy.packages.size, exit)
+    }
+    return if (policy.domesticDirect && policy.exit != ChainPolicy.EXIT_DIRECT) "$scope · ${stringResource(R.string.chain_policy_domestic)}" else scope
 }
 
 @Composable

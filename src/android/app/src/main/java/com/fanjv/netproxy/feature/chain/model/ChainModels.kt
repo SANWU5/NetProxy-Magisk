@@ -27,14 +27,31 @@ internal data class ChainLanding(
     val tls: Boolean = false,
 )
 
+/**
+ * 策略组：按应用匹配（白名单只匹配勾选的应用，黑名单匹配勾选应用以外的全部应用），
+ * 匹配到的流量经由组的出口。多个组按列表顺序匹配，先命中的组生效。
+ */
 @Serializable
 internal data class ChainPolicy(
-    val id: String,
+    val id: String = "",
     val name: String,
     val enabled: Boolean,
-    val landing: String,
+    val match: String = MATCH_WHITELIST,
+    val exit: String = EXIT_LANDING,
+    val landing: String = "",
+    @SerialName("domestic_direct") val domesticDirect: Boolean = false,
     val packages: List<String> = emptyList(),
-)
+) {
+    val isBlacklist: Boolean get() = match == MATCH_BLACKLIST
+
+    companion object {
+        const val MATCH_WHITELIST = "whitelist"
+        const val MATCH_BLACKLIST = "blacklist"
+        const val EXIT_LANDING = "landing"
+        const val EXIT_FRONT = "front"
+        const val EXIT_DIRECT = "direct"
+    }
+}
 
 /**
  * 指定的链式前置：smartId 指定智能分组或自建分组的自动选择；否则 groupId 指定节点分组，

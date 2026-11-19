@@ -4,6 +4,7 @@ import com.fanjv.netproxy.feature.smart.model.SmartNodeRef
 import com.fanjv.netproxy.feature.smart.model.SmartGroup
 import com.fanjv.netproxy.feature.smart.data.SmartGroupRepository
 import com.fanjv.netproxy.feature.chain.model.ChainFront
+import com.fanjv.netproxy.feature.chain.model.ChainPolicy
 import com.fanjv.netproxy.feature.catalog.model.CatalogNodeGroup
 import com.fanjv.netproxy.feature.catalog.data.NodeRepository
 import androidx.lifecycle.ViewModel
@@ -173,17 +174,25 @@ internal class ChainViewModel(
         chain
     }
 
-    fun savePolicy(id: String?, name: String, enabled: Boolean, landing: String, packages: List<String>, onDone: () -> Unit) =
+    /** 新建（id 为空）或保存策略组。 */
+    fun savePolicy(policy: ChainPolicy, onDone: () -> Unit) =
         write("policy", onDone = onDone) {
-            if (id == null) repository.createPolicy(name, enabled, landing, packages)
-            else repository.savePolicy(id, name, enabled, landing, packages)
+            if (policy.id.isEmpty()) repository.createPolicy(policy) else repository.savePolicy(policy)
         }
 
     fun setPolicyEnabled(id: String, enabled: Boolean) {
         val policy = _state.value.chain.policies.firstOrNull { it.id == id } ?: return
-        write("policy:$id", announce = false) {
-            repository.savePolicy(id, policy.name, enabled, policy.landing, policy.packages)
-        }
+        write("policy:$id", announce = false) { repository.savePolicy(policy.copy(enabled = enabled)) }
+    }
+
+    /** 把策略组上移或下移一位；顺序决定匹配优先级，先命中的组生效。 */
+    fun movePolicy(id: String, offset: Int) {
+        val ids = _state.value.chain.policies.map { it.id }.toMutableList()
+        val from = ids.indexOf(id)
+        val to = from + offset
+        if (from < 0 || to !in ids.indices) return
+        ids.add(to, ids.removeAt(from))
+        write("policy:$id", announce = false) { repository.orderPolicies(ids) }
     }
 
     fun deletePolicy(id: String, onDone: () -> Unit) = write("policy", onDone = onDone) { repository.deletePolicy(id) }

@@ -20,6 +20,7 @@ import com.fanjv.netproxy.R
 import com.fanjv.netproxy.core.di.netProxyViewModel
 import com.fanjv.netproxy.feature.apps.data.AppIconCache
 import com.fanjv.netproxy.feature.chain.model.ChainAppChoice
+import com.fanjv.netproxy.feature.chain.model.ChainPolicy
 import dev.aiingjie.coui.CouiAppIcon
 import dev.aiingjie.coui.CouiButton
 import dev.aiingjie.coui.CouiButtonStyle
@@ -38,7 +39,7 @@ import dev.aiingjie.coui.couiCardItems
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-/** 新建或编辑一个按应用策略：名称、启用、后置代理以及要接管的应用。id 为空表示新建。 */
+/** 新建或编辑一个策略组：名称、启用、匹配方式、出口、国内直连以及应用。id 为空表示新建。 */
 @Composable
 internal fun ChainPolicyScreen(
     id: String,
@@ -55,6 +56,9 @@ internal fun ChainPolicyScreen(
     var name by rememberSaveable(id) { mutableStateOf("") }
     var enabled by rememberSaveable(id) { mutableStateOf(true) }
     var landing by rememberSaveable(id) { mutableStateOf("") }
+    var match by rememberSaveable(id) { mutableStateOf(ChainPolicy.MATCH_WHITELIST) }
+    var exit by rememberSaveable(id) { mutableStateOf(ChainPolicy.EXIT_LANDING) }
+    var domesticDirect by rememberSaveable(id) { mutableStateOf(true) }
     var packagesText by rememberSaveable(id) { mutableStateOf("") }
     var query by rememberSaveable(id) { mutableStateOf("") }
     val packages = packagesText.split('\n').filter(String::isNotEmpty)
@@ -71,6 +75,9 @@ internal fun ChainPolicyScreen(
             name = existing.name
             enabled = existing.enabled
             landing = existing.landing
+            match = existing.match
+            exit = existing.exit
+            domesticDirect = existing.domesticDirect
             packagesText = existing.packages.joinToString("\n")
         } else {
             landing = chain.manual.ifEmpty { chain.landings.firstOrNull()?.tag.orEmpty() }
@@ -125,16 +132,43 @@ internal fun ChainPolicyScreen(
             }
         }
         item {
-            CouiGroup(title = stringResource(R.string.chain_policy_landing)) {
+            CouiGroup(
+                title = stringResource(R.string.chain_policy_match),
+                footer = stringResource(if (match == ChainPolicy.MATCH_BLACKLIST) R.string.chain_policy_match_blacklist_footer
+                    else R.string.chain_policy_match_whitelist_footer),
+            ) {
+                CouiRadioRow(stringResource(R.string.chain_policy_match_whitelist), match == ChainPolicy.MATCH_WHITELIST,
+                    { match = ChainPolicy.MATCH_WHITELIST })
+                CouiRadioRow(stringResource(R.string.chain_policy_match_blacklist), match == ChainPolicy.MATCH_BLACKLIST,
+                    { match = ChainPolicy.MATCH_BLACKLIST })
+            }
+        }
+        item {
+            CouiGroup(title = stringResource(R.string.chain_policy_exit)) {
                 chain.landings.forEach { option ->
-                    CouiRadioRow(option.tag, landing == option.tag, { landing = option.tag })
+                    CouiRadioRow(option.tag, exit == ChainPolicy.EXIT_LANDING && landing == option.tag,
+                        { exit = ChainPolicy.EXIT_LANDING; landing = option.tag })
                 }
+                CouiRadioRow(stringResource(R.string.chain_policy_exit_front), exit == ChainPolicy.EXIT_FRONT,
+                    { exit = ChainPolicy.EXIT_FRONT }, summary = stringResource(R.string.chain_policy_exit_front_summary))
+                CouiRadioRow(stringResource(R.string.chain_policy_exit_direct), exit == ChainPolicy.EXIT_DIRECT,
+                    { exit = ChainPolicy.EXIT_DIRECT })
+            }
+        }
+        item {
+            CouiGroup(footer = stringResource(R.string.chain_policy_domestic_footer)) {
+                CouiSwitchRow(stringResource(R.string.chain_policy_domestic), domesticDirect && exit != ChainPolicy.EXIT_DIRECT,
+                    { domesticDirect = it }, enabled = exit != ChainPolicy.EXIT_DIRECT)
             }
         }
         if (packages.isNotEmpty()) {
             item {
-                CouiGroup(title = stringResource(R.string.chain_policy_selected, packages.size),
-                    footer = stringResource(R.string.chain_policy_selected_footer)) {
+                CouiGroup(
+                    title = stringResource(if (match == ChainPolicy.MATCH_BLACKLIST) R.string.chain_policy_excluded
+                        else R.string.chain_policy_selected, packages.size),
+                    footer = stringResource(if (match == ChainPolicy.MATCH_BLACKLIST) R.string.chain_policy_excluded_footer
+                        else R.string.chain_policy_selected_footer),
+                ) {
                     packages.forEach { packageName ->
                         val app = labels[packageName]
                         CouiRow(
@@ -175,10 +209,20 @@ internal fun ChainPolicyScreen(
             CouiButton(
                 text = stringResource(if (saving) R.string.chain_saving else R.string.chain_save),
                 onClick = {
-                    viewModel.savePolicy(existing?.id, name.trim(), enabled, landing, packages, onBack)
+                    viewModel.savePolicy(
+                        ChainPolicy(
+                            id = existing?.id.orEmpty(), name = name.trim(), enabled = enabled, match = match, exit = exit,
+                            landing = if (exit == ChainPolicy.EXIT_LANDING) landing else "",
+                            domesticDirect = domesticDirect && exit != ChainPolicy.EXIT_DIRECT, packages = packages,
+                        ),
+                        onBack,
+                    )
                 },
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 24.dp),
-                enabled = !saving && initialized && name.isNotBlank() && landing.isNotEmpty() && (!enabled || packages.isNotEmpty()),
+                // 白名单组启用时至少要选一个应用；黑名单组不选应用表示全部应用。
+                enabled = !saving && initialized && name.isNotBlank() &&
+                    (exit != ChainPolicy.EXIT_LANDING || landing.isNotEmpty()) &&
+                    (!enabled || match == ChainPolicy.MATCH_BLACKLIST || packages.isNotEmpty()),
             )
         }
         if (existing != null) {

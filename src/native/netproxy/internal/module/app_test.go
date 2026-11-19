@@ -118,11 +118,9 @@ func TestPrepareLogOverrideFollowsLoggingSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prepared.Log != "" {
-		t.Fatalf("记录日志时不应覆盖主配置的日志设置: %s", prepared.Log)
-	}
-	if _, err := os.Stat(filepath.Join(options.RuntimeDir, "log.json")); !os.IsNotExist(err) {
-		t.Fatalf("旧日志覆盖未清理: %v", err)
+	// 记录日志时日志覆盖仍然存在但为空配置：传给核心的文件列表不变，原位重载才能读到新设置。
+	if content, err := os.ReadFile(prepared.Log); err != nil || string(content) != emptyOverlay {
+		t.Fatalf("记录日志时日志覆盖应为空配置: %q %v", content, err)
 	}
 }
 
@@ -211,11 +209,13 @@ func TestPrepareWritesChainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prepared.Route != "" {
-		t.Fatalf("手动模式不应生成策略路由: %s", prepared.Route)
+	// 不使用策略时策略路由仍然存在但为空配置，原位重载不会因文件缺失失败。
+	if content, err := os.ReadFile(prepared.Route); err != nil || string(content) != emptyOverlay {
+		t.Fatalf("手动模式的策略路由应为空配置: %q %v", content, err)
 	}
-	if _, err := os.Stat(filepath.Join(options.RuntimeDir, "route.json")); !os.IsNotExist(err) {
-		t.Fatalf("旧策略路由未清理: %v", err)
+	args, err := preparedConfigArgs(options, prepared)
+	if err != nil || len(args) != 12 {
+		t.Fatalf("配置文件列表应始终包含日志覆盖与策略路由: %v %v", args, err)
 	}
 }
 

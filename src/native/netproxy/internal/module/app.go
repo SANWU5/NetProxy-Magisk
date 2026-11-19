@@ -173,15 +173,15 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 		return PrepareResult{}, err
 	}
 	// 策略路由必须排在主配置规则之前才能先于兜底规则命中，排序方式见 preparedConfigArgs。
+	// 策略路由文件始终存在，没有策略时为空配置：核心原位重载按启动时的文件列表重新读取，
+	// 文件被删除会让重载失败，新出现的文件也不会被读取。
 	routePath := filepath.Join(options.RuntimeDir, "route.json")
+	routeContent := []byte(emptyOverlay)
 	if chainRuntime != nil && chainRuntime.Route != nil {
-		if err := provider.WriteAtomic(routePath, chainRuntime.Route, 0o600); err != nil {
-			return PrepareResult{}, err
-		}
-	} else if err := os.Remove(routePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		routeContent = chainRuntime.Route
+	}
+	if err := provider.WriteAtomic(routePath, routeContent, 0o600); err != nil {
 		return PrepareResult{}, err
-	} else {
-		routePath = ""
 	}
 	logPath, err := prepareLogOverride(options)
 	if err != nil {
@@ -226,15 +226,17 @@ func prepareLogOverride(options Options) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// 日志覆盖文件同样始终存在（记录核心日志时为空配置），切换日志开关后原位重载才能生效。
 	path := filepath.Join(options.RuntimeDir, "log.json")
+	content := logOverride
 	if module.Logging {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return "", err
-		}
-		return "", nil
+		content = emptyOverlay
 	}
-	return path, provider.WriteAtomic(path, []byte(logOverride), 0o600)
+	return path, provider.WriteAtomic(path, []byte(content), 0o600)
 }
+
+// emptyOverlay 是不改变任何设置的覆盖配置，让传给核心的配置文件列表保持不变。
+const emptyOverlay = "{}\n"
 
 func (options Options) chainDir() string {
 	return paths.New(options.ModuleDir).Chain()

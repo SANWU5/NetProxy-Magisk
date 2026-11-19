@@ -6,6 +6,7 @@ import (
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 )
 
@@ -26,7 +27,8 @@ type Runtime struct {
 }
 
 // BuildRuntime 根据持久状态生成运行时片段。没有后置代理时返回 nil。
-func BuildRuntime(ctx context.Context, dir string, state State) (*Runtime, error) {
+// domestic 是主配置中可用的中国大陆规则集标签，供开启「国内直连」的策略组使用；为空时这些组全部经由出口。
+func BuildRuntime(ctx context.Context, dir string, state State, domestic ...string) (*Runtime, error) {
 	if err := state.Validate(); err != nil {
 		return nil, err
 	}
@@ -67,7 +69,7 @@ func BuildRuntime(ctx context.Context, dir string, state State) (*Runtime, error
 		result.LandingTags = append(result.LandingTags, runtimeTag)
 	}
 	if UsesPolicies(state.Mode) {
-		result.Route, err = routeOverlay(state)
+		result.Route, err = routeOverlay(state, domestic)
 		if err != nil {
 			return nil, err
 		}
@@ -93,7 +95,8 @@ func landingObjects(dir string) ([]map[string]jsontext.Value, error) {
 // routeOverlay 生成先于主配置加载的策略路由。
 // 主配置的 Direct 模式与 DNS 劫持必须保持优先：Wi-Fi 绕过时策略应用同样直连，
 // 应用自身的 DNS 查询仍由内核接管，不能被送进后置代理。
-func routeOverlay(state State) ([]byte, error) {
+// domestic 是主配置中已定义的中国大陆规则集，组开启「国内直连」时这些目标先于组出口直连。
+func routeOverlay(state State, domestic []string) ([]byte, error) {
 	rules := []map[string]any{
 		{"clash_mode": "Direct", "action": "route", "outbound": "direct"},
 		{
@@ -108,15 +111,37 @@ func routeOverlay(state State) ([]byte, error) {
 		{"ip_is_private": true, "action": "route", "outbound": "direct"},
 	}
 	policyRules := 0
+	// 组按列表顺序生成规则，sing-box 自上而下匹配，先命中的组生效。
 	for _, policy := range state.Policies {
-		if !policy.Enabled || len(policy.Packages) == 0 {
+		if !policy.Enabled {
 			continue
 		}
-		rules = append(rules, map[string]any{
-			"package_name": policy.Packages,
-			"action":       "route",
-			"outbound":     LandingTag(policy.Landing),
-		})
+		var match map[string]any
+		switch {
+		case policy.MatchMode() == MatchWhitelist:
+			if len(policy.Packages) == 0 {
+				continue
+			}
+			match = map[string]any{"package_name": policy.Packages}
+		case len(policy.Packages) > 0:
+			match = map[string]any{"package_name": policy.Packages, "invert": true}
+		default:
+			// 不勾选应用的黑名单组匹配全部流量。
+			match = map[string]any{"network": []string{"tcp", "udp"}}
+		}
+		outbound := policy.exitTag()
+		if policy.DomesticDirect && outbound != "direct" && len(domestic) > 0 {
+			rules = append(rules, map[string]any{
+				"type":     "logical",
+				"mode":     "and",
+				"rules":    []map[string]any{match, {"rule_set": domestic}},
+				"action":   "route",
+				"outbound": "direct",
+			})
+		}
+		rule := maps.Clone(match)
+		rule["action"], rule["outbound"] = "route", outbound
+		rules = append(rules, rule)
 		policyRules++
 	}
 	if policyRules == 0 {

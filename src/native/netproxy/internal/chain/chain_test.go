@@ -122,11 +122,69 @@ func TestUpdateValidatesReferencesAndPersists(t *testing.T) {
 	if err != nil || renamed.Manual != "主后置" {
 		t.Fatalf("重命名未同步手动引用: %#v %v", renamed.Settings, err)
 	}
+	// 不同策略组可以包含同一应用，按顺序先命中的组生效。
 	if _, _, _, err := Update(t.Context(), dir, func(state *State) error {
 		state.Policies = append(state.Policies, Policy{ID: "p2", Name: "重复", Enabled: true, Landing: "主后置", Packages: []string{"com.example.app"}})
 		return nil
-	}); err == nil {
-		t.Fatal("同一应用不能出现在两个启用的策略中")
+	}); err != nil {
+		t.Fatalf("重叠的策略组应被接受: %v", err)
+	}
+	for name, policy := range map[string]Policy{
+		"空白名单": {ID: "p3", Name: "空", Enabled: true, Landing: "主后置"},
+		"前置带后置": {ID: "p3", Name: "前置", Enabled: true, Exit: ExitFront, Landing: "主后置", Match: MatchBlacklist},
+		"未知匹配":  {ID: "p3", Name: "未知", Match: "everything", Landing: "主后置"},
+		"未知出口":  {ID: "p3", Name: "未知", Exit: "proxy"},
+	} {
+		if _, _, _, err := Update(t.Context(), dir, func(state *State) error {
+			state.Policies = append(state.Policies, policy)
+			return nil
+		}); err == nil {
+			t.Fatalf("%s 应被拒绝", name)
+		}
+	}
+	// 不勾选应用的黑名单组表示全部应用，可以启用；直连出口不需要后置。
+	if _, _, _, err := Update(t.Context(), dir, func(state *State) error {
+		state.Policies = append(state.Policies, Policy{ID: "p3", Name: "其余", Enabled: true, Match: MatchBlacklist, Exit: ExitDirect})
+		return nil
+	}); err != nil {
+		t.Fatalf("空黑名单直连组应被接受: %v", err)
+	}
+}
+
+func TestRouteOverlayOrdersGroupsAndDomesticDirect(t *testing.T) {
+	state := State{Settings: Settings{Mode: ModePolicy, Policies: []Policy{
+		{ID: "a", Name: "白", Enabled: true, Landing: "L", Packages: []string{"com.a.app"}, DomesticDirect: true},
+		{ID: "b", Name: "关", Enabled: false, Landing: "L", Packages: []string{"com.b.app"}},
+		{ID: "c", Name: "黑", Enabled: true, Match: MatchBlacklist, Exit: ExitFront, Packages: []string{"com.c.app"}},
+		{ID: "d", Name: "全", Enabled: true, Match: MatchBlacklist, Exit: ExitDirect, DomesticDirect: true},
+	}}}
+	content, err := routeOverlay(state, []string{"geosite/cn", "geoip/cn"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Route struct {
+			Rules []map[string]any `json:"rules"`
+		} `json:"route"`
+	}
+	if err := json.Unmarshal(content, &document); err != nil {
+		t.Fatal(err)
+	}
+	rules := document.Route.Rules[3:]
+	if len(rules) != 4 {
+		t.Fatalf("规则数量错误: %s", content)
+	}
+	if rules[0]["type"] != "logical" || rules[0]["outbound"] != "direct" {
+		t.Fatalf("国内直连规则应排在组出口之前: %v", rules[0])
+	}
+	if rules[1]["outbound"] != LandingTag("L") || rules[1]["invert"] != nil {
+		t.Fatalf("白名单组规则错误: %v", rules[1])
+	}
+	if rules[2]["outbound"] != FrontTag || rules[2]["invert"] != true {
+		t.Fatalf("黑名单组应反选应用并经由前置: %v", rules[2])
+	}
+	if rules[3]["outbound"] != "direct" || rules[3]["network"] == nil {
+		t.Fatalf("空黑名单直连组应匹配全部流量且不重复生成国内直连: %v", rules[3])
 	}
 }
 

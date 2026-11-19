@@ -227,7 +227,7 @@ func ReadChain(ctx context.Context, options Options) (ChainView, error) {
 func chainView(state chain.State) ChainView {
 	view := ChainView{
 		Mode: state.Mode, Manual: state.Manual,
-		Landings: state.Summaries(), Policies: slices.Clone(state.Policies),
+		Landings: state.Summaries(), Policies: normalizedPolicies(state.Policies),
 		Delays: map[string]int32{},
 	}
 	if state.Front != nil {
@@ -325,11 +325,23 @@ func sameLandings(before, after []option.Outbound) bool {
 	})
 }
 
+// samePolicies 按顺序比较策略组：顺序决定匹配优先级，重排也需要重载核心。
 func samePolicies(before, after []chain.Policy) bool {
 	return slices.EqualFunc(before, after, func(left, right chain.Policy) bool {
+		left, right = left.Normalized(), right.Normalized()
 		return left.ID == right.ID && left.Name == right.Name && left.Enabled == right.Enabled &&
+			left.Match == right.Match && left.Exit == right.Exit && left.DomesticDirect == right.DomesticDirect &&
 			left.Landing == right.Landing && slices.Equal(left.Packages, right.Packages)
 	})
+}
+
+// normalizedPolicies 返回填好默认匹配方式与出口的策略组，客户端无需了解旧版数据格式。
+func normalizedPolicies(policies []chain.Policy) []chain.Policy {
+	result := make([]chain.Policy, len(policies))
+	for index, policy := range policies {
+		result[index] = policy.Normalized()
+	}
+	return result
 }
 
 // TestChainLandings 经由当前前置测试后置代理，同时单独测试前置节点；tag 为空时测试全部后置。

@@ -138,10 +138,13 @@ func (s *Server) testChainLandings(ctx context.Context, r *http.Request) (contra
 }
 
 type chainPolicyInput struct {
-	Name     string   `json:"name"`
-	Enabled  bool     `json:"enabled"`
-	Landing  string   `json:"landing"`
-	Packages []string `json:"packages"`
+	Name           string   `json:"name"`
+	Enabled        bool     `json:"enabled"`
+	Match          string   `json:"match"`
+	Exit           string   `json:"exit"`
+	Landing        string   `json:"landing"`
+	DomesticDirect bool     `json:"domestic_direct"`
+	Packages       []string `json:"packages"`
 }
 
 func (input chainPolicyInput) policy(id string) chain.Policy {
@@ -151,7 +154,28 @@ func (input chainPolicyInput) policy(id string) chain.Policy {
 			packages = append(packages, name)
 		}
 	}
-	return chain.Policy{ID: id, Name: strings.TrimSpace(input.Name), Enabled: input.Enabled, Landing: input.Landing, Packages: packages}
+	// 旧版客户端不传匹配方式与出口：按白名单、经由后置代理处理，与之前的策略行为一致。
+	policy := chain.Policy{ID: id, Name: strings.TrimSpace(input.Name), Enabled: input.Enabled, Match: input.Match, Exit: input.Exit,
+		Landing: input.Landing, DomesticDirect: input.DomesticDirect, Packages: packages}
+	policy = policy.Normalized()
+	if policy.Exit != chain.ExitLanding {
+		policy.Landing = ""
+	}
+	return policy
+}
+
+// orderChainPolicies 按给定顺序重排策略组；顺序决定匹配优先级，先命中的组生效。
+func (s *Server) orderChainPolicies(ctx context.Context, r *http.Request) (contract.Result, error) {
+	var input struct {
+		IDs []string `json:"ids"`
+	}
+	if err := resourceDecode(r, &input); err != nil {
+		return contract.Result{}, err
+	}
+	data, err := module.UpdateChain(ctx, s.options, func(state *chain.State) error {
+		return state.ReorderPolicies(input.IDs)
+	})
+	return contract.Success("chain.policies_ordered", "策略组顺序已保存", data), chainError(err)
 }
 
 func (s *Server) addChainPolicy(ctx context.Context, r *http.Request) (contract.Result, error) {
@@ -164,7 +188,7 @@ func (s *Server) addChainPolicy(ctx context.Context, r *http.Request) (contract.
 		state.Policies = append(state.Policies, policy)
 		return nil
 	})
-	return contract.Success("chain.policy_created", "策略已创建", map[string]any{"chain": data, "policy": policy}), chainError(err)
+	return contract.Success("chain.policy_created", "策略组已创建", map[string]any{"chain": data, "policy": policy}), chainError(err)
 }
 
 func (s *Server) saveChainPolicy(ctx context.Context, r *http.Request) (contract.Result, error) {
@@ -176,12 +200,12 @@ func (s *Server) saveChainPolicy(ctx context.Context, r *http.Request) (contract
 	data, err := module.UpdateChain(ctx, s.options, func(state *chain.State) error {
 		index := state.FindPolicy(id)
 		if index < 0 {
-			return &contract.Error{Code: "chain.policy_not_found", Message: "策略不存在", HTTPStatus: http.StatusNotFound}
+			return &contract.Error{Code: "chain.policy_not_found", Message: "策略组不存在", HTTPStatus: http.StatusNotFound}
 		}
 		state.Policies[index] = input.policy(id)
 		return nil
 	})
-	return contract.Success("chain.policy_saved", "策略已保存", data), chainError(err)
+	return contract.Success("chain.policy_saved", "策略组已保存", data), chainError(err)
 }
 
 func (s *Server) deleteChainPolicy(ctx context.Context, r *http.Request) (contract.Result, error) {
@@ -192,10 +216,10 @@ func (s *Server) deleteChainPolicy(ctx context.Context, r *http.Request) (contra
 	data, err := module.UpdateChain(ctx, s.options, func(state *chain.State) error {
 		index := state.FindPolicy(id)
 		if index < 0 {
-			return &contract.Error{Code: "chain.policy_not_found", Message: "策略不存在", HTTPStatus: http.StatusNotFound}
+			return &contract.Error{Code: "chain.policy_not_found", Message: "策略组不存在", HTTPStatus: http.StatusNotFound}
 		}
 		state.Policies = slices.Delete(state.Policies, index, index+1)
 		return nil
 	})
-	return contract.Success("chain.policy_deleted", "策略已删除", data), chainError(err)
+	return contract.Success("chain.policy_deleted", "策略组已删除", data), chainError(err)
 }

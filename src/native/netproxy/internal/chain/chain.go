@@ -47,13 +47,68 @@ const (
 
 var packageNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$`)
 
-// Policy 让一组应用经由指定后置代理出网。
+// 策略组的应用匹配方式：白名单只匹配勾选的应用，黑名单匹配勾选应用以外的全部应用。
+const (
+	MatchWhitelist = "whitelist"
+	MatchBlacklist = "blacklist"
+)
+
+// 策略组的出口：经由后置代理、只经过前置节点，或直连。
+const (
+	ExitLanding = "landing"
+	ExitFront   = "front"
+	ExitDirect  = "direct"
+)
+
+// Policy 是一个策略组：匹配到的应用流量经由组的出口出网。多个组按列表顺序匹配，先命中的组生效。
 type Policy struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	Enabled  bool     `json:"enabled"`
-	Landing  string   `json:"landing"`
-	Packages []string `json:"packages"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	// Match 为空表示旧版策略，按白名单处理。
+	Match string `json:"match,omitzero"`
+	// Exit 为空表示旧版策略，经由 Landing 出网。
+	Exit string `json:"exit,omitzero"`
+	// Landing 只在出口为后置代理时使用。
+	Landing string `json:"landing"`
+	// DomesticDirect 让中国大陆网站直连而不经过组的出口；旧版策略没有这个字段，保持全部经由出口。
+	DomesticDirect bool     `json:"domestic_direct,omitzero"`
+	Packages       []string `json:"packages"`
+}
+
+// MatchMode 返回匹配方式；旧版策略没有这个字段，按白名单处理。
+func (p Policy) MatchMode() string {
+	if p.Match == "" {
+		return MatchWhitelist
+	}
+	return p.Match
+}
+
+// ExitKind 返回出口；旧版策略没有这个字段，经由后置代理。
+func (p Policy) ExitKind() string {
+	if p.Exit == "" {
+		return ExitLanding
+	}
+	return p.Exit
+}
+
+// Normalized 返回填好默认匹配方式与出口的副本，供客户端展示。
+func (p Policy) Normalized() Policy {
+	p.Match, p.Exit = p.MatchMode(), p.ExitKind()
+	p.Packages = slices.Clone(p.Packages)
+	return p
+}
+
+// exitTag 返回组出口在运行时出站图中的标签。
+func (p Policy) exitTag() string {
+	switch p.ExitKind() {
+	case ExitFront:
+		return FrontTag
+	case ExitDirect:
+		return "direct"
+	default:
+		return LandingTag(p.Landing)
+	}
 }
 
 // Front 固定链式前置：SmartID 指定智能分组或自建分组的自动选择；否则 GroupID 指定节点分组，
@@ -200,41 +255,48 @@ func (state State) Validate() error {
 		return errors.New("开启链式代理前需要先导入至少一个后置代理")
 	}
 	ids := make(map[string]struct{}, len(state.Policies))
-	owners := make(map[string]string)
 	for _, policy := range state.Policies {
 		if strings.TrimSpace(policy.ID) == "" {
-			return errors.New("策略缺少 id")
+			return errors.New("策略组缺少 id")
 		}
 		if _, exists := ids[policy.ID]; exists {
-			return fmt.Errorf("策略 id 重复: %s", policy.ID)
+			return fmt.Errorf("策略组 id 重复: %s", policy.ID)
 		}
 		ids[policy.ID] = struct{}{}
 		if err := ValidateName(policy.Name); err != nil {
-			return fmt.Errorf("策略名称无效: %w", err)
+			return fmt.Errorf("策略组名称无效: %w", err)
 		}
-		if _, ok := tags[policy.Landing]; !ok {
-			return fmt.Errorf("策略 %q 的后置代理 %q 不存在", policy.Name, policy.Landing)
+		switch policy.MatchMode() {
+		case MatchWhitelist, MatchBlacklist:
+		default:
+			return fmt.Errorf("策略组 %q 的匹配方式只能是 whitelist 或 blacklist", policy.Name)
 		}
+		switch policy.ExitKind() {
+		case ExitLanding:
+			if _, ok := tags[policy.Landing]; !ok {
+				return fmt.Errorf("策略组 %q 的后置代理 %q 不存在", policy.Name, policy.Landing)
+			}
+		case ExitFront, ExitDirect:
+			if policy.Landing != "" {
+				return fmt.Errorf("策略组 %q 不经由后置代理时不能指定后置", policy.Name)
+			}
+		default:
+			return fmt.Errorf("策略组 %q 的出口只能是 landing、front 或 direct", policy.Name)
+		}
+		// 不同组可以包含同一应用：按列表顺序匹配，先命中的组生效，客户端据此显示应用实际所在的组。
 		seen := make(map[string]struct{}, len(policy.Packages))
 		for _, name := range policy.Packages {
 			if !packageNamePattern.MatchString(name) {
-				return fmt.Errorf("策略 %q 包含无效包名 %q", policy.Name, name)
+				return fmt.Errorf("策略组 %q 包含无效包名 %q", policy.Name, name)
 			}
 			if _, exists := seen[name]; exists {
-				return fmt.Errorf("策略 %q 重复包含应用 %s", policy.Name, name)
+				return fmt.Errorf("策略组 %q 重复包含应用 %s", policy.Name, name)
 			}
 			seen[name] = struct{}{}
-			if !policy.Enabled {
-				continue
-			}
-			// 同一应用只能命中一个后置，否则结果取决于规则顺序，用户无法从界面判断。
-			if owner, exists := owners[name]; exists {
-				return fmt.Errorf("应用 %s 同时出现在策略 %q 和 %q 中", name, owner, policy.Name)
-			}
-			owners[name] = policy.Name
 		}
-		if policy.Enabled && len(policy.Packages) == 0 {
-			return fmt.Errorf("启用的策略 %q 至少需要选择一个应用", policy.Name)
+		// 黑名单组不勾选应用表示匹配全部应用；白名单组没有应用就什么也匹配不到。
+		if policy.Enabled && policy.MatchMode() == MatchWhitelist && len(policy.Packages) == 0 {
+			return fmt.Errorf("启用的白名单策略组 %q 至少需要选择一个应用", policy.Name)
 		}
 	}
 	return nil
@@ -374,4 +436,23 @@ func save(ctx context.Context, dir string, state State) error {
 		return err
 	}
 	return provider.WriteAtomic(settingsPath(dir), append(content, '\n'), 0o600)
+}
+
+// ReorderPolicies 按 ids 的顺序重排策略组；ids 必须恰好包含现有的全部组。组的顺序决定匹配优先级。
+func (state *State) ReorderPolicies(ids []string) error {
+	if len(ids) != len(state.Policies) {
+		return &InvalidError{Err: errors.New("策略组顺序必须包含全部策略组")}
+	}
+	ordered := make([]Policy, 0, len(ids))
+	used := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		index := state.FindPolicy(id)
+		if index < 0 || used[id] {
+			return &InvalidError{Err: fmt.Errorf("策略组顺序无效: %s", id)}
+		}
+		used[id] = true
+		ordered = append(ordered, state.Policies[index])
+	}
+	state.Policies = ordered
+	return nil
 }

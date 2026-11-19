@@ -66,6 +66,7 @@ func (s *Server) registerResources() {
 	s.route("PUT /api/v1/smart-groups/{id}/selection", resourceWriteTimeout, true, s.selectSmartGroupNode)
 	s.route("DELETE /api/v1/smart-groups/{id}", resourceWriteTimeout, true, s.deleteSmartGroup)
 	s.route("POST /api/v1/chain/policies", resourceWriteTimeout, true, s.addChainPolicy)
+	s.route("PUT /api/v1/chain/policies/order", resourceWriteTimeout, true, s.orderChainPolicies)
 	s.route("PUT /api/v1/chain/policies/{id}", resourceWriteTimeout, true, s.saveChainPolicy)
 	s.route("DELETE /api/v1/chain/policies/{id}", resourceWriteTimeout, true, s.deleteChainPolicy)
 	s.route("GET /api/v1/selection", resourceReadTimeout, false, s.readSelection)

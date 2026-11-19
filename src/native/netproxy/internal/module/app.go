@@ -147,7 +147,7 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 	if err != nil {
 		return PrepareResult{}, err
 	}
-	chainRuntime, err := chain.BuildRuntime(ctx, options.chainDir(), chainState)
+	chainRuntime, err := chain.BuildRuntime(ctx, options.chainDir(), chainState, domesticRuleSets(options)...)
 	if err != nil {
 		return PrepareResult{}, err
 	}
@@ -197,6 +197,13 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 		}
 	}
 	config, err = config.WithDNSBypass(network.DesiredMode == "Direct")
+	if err != nil {
+		return PrepareResult{}, err
+	}
+	// 启用的白名单策略组中的应用必须被接管，否则分应用代理跳过它们时策略组看不到这些流量。
+	config.App, err = interceptPolicyApps(config.App, chainState, func(refs []inbound.PackageRef) (inbound.PackageUIDResolution, error) {
+		return inbound.ResolvePackageUIDs(ctx, refs)
+	})
 	if err != nil {
 		return PrepareResult{}, err
 	}

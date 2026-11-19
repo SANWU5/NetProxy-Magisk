@@ -222,9 +222,14 @@ func TestResourcesChainLandingsModesAndPolicies(t *testing.T) {
 	if created.Policy.ID == "" || len(created.Policy.Packages) != 1 || len(created.Chain.Policies) != 1 {
 		t.Fatalf("策略创建结果错误: %+v", created)
 	}
-	response, result = resourceRequest(t, server, "POST", "/api/v1/chain/policies", `{"name":"冲突","enabled":true,"landing":"办公","packages":["com.example.app"]}`)
-	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(result.Message, "com.example.app") {
-		t.Fatalf("同一应用出现在两个策略中应被拒绝: %s", response.Body.String())
+	// 不同策略组可以包含同一应用（按顺序先命中的生效）；启用的白名单组必须选择应用。
+	response, result = resourceRequest(t, server, "POST", "/api/v1/chain/policies", `{"name":"空组","enabled":true,"landing":"办公","packages":[]}`)
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(result.Message, "至少需要选择一个应用") {
+		t.Fatalf("启用的空白名单组应被拒绝: %s", response.Body.String())
+	}
+	response, _ = resourceRequest(t, server, "PUT", "/api/v1/chain/policies/order", `{"ids":["missing"]}`)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("无效的策略组顺序应被拒绝: %s", response.Body.String())
 	}
 	response, result = resourceRequest(t, server, "DELETE", "/api/v1/chain/landings?tag="+url.QueryEscape("办公"), "")
 	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(result.Message, "手动模式") {

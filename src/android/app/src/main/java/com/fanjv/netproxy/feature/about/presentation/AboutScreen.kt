@@ -13,10 +13,11 @@ import com.fanjv.netproxy.navigation.LocalNavigator
 internal fun AboutScreen() {
     val navigator = LocalNavigator.current
     val uriHandler = LocalUriHandler.current
+    // 本分支是非官方 fork：源码与问题反馈指向本仓库，原项目只作为致谢链接，不引导到官方交流群。
     val linksHtml = stringResource(
         id = R.string.about_source_code,
+        "<b><a href=\"https://github.com/SANWU5/NetProxy-Magisk\">GitHub</a></b>",
         "<b><a href=\"https://github.com/Fanju6/NetProxy-Magisk\">GitHub</a></b>",
-        "<b><a href=\"https://t.me/NetProxy_Magisk\">Telegram</a></b>",
     )
 
     AboutScreenCoui(

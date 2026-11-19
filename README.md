@@ -10,25 +10,35 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Fanju6/NetProxy-Magisk/releases">
-    <img src="https://img.shields.io/github/v/release/Fanju6/NetProxy-Magisk?style=flat-square&label=Release&color=blue" alt="Latest Release" />
+  <a href="https://github.com/SANWU5/NetProxy-Magisk/releases/tag/nightly">
+    <img src="https://img.shields.io/github/v/release/SANWU5/NetProxy-Magisk?include_prereleases&style=flat-square&label=Release&color=blue" alt="Latest Release" />
   </a>
-  <a href="https://github.com/Fanju6/NetProxy-Magisk/releases">
-    <img src="https://img.shields.io/github/downloads/Fanju6/NetProxy-Magisk/total?style=flat-square&color=green" alt="Downloads" />
+  <a href="https://github.com/Fanju6/NetProxy-Magisk">
+    <img src="https://img.shields.io/badge/Fork_of-Fanju6%2FNetProxy--Magisk-lightgrey?style=flat-square" alt="Fork of Fanju6/NetProxy-Magisk" />
   </a>
   <img src="https://img.shields.io/badge/Core-sing--box-blueviolet?style=flat-square" alt="sing-box Core" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/Fanju6/NetProxy-Magisk/releases">下载模块与管理器</a> ·
-  <a href="https://www.netproxy.store/">使用文档</a> ·
-  <a href="src/android/">管理器源码</a> ·
-  <a href="https://t.me/NetProxy_Magisk">Telegram</a>
+  <a href="https://github.com/SANWU5/NetProxy-Magisk/releases/tag/nightly">下载本分支开发包</a> ·
+  <a href="docs/guide/chain-proxy.md">链式代理</a> ·
+  <a href="docs/guide/smart-groups.md">智能分组</a> ·
+  <a href="https://www.netproxy.store/">官方文档</a> ·
+  <a href="https://github.com/SANWU5/NetProxy-Magisk/issues">问题反馈</a>
 </p>
 
 <p align="center">
   中文 | <a href="README_EN.md">English</a>
 </p>
+
+> [!IMPORTANT]
+> **这是非官方分支（fork），由 AiingJie 维护，与原作者无关。** 原项目是 [Fanju6/NetProxy-Magisk](https://github.com/Fanju6/NetProxy-Magisk)，作者 Fanju6。
+>
+> - **代码基础**：官方 8.6.2，加 chenran0408 的 8.6.3–8.6.5，再加本分支自 2026-11 起的修改，详见[更新日志](docs/changelog.md)。
+> - **主要改动**：全局链式代理（前置 → 后置、按应用策略、链路测速）、按地区的智能分组、COUI（ColorOS 风格）管理器界面、`netproxyctl` 与 WebUI 的 `chain`、`smart` 命令、内置规则跟随分支每日更新、无遥测构建。
+> - **独立签名**：与官方版不能直接互相覆盖安装，切换前请先卸载另一版的管理器；本分支不会从官方渠道更新。
+> - **问题反馈**：请到[本仓库 Issues](https://github.com/SANWU5/NetProxy-Magisk/issues)，不要向原作者或官方群反馈本分支的问题。
+> - **许可证**：与原项目相同，为 GPL-3.0；原版权声明见 [NOTICE](NOTICE)。
 
 ---
 
@@ -59,7 +69,7 @@ NetProxy 是面向已 Root Android 设备的系统级透明代理模块，支持
 
 默认使用 eBPF，可在“设置 → 入站设置”中选择 TUN。设备能力要求与安装选项见[安装与升级](https://www.netproxy.store/guide/installation)。
 
-1. 从 [Releases](https://github.com/Fanju6/NetProxy-Magisk/releases) 下载 `NetProxy_<版本>_<构建号>.zip`，内含模块和 Android 管理器。
+1. 从本分支的 [nightly 开发包](https://github.com/SANWU5/NetProxy-Magisk/releases/tag/nightly) 下载 `NetProxy_<版本>_<构建号>.zip`，内含模块和 Android 管理器。
 2. 在 Root 管理器中刷入，按提示选择数据保留方式及是否安装管理器；等待安装完成。
 3. 打开 Android 管理器，自动连接模块，在“节点”页导入节点，或在“订阅”页添加订阅。
 4. 在“节点”页选择分组与自动 / 手动节点，返回“仪表盘”开启服务。
@@ -120,9 +130,9 @@ tests/               契约与回归测试
 
 ## 交流与贡献
 
-- [Telegram 群组](https://t.me/NetProxy_Magisk)
-- [提交 Issue](https://github.com/Fanju6/NetProxy-Magisk/issues)
-- [提交 Pull Request](https://github.com/Fanju6/NetProxy-Magisk/pulls)
+- [本分支问题反馈](https://github.com/SANWU5/NetProxy-Magisk/issues)
+- [本分支 Pull Request](https://github.com/SANWU5/NetProxy-Magisk/pulls)
+- 原项目：[Fanju6/NetProxy-Magisk](https://github.com/Fanju6/NetProxy-Magisk)（官方版本的问题与交流请到原项目）
 
 ## 许可证
 

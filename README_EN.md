@@ -10,25 +10,35 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Fanju6/NetProxy-Magisk/releases">
-    <img src="https://img.shields.io/github/v/release/Fanju6/NetProxy-Magisk?style=flat-square&label=Release&color=blue" alt="Latest Release" />
+  <a href="https://github.com/SANWU5/NetProxy-Magisk/releases/tag/nightly">
+    <img src="https://img.shields.io/github/v/release/SANWU5/NetProxy-Magisk?include_prereleases&style=flat-square&label=Release&color=blue" alt="Latest Release" />
   </a>
-  <a href="https://github.com/Fanju6/NetProxy-Magisk/releases">
-    <img src="https://img.shields.io/github/downloads/Fanju6/NetProxy-Magisk/total?style=flat-square&color=green" alt="Downloads" />
+  <a href="https://github.com/Fanju6/NetProxy-Magisk">
+    <img src="https://img.shields.io/badge/Fork_of-Fanju6%2FNetProxy--Magisk-lightgrey?style=flat-square" alt="Fork of Fanju6/NetProxy-Magisk" />
   </a>
   <img src="https://img.shields.io/badge/Core-sing--box-blueviolet?style=flat-square" alt="sing-box Core" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/Fanju6/NetProxy-Magisk/releases">Download Module & Manager</a> ·
-  <a href="https://www.netproxy.store/">Documentation</a> ·
-  <a href="src/android/">Manager Source</a> ·
-  <a href="https://t.me/NetProxy_Magisk">Telegram</a>
+  <a href="https://github.com/SANWU5/NetProxy-Magisk/releases/tag/nightly">Download this fork's builds</a> ·
+  <a href="docs/guide/chain-proxy.md">Chain proxy</a> ·
+  <a href="docs/guide/smart-groups.md">Smart groups</a> ·
+  <a href="https://www.netproxy.store/">Official docs</a> ·
+  <a href="https://github.com/SANWU5/NetProxy-Magisk/issues">Report issues</a>
 </p>
 
 <p align="center">
   <a href="README.md">中文</a> | English
 </p>
+
+> [!IMPORTANT]
+> **This is an unofficial fork maintained by AiingJie and is not affiliated with the original author.** The original project is [Fanju6/NetProxy-Magisk](https://github.com/Fanju6/NetProxy-Magisk) by Fanju6.
+>
+> - **Based on**: official 8.6.2, plus chenran0408's 8.6.3–8.6.5, plus this fork's changes since 2026-11. See the [changelog](docs/changelog.md) (Chinese).
+> - **Main changes**: global chain proxy (front → landing, per-app policies, link speed test), region-based smart groups, a COUI (ColorOS-style) manager, `chain` and `smart` commands in `netproxyctl` and the WebUI, built-in rule sets that follow their branches and update daily, and builds without telemetry.
+> - **Separate signing key**: it cannot be installed over the official release or the other way round; uninstall the other manager first. This fork never updates from official channels.
+> - **Support**: please use [this repository's issues](https://github.com/SANWU5/NetProxy-Magisk/issues). Do not report this fork's problems to the original author or the official group.
+> - **License**: GPL-3.0, same as the original project; the original copyright notice is in [NOTICE](NOTICE).
 
 ---
 
@@ -59,7 +69,7 @@ Requires an `arm64-v8a` Android device with Magisk, KernelSU, or APatch. Traffic
 
 eBPF is selected by default. Choose TUN under **Settings → Inbound settings**. See [Installation and Upgrades](https://www.netproxy.store/guide/installation) for device requirements and installation options.
 
-1. Download `NetProxy_<version>_<build>.zip` from [Releases](https://github.com/Fanju6/NetProxy-Magisk/releases). It includes the module and Android Manager.
+1. Download `NetProxy_<version>_<build>.zip` from this fork's [nightly builds](https://github.com/SANWU5/NetProxy-Magisk/releases/tag/nightly). It includes the module and Android Manager.
 2. Flash it in your root manager, choose how to retain data and whether to install the Android Manager, then wait for installation to finish.
 3. Open the Android Manager to connect to the module automatically. Import nodes on the **Nodes** page or add a subscription on the **Subscriptions** page.
 4. On the **Nodes** page, choose a group and automatic or manual selection, then return to **Dashboard** to start the service.
@@ -120,9 +130,9 @@ Thanks also to [CHIZI-0618/sing-box](https://github.com/CHIZI-0618/sing-box), [X
 
 ## Community and Contributing
 
-- [Telegram Group](https://t.me/NetProxy_Magisk)
-- [Report an Issue](https://github.com/Fanju6/NetProxy-Magisk/issues)
-- [Submit a Pull Request](https://github.com/Fanju6/NetProxy-Magisk/pulls)
+- [Report an issue with this fork](https://github.com/SANWU5/NetProxy-Magisk/issues)
+- [Pull requests for this fork](https://github.com/SANWU5/NetProxy-Magisk/pulls)
+- Original project: [Fanju6/NetProxy-Magisk](https://github.com/Fanju6/NetProxy-Magisk) (use it for the official release)
 
 ## License
 

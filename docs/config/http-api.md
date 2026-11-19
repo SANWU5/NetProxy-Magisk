@@ -117,7 +117,8 @@ HTTP 保存必须提供读取时的 revision。发生 `config.conflict` 时重�
 | `PUT /chain/landings` | 重命名后置代理，正文含 `tag/name` |
 | `DELETE /chain/landings?tag=...` | 删除后置代理；被手动后置或策略使用时拒绝 |
 | `POST /chain/landings/delay` | 链路测速，正文含 `tag`；同时测试前置节点 |
-| `POST /chain/policies`、`PUT/DELETE /chain/policies/{id}` | 新增、修改、删除按应用策略 |
+| `POST /chain/policies`、`PUT/DELETE /chain/policies/{id}` | 新增、修改、删除策略组；正文含 `name/enabled/match/exit/landing/domestic_direct/packages`，`match` 为 `whitelist/blacklist`，`exit` 为 `landing/front/direct`（`landing` 只在出口为后置时填写）；省略 `match`、`exit` 时按白名单、经由后置处理 |
+| `PUT /chain/policies/order` | 按 `{"ids":[...]}` 的顺序重排全部策略组，顺序决定匹配优先级 |
 | `GET/POST /smart-groups` | 读取智能分组与自建分组，或新建自建分组 |
 | `POST /smart-groups/generate` | 重新智能分组，保留地区分组的手动修改 |
 | `POST /smart-groups/delay` | 分组成员测速，正文含分组 `id`；失败或超时的成员延迟为 `-1` |

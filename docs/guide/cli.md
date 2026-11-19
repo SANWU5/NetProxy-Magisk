@@ -115,7 +115,7 @@ su -c '/data/adb/modules/netproxy/netproxyctl smart select <智能分组ID> auto
 su -c '/data/adb/modules/netproxy/netproxyctl smart test'
 ```
 
-`chain mode` 的模式为 `off/manual/policy/manual_policy`，省略后置时保留当前的手动后置。`chain landing` 还支持 `list`、`rename <后置> <新名称>` 与 `remove <后置>`；`chain policy list` 只读，修改按应用策略请使用 Android 管理器或 [HTTP API](/config/http-api)。
+`chain mode` 的模式为 `off/manual/policy/manual_policy`，省略后置时保留当前的手动后置。`chain landing` 还支持 `list`、`rename <后置> <新名称>` 与 `remove <后置>`；`chain policy list` 查看策略组，`chain policy enable|disable <ID>` 启用或停用，`chain policy order <ID>...` 按顺序重排全部组（顺序决定匹配优先级）；新建与编辑组的应用、出口等请使用 Android 管理器或 [HTTP API](/config/http-api)。
 `chain front <分组>` 使用该分组的自动选择，`<分组>/<节点>` 固定节点，`follow` 恢复为跟随节点页。`smart select` 在分组内选择节点并让节点页改用这个分组。
 这些命令与 HTTP API 的 `/chain`、`/smart-groups` 接口行为一致，修改可能重载核心，默认超时为 120 秒。说明见[链式代理](/guide/chain-proxy)与[智能分组](/guide/smart-groups)。
 

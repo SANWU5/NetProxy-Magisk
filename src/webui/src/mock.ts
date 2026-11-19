@@ -37,7 +37,7 @@ const chain = {
   manual: '',
   front: undefined as ChainFront | undefined,
   landings: [{ tag: '示例后置', type: 'socks', server: 'landing.example.test', port: 1080, username: 'demo', has_password: true, tls: false }] as Landing[],
-  policies: [{ id: 'policy-demo', name: '示例策略', enabled: false, landing: '示例后置', packages: ['com.example.app'] }],
+  policies: [{ id: 'policy-demo', name: '示例策略组', enabled: false, match: 'whitelist', exit: 'landing', landing: '示例后置', domestic_direct: true, packages: ['com.example.app'] }],
   delays: {} as Record<string, number>,
 }
 type SmartGroup = { id: string; name: string; kind: string; region?: string; members: NodeRef[]; manual?: NodeRef }
@@ -319,8 +319,23 @@ function executeLanding(args: string[]): CtlResult<unknown> {
 
 function executeChain(args: string[]): CtlResult<unknown> {
   const [action = 'status', target, value] = args
-  if ((action === 'status' && args.length <= 1) || (action === 'policy' && target === 'list')) {
+  if ((action === 'status' && args.length <= 1) || (action === 'policy' && (!target || target === 'list'))) {
     return response('chain.current', '链式代理设置', chainView())
+  }
+  if (action === 'policy' && (target === 'enable' || target === 'disable') && value && args.length === 3) {
+    const policy = chain.policies.find(item => item.id === value)
+    if (!policy) return failure('chain.policy_not_found', '策略组不存在')
+    policy.enabled = target === 'enable'
+    return response('chain.policy_saved', '策略组已保存', chainView())
+  }
+  if (action === 'policy' && target === 'order' && args.length > 2) {
+    const ids = args.slice(2)
+    const ordered = ids.map(id => chain.policies.find(item => item.id === id))
+    if (ids.length !== chain.policies.length || new Set(ids).size !== ids.length || ordered.some(item => !item)) {
+      return chainInvalid('策略组顺序必须包含全部策略组')
+    }
+    chain.policies = ordered as typeof chain.policies
+    return response('chain.policies_ordered', '策略组顺序已保存', chainView())
   }
   if (action === 'mode' && target) {
     if (!CHAIN_MODES.includes(target)) return chainInvalid(`后置模式只能是 off、manual、policy 或 manual_policy，当前为 "${target}"`)

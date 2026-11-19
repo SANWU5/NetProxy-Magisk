@@ -53,10 +53,7 @@ func (c *cli) chain(ctx context.Context, args []string) error {
 	case "front":
 		return c.chainFront(ctx, args[1:])
 	case "policy":
-		if len(args) != 2 || args[1] != "list" {
-			return usageError("用法: netproxyctl chain policy list")
-		}
-		return c.chainStatus(ctx)
+		return c.chainPolicy(ctx, args[1:])
 	default:
 		return usageError("未知 chain 操作，使用 netproxyctl help 查看帮助")
 	}
@@ -233,4 +230,40 @@ func readChainImport(path string) (string, error) {
 		return "", chainInvalid(fmt.Sprintf("导入文件超过 %d MiB", chainImportLimit>>20))
 	}
 	return string(content), nil
+}
+
+// chainPolicy 查看策略组、启用或停用某个组，以及调整组的顺序（顺序决定匹配优先级）。
+// 新建与编辑策略组的应用、出口等细节请使用 Android 管理器或 HTTP API。
+func (c *cli) chainPolicy(ctx context.Context, args []string) error {
+	usage := "用法: netproxyctl chain policy list|enable <ID>|disable <ID>|order <ID>..."
+	if len(args) == 0 || args[0] == "list" {
+		if len(args) > 1 {
+			return usageError(usage)
+		}
+		return c.chainStatus(ctx)
+	}
+	switch args[0] {
+	case "enable", "disable":
+		if len(args) != 2 {
+			return usageError(usage)
+		}
+		enabled := args[0] == "enable"
+		return c.updateChain(ctx, "chain.policy_saved", "策略组已保存", func(state *chain.State) error {
+			index := state.FindPolicy(args[1])
+			if index < 0 {
+				return &contract.Error{Code: "chain.policy_not_found", Message: "策略组不存在", HTTPStatus: http.StatusNotFound}
+			}
+			state.Policies[index].Enabled = enabled
+			return nil
+		})
+	case "order":
+		if len(args) < 2 {
+			return usageError(usage)
+		}
+		return c.updateChain(ctx, "chain.policies_ordered", "策略组顺序已保存", func(state *chain.State) error {
+			return state.ReorderPolicies(args[1:])
+		})
+	default:
+		return usageError(usage)
+	}
 }

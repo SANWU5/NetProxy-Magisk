@@ -84,7 +84,9 @@ configured_backend 是保存的入站；active_backend 仅在 ready 且 PID/API 
   chain front <分组>                   前置使用分组的自动选择
   chain front <分组>/<tag>             前置固定为指定节点
   chain front smart <智能分组ID>       前置使用智能分组
-  chain policy list                    查看按应用策略（只读）
+  chain policy list                    查看策略组（顺序即匹配优先级）
+  chain policy enable|disable <ID>     启用或停用策略组
+  chain policy order <ID>...           按给出的顺序重排全部策略组
 
 模式: off（关闭）/ manual（手动）/ policy（按应用策略）/ manual_policy（手动 + 策略）
 延迟 -1 表示最近一次测速失败；服务运行时修改立即生效。
@@ -230,7 +232,7 @@ export const VALUE_COMPLETIONS: Record<string, string[]> = {
   'app mode': ['blacklist', 'whitelist'],
   'chain mode': ['off', 'manual', 'policy', 'manual_policy'],
   'chain landing': ['list', 'import', 'use', 'rename', 'remove', 'test'],
-  'chain policy': ['list'],
+  'chain policy': ['list', 'enable', 'disable', 'order'],
   'smart generate': ['--english'],
   'ebpf status': ['configured', 'all', 'local', 'shared', '--raw'],
   'logs show': ['service', 'core'],

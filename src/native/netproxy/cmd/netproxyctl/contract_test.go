@@ -240,6 +240,10 @@ func TestPublicCommandsKeepSingleJSONContract(t *testing.T) {
 		{"smart select missing auto", "smart.not_found", 1},
 		{"smart select missing bad", "usage.invalid", 2},
 		{"smart generate --bogus", "usage.invalid", 2},
+		{"smart sources", "smart.list", 0},
+		{"smart sources default", "smart.sources_saved", 0},
+		{"smart sources missing", "smart.invalid", 1},
+		{"smart sources all", "smart.sources_saved", 0},
 	} {
 		t.Run(test.args, func(t *testing.T) {
 			capture, err := os.CreateTemp(t.TempDir(), "stdout-")

@@ -121,6 +121,7 @@ HTTP 保存必须提供读取时的 revision。发生 `config.conflict` 时重�
 | `PUT /chain/policies/order` | 按 `{"ids":[...]}` 的顺序重排全部策略组，顺序决定匹配优先级 |
 | `GET/POST /smart-groups` | 读取智能分组与自建分组，或新建自建分组 |
 | `POST /smart-groups/generate` | 重新智能分组，保留地区分组的手动修改 |
+| `PUT /smart-groups/sources` | 设置订阅分组范围并立即重新分组，正文为 `{"mode":"all"}` 或 `{"mode":"custom","groups":["<分组ID>"]}`，可带 `english` |
 | `POST /smart-groups/delay` | 分组成员测速，正文含分组 `id`；失败或超时的成员延迟为 `-1` |
 | `PUT/DELETE /smart-groups/{id}` | 修改分组名称与成员，或删除分组 |
 | `PUT /smart-groups/{id}/selection` | 在分组内选择节点，正文 `manual` 为节点引用，省略时改回自动选择；同时让节点页改用这个分组 |

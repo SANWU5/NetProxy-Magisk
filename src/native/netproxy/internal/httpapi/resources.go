@@ -62,6 +62,7 @@ func (s *Server) registerResources() {
 	s.route("POST /api/v1/smart-groups", resourceWriteTimeout, true, s.createSmartGroup)
 	s.route("POST /api/v1/smart-groups/generate", resourceWriteTimeout, true, s.generateSmartGroups)
 	s.route("POST /api/v1/smart-groups/delay", resourceWriteTimeout, true, s.testSmartGroups)
+	s.route("PUT /api/v1/smart-groups/sources", resourceWriteTimeout, true, s.setSmartSources)
 	s.route("PUT /api/v1/smart-groups/{id}", resourceWriteTimeout, true, s.saveSmartGroup)
 	s.route("PUT /api/v1/smart-groups/{id}/selection", resourceWriteTimeout, true, s.selectSmartGroupNode)
 	s.route("DELETE /api/v1/smart-groups/{id}", resourceWriteTimeout, true, s.deleteSmartGroup)

@@ -61,11 +61,23 @@ func (c *cli) smart(ctx context.Context, args []string) error {
 		}
 		code, message = "node.selected", "节点选择已更新"
 		data, err = moduleapp.SelectSmartNode(ctx, c.options, rest[0], manual)
+	case action == "sources" && len(rest) == 0:
+		code, message = "smart.list", "智能分组"
+		data, err = moduleapp.ReadSmartGroups(ctx, c.options)
+	case action == "sources":
+		// sources all 使用全部订阅与本地分组；sources <分组ID>... 只使用这些分组，并立即重新分组。
+		mode, groups := smartgroup.SourcesCustom, rest
+		if len(rest) == 1 && rest[0] == "all" {
+			mode, groups = smartgroup.SourcesAll, nil
+		}
+		code, message = "smart.sources_saved", "订阅分组范围已保存"
+		view, summary, sourcesErr := moduleapp.SetSmartSources(ctx, c.options, mode, groups, false)
+		data, err = map[string]any{"smart": view, "summary": summary}, sourcesErr
 	case action == "test" && len(rest) <= 1:
 		code, message = "smart.delay", "分组测速完成"
 		data, err = moduleapp.TestSmartGroups(ctx, c.options, first(rest))
 	default:
-		return usageError("用法: netproxyctl smart <list|generate [--english]|use <ID>|select <ID> <分组>/<节点>|auto|test [ID]>")
+		return usageError("用法: netproxyctl smart <list|generate [--english]|use <ID>|select <ID> <分组>/<节点>|auto|test [ID]|sources [all|<分组ID>...]>")
 	}
 	if err != nil {
 		return smartCLIError(err)

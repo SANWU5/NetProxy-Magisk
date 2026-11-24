@@ -79,6 +79,38 @@ type Group struct {
 type Document struct {
 	Groups      []Group `json:"groups"`
 	GeneratedAt string  `json:"generated_at,omitzero"`
+	// Sources 决定重新智能分组时使用哪些订阅与本地分组；未设置等同于全部。
+	Sources SourceSelection `json:"sources,omitzero"`
+}
+
+// 智能分组的来源范围：all 使用全部订阅与本地分组；custom 只使用 SourceSelection.Groups 中的分组。
+const (
+	SourcesAll    = "all"
+	SourcesCustom = "custom"
+)
+
+// SourceSelection 是智能分组使用的订阅分组范围。不同的范围生成的地区分组内容不同。
+type SourceSelection struct {
+	Mode   string   `json:"mode,omitzero"`
+	Groups []string `json:"groups,omitzero"`
+}
+
+// Filter 按范围筛选参与智能分组的来源；未设置或为 all 时返回全部来源。
+func (selection SourceSelection) Filter(sources []Source) []Source {
+	if selection.Mode != SourcesCustom {
+		return sources
+	}
+	allowed := make(map[string]bool, len(selection.Groups))
+	for _, id := range selection.Groups {
+		allowed[id] = true
+	}
+	result := make([]Source, 0, len(sources))
+	for _, source := range sources {
+		if allowed[source.GroupID] {
+			result = append(result, source)
+		}
+	}
+	return result
 }
 
 // Source 是参与智能分组的一个节点分组及其节点名称。
@@ -207,7 +239,7 @@ func Generate(doc Document, sources []Source, english bool, now time.Time) (Docu
 			names[group.Name] = struct{}{}
 		}
 	}
-	next := Document{Groups: []Group{}, GeneratedAt: now.UTC().Format(time.RFC3339)}
+	next := Document{Groups: []Group{}, GeneratedAt: now.UTC().Format(time.RFC3339), Sources: doc.Sources}
 	for _, key := range sortedRegions(buckets) {
 		id := regionIDPrefix + key
 		group, existed := previous[id]
@@ -236,6 +268,22 @@ func Generate(doc Document, sources []Source, english bool, now time.Time) (Docu
 
 // Validate 校验分组 id、名称、类型与成员引用。
 func (doc Document) Validate() error {
+	switch doc.Sources.Mode {
+	case "", SourcesAll:
+	case SourcesCustom:
+		if len(doc.Sources.Groups) == 0 {
+			return &InvalidError{Err: errors.New("自选订阅分组时至少选择一个分组")}
+		}
+	default:
+		return &InvalidError{Err: fmt.Errorf("订阅分组范围只能是 all 或 custom，当前为 %q", doc.Sources.Mode)}
+	}
+	seenSources := make(map[string]bool, len(doc.Sources.Groups))
+	for _, id := range doc.Sources.Groups {
+		if strings.TrimSpace(id) == "" || seenSources[id] {
+			return &InvalidError{Err: fmt.Errorf("订阅分组范围包含无效或重复的分组 %q", id)}
+		}
+		seenSources[id] = true
+	}
 	ids := make(map[string]struct{}, len(doc.Groups))
 	names := make(map[string]struct{}, len(doc.Groups))
 	for _, group := range doc.Groups {

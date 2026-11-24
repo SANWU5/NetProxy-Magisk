@@ -99,3 +99,17 @@ func (s *Server) testSmartGroups(ctx context.Context, r *http.Request) (contract
 	view, err := module.TestSmartGroups(ctx, s.options, input.ID)
 	return contract.Success("smart.delay", "分组测速完成", view), smartError(err)
 }
+
+// setSmartSources 设置智能分组使用的订阅分组范围（all 或 custom + groups）并立即重新分组。
+func (s *Server) setSmartSources(ctx context.Context, r *http.Request) (contract.Result, error) {
+	var input struct {
+		Mode    string   `json:"mode"`
+		Groups  []string `json:"groups"`
+		English bool     `json:"english"`
+	}
+	if err := resourceDecode(r, &input); err != nil {
+		return contract.Result{}, err
+	}
+	view, summary, err := module.SetSmartSources(ctx, s.options, input.Mode, input.Groups, input.English)
+	return contract.Success("smart.sources_saved", "订阅分组范围已保存", map[string]any{"smart": view, "summary": summary}), smartError(err)
+}

@@ -113,6 +113,8 @@ su -c '/data/adb/modules/netproxy/netproxyctl smart use <智能分组ID>'
 su -c '/data/adb/modules/netproxy/netproxyctl smart select <智能分组ID> default/<节点标签>'
 su -c '/data/adb/modules/netproxy/netproxyctl smart select <智能分组ID> auto'
 su -c '/data/adb/modules/netproxy/netproxyctl smart test'
+su -c '/data/adb/modules/netproxy/netproxyctl smart sources all'
+su -c '/data/adb/modules/netproxy/netproxyctl smart sources <分组ID>...'
 ```
 
 `chain mode` 的模式为 `off/manual/policy/manual_policy`，省略后置时保留当前的手动后置。`chain landing` 还支持 `list`、`rename <后置> <新名称>` 与 `remove <后置>`；`chain policy list` 查看策略组，`chain policy enable|disable <ID>` 启用或停用，`chain policy order <ID>...` 按顺序重排全部组（顺序决定匹配优先级）；新建与编辑组的应用、出口等请使用 Android 管理器或 [HTTP API](/config/http-api)。

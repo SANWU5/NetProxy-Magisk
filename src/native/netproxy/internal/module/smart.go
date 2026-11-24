@@ -47,6 +47,17 @@ type SmartGroupsView struct {
 	// Active 是节点页当前使用的智能分组 id；为空表示正在使用普通分组。
 	Active  string `json:"active,omitzero"`
 	Running bool   `json:"running"`
+	// Sources 是重新智能分组使用的订阅分组范围，Available 是可以选择的订阅与本地分组。
+	Sources   smartgroup.SourceSelection `json:"sources"`
+	Available []SmartSourceGroup         `json:"available"`
+}
+
+// SmartSourceGroup 是可以参与智能分组的一个订阅或本地分组。
+type SmartSourceGroup struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	NodeCount int    `json:"node_count"`
 }
 
 func smartRuntime(document smartgroup.Document) []catalog.SmartGroup {
@@ -100,6 +111,13 @@ func smartView(ctx context.Context, options Options, document smartgroup.Documen
 		return SmartGroupsView{}, err
 	}
 	view := SmartGroupsView{Groups: make([]SmartGroupView, 0, len(document.Groups)), GeneratedAt: document.GeneratedAt}
+	view.Sources = document.Sources
+	if view.Sources.Mode == "" {
+		view.Sources.Mode = smartgroup.SourcesAll
+	}
+	if view.Available, err = smartSourceGroups(ctx, options); err != nil {
+		return SmartGroupsView{}, err
+	}
 	if document.Find(module.SmartGroupID) >= 0 {
 		view.Active = module.SmartGroupID
 	}
@@ -181,10 +199,54 @@ func GenerateSmartGroups(ctx context.Context, options Options, english bool) (Sm
 	}
 	var summary smartgroup.Summary
 	view, err := updateSmart(ctx, options, "smart.generate", "智能分组", func(document *smartgroup.Document) error {
-		*document, summary = smartgroup.Generate(*document, sources, english, time.Now())
+		*document, summary = smartgroup.Generate(*document, document.Sources.Filter(sources), english, time.Now())
 		return nil
 	})
 	return view, summary, err
+}
+
+// SetSmartSources 设置智能分组使用的订阅分组范围并立即重新分组，地区分组随之只包含所选分组的节点。
+// mode 为 all 时使用全部订阅与本地分组；custom 时只使用 groups，且每个分组都必须存在。
+func SetSmartSources(ctx context.Context, options Options, mode string, groups []string, english bool) (SmartGroupsView, smartgroup.Summary, error) {
+	sources, _, err := catalogNodes(ctx, options)
+	if err != nil {
+		return SmartGroupsView{}, smartgroup.Summary{}, err
+	}
+	selection := smartgroup.SourceSelection{Mode: mode}
+	if mode == smartgroup.SourcesCustom {
+		known := make(map[string]bool, len(sources))
+		for _, source := range sources {
+			known[source.GroupID] = true
+		}
+		for _, id := range groups {
+			if !known[id] {
+				return SmartGroupsView{}, smartgroup.Summary{}, &smartgroup.InvalidError{Err: fmt.Errorf("订阅分组 %q 不存在", id)}
+			}
+			if !slices.Contains(selection.Groups, id) {
+				selection.Groups = append(selection.Groups, id)
+			}
+		}
+	}
+	var summary smartgroup.Summary
+	view, err := updateSmart(ctx, options, "smart.sources", "订阅分组范围", func(document *smartgroup.Document) error {
+		document.Sources = selection
+		*document, summary = smartgroup.Generate(*document, selection.Filter(sources), english, time.Now())
+		return nil
+	})
+	return view, summary, err
+}
+
+// smartSourceGroups 列出可以参与智能分组的订阅与本地分组。
+func smartSourceGroups(ctx context.Context, options Options) ([]SmartSourceGroup, error) {
+	groups, err := catalog.Scan(ctx, catalog.ScanOptions{Root: options.CatalogRoot, WithNodes: true})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]SmartSourceGroup, 0, len(groups))
+	for _, group := range groups {
+		result = append(result, SmartSourceGroup{ID: group.Group.ID, Name: group.Group.Name, Type: group.Group.Type, NodeCount: len(group.Nodes)})
+	}
+	return result, nil
 }
 
 // SaveSmartGroup 创建自建分组（id 为空）或修改分组名称与成员，返回分组 id。

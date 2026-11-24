@@ -69,6 +69,9 @@ type Status struct {
 	ActiveGroupNodeCount   int      `json:"active_group_node_count"`
 	SelectedNodeRef        string   `json:"selected_node_ref"`
 	RuntimeSelected        string   `json:"runtime_selected"`
+	// IPv6Bypassed 表示 eBPF 本机接管未开启 IPv6；IPv6DNSGuard 表示仍由 IPv6 DNS 保护劫持 IPv6 的 DNS 查询。
+	IPv6Bypassed bool `json:"ipv6_bypassed"`
+	IPv6DNSGuard bool `json:"ipv6_dns_guard"`
 	// SmartGroupID 与 SmartGroupName 不为空时，节点页使用的是该智能分组的自动选择。
 	SmartGroupID   string `json:"smart_group_id,omitempty"`
 	SmartGroupName string `json:"smart_group_name,omitempty"`
@@ -181,6 +184,12 @@ func ReadStatus(ctx context.Context, options Options) (Status, error) {
 			return Status{}, err
 		}
 		status.ConfiguredBackend = config.Backend
+		// 本机未接管 IPv6 时提示用户：有保护时只劫持 IPv6 的 DNS，失败退回后 IPv6 的 DNS 与连接都绕过代理。
+		if leaks, err := config.LocalIPv6DNSLeaks(); err == nil && leaks {
+			status.IPv6Bypassed = true
+			_, markerErr := os.Stat(inbound.IPv6GuardMarker(options.StateFile))
+			status.IPv6DNSGuard = os.IsNotExist(markerErr)
+		}
 	}
 
 	active, activeErr := readActiveGroup(ctx, options, module.ActiveGroupID)

@@ -171,6 +171,25 @@ func StartService(ctx context.Context, options Options) (err error) {
 	if err := options.updateSelection(ctx, prepared.Selection); err != nil {
 		return failServiceStart(options, 0, 0, "运行时选择状态同步失败", err)
 	}
+	err = startPreparedService(ctx, options, prepared)
+	if err == nil || !prepared.IPv6DNSGuard || ctx.Err() != nil {
+		return err
+	}
+	// IPv6 DNS 保护要求内核支持 IPv6 重定向，不支持时核心会拒绝启动。本次开机不再启用它，按用户原设置重试一次。
+	logService(options, "WARN", "service.start", "ipv6-guard-fallback", "IPv6 DNS 保护未能启动，本次开机按不接管 IPv6 重试: %v", err)
+	if markErr := markIPv6DNSGuardUnsupported(options); markErr != nil {
+		return errors.Join(err, markErr)
+	}
+	prepared, err = Prepare(ctx, options, false)
+	if err != nil {
+		return failServiceStart(options, 0, 0, "运行时配置生成失败", err)
+	}
+	if err := checkPreparedConfiguration(ctx, options, prepared); err != nil {
+		return failServiceStart(options, 0, 0, "sing-box 配置检查失败", err)
+	}
+	if err := options.updateSelection(ctx, prepared.Selection); err != nil {
+		return failServiceStart(options, 0, 0, "运行时选择状态同步失败", err)
+	}
 	return startPreparedService(ctx, options, prepared)
 }
 

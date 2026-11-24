@@ -52,6 +52,41 @@ func (c Config) WithDNSBypass(bypass bool) (Config, error) {
 	return c, err
 }
 
+// IPv6GuardMarkerName 记录本次开机中 IPv6 DNS 保护让核心启动失败，放在服务状态目录（开机清空），下次开机重新尝试。
+const IPv6GuardMarkerName = "ipv6-dns-guard.unsupported"
+
+// IPv6GuardMarker 返回与服务状态文件同目录的 IPv6 DNS 保护失败标记路径。
+func IPv6GuardMarker(stateFile string) string {
+	return filepath.Join(filepath.Dir(stateFile), IPv6GuardMarkerName)
+}
+
+// LocalIPv6DNSLeaks 判断本机网络的 IPv6 是否未被接管而 DNS 仍需接管：eBPF 本机接管开启、IPv6 显式关闭、
+// DNS 模式不是 off。此时走 IPv6 的 DNS 查询会绕过代理，经明文 DNS 被污染。
+func (c Config) LocalIPv6DNSLeaks() (bool, error) {
+	if c.Backend != "ebpf" {
+		return false, nil
+	}
+	native, err := c.EBPFOptions()
+	if err != nil {
+		return false, err
+	}
+	local, _ := native.EffectiveEnablement()
+	return local && native.Local.IPv6 != nil && !*native.Local.IPv6 && native.Local.DNSMode != "off", nil
+}
+
+// WithIPv6DNSGuard 只覆盖运行时副本：本机接管仍处理 IPv6，由路由把 DNS 以外的 IPv6 流量直连，
+// 走 IPv6 的 DNS 查询因此也被劫持到代理的 DNS。用户保存的「不接管 IPv6」设置不变。
+func (c Config) WithIPv6DNSGuard() (Config, error) {
+	native, err := c.EBPFOptions()
+	if err != nil {
+		return c, err
+	}
+	enabled := true
+	native.Local.IPv6 = &enabled
+	c.EBPF, err = marshalNative(ebpfInbound{Type: "ebpf", Tag: Tag, EBPFInboundOptions: native})
+	return c, err
+}
+
 func (c Config) DNSState() (string, error) {
 	if c.Backend == "ebpf" {
 		native, err := c.EBPFOptions()

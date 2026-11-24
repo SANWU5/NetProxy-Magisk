@@ -91,6 +91,8 @@ type PrepareResult struct {
 	Log     string             `json:"log,omitempty"`
 	Backend string             `json:"backend"`
 	Network *NetworkEvaluation `json:"-"`
+	// IPv6DNSGuard 表示本次运行启用了 IPv6 DNS 保护；核心因此启动失败时退回不保护并重试。
+	IPv6DNSGuard bool `json:"-"`
 }
 
 // AppPolicy 描述分应用代理的持久设置。
@@ -180,9 +182,6 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 	if chainRuntime != nil && chainRuntime.Route != nil {
 		routeContent = chainRuntime.Route
 	}
-	if err := provider.WriteAtomic(routePath, routeContent, 0o600); err != nil {
-		return PrepareResult{}, err
-	}
 	logPath, err := prepareLogOverride(options)
 	if err != nil {
 		return PrepareResult{}, err
@@ -200,6 +199,23 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 	if err != nil {
 		return PrepareResult{}, err
 	}
+	// IPv6 DNS 保护：用户不接管 IPv6 时，运行时仍接管 IPv6，但只劫持 DNS、其余 IPv6 直连，
+	// 避免应用经网络下发的 IPv6 DNS 服务器查询而被污染。策略路由文件因此在这里才写出。
+	ipv6Guard, err := ipv6DNSGuardApplies(options, config)
+	if err != nil {
+		return PrepareResult{}, err
+	}
+	if ipv6Guard {
+		if config, err = config.WithIPv6DNSGuard(); err != nil {
+			return PrepareResult{}, err
+		}
+		if routeContent, err = withIPv6DirectRule(routeContent); err != nil {
+			return PrepareResult{}, err
+		}
+	}
+	if err := provider.WriteAtomic(routePath, routeContent, 0o600); err != nil {
+		return PrepareResult{}, err
+	}
 	// 启用的白名单策略组中的应用必须被接管，否则分应用代理跳过它们时策略组看不到这些流量。
 	config.App, err = interceptPolicyApps(config.App, chainState, func(refs []inbound.PackageRef) (inbound.PackageUIDResolution, error) {
 		return inbound.ResolvePackageUIDs(ctx, refs)
@@ -214,7 +230,7 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 	for _, ref := range missingPackages {
 		logService(options, "WARN", "inbound.package", "skipped", "分应用代理跳过未安装应用: %s", ref.String())
 	}
-	return PrepareResult{RuntimeResult: runtime, Providers: providers, Outbounds: outbounds, Inbound: inboundPath, Route: routePath, Log: logPath, Backend: config.Backend, Network: &network}, nil
+	return PrepareResult{RuntimeResult: runtime, Providers: providers, Outbounds: outbounds, Inbound: inboundPath, Route: routePath, Log: logPath, Backend: config.Backend, Network: &network, IPv6DNSGuard: ipv6Guard}, nil
 }
 
 // logOverride 关闭核心日志；启动失败这类致命错误由 sing-box 命令行直接写到标准错误，仍会记录。

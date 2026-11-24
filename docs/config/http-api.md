@@ -105,7 +105,7 @@ HTTP 保存必须提供读取时的 revision。发生 `config.conflict` 时重�
 | `GET /nodes/snapshot?group_id=...` | 持久节点与运行时快照 |
 | `GET /nodes/get?group_id=...&node_tag=...` | 节点原生配置 |
 | `GET /nodes/export?group_id=...&node_tag=...` | 节点分享内容 |
-| `POST /nodes` | 添加节点，正文含 `group_id/content/allow_insecure` |
+| `POST /nodes` | 添加节点，正文含 `group_id/content/allow_insecure`；只能加入本地分组。改传 `new_group`（名称，不能与 `group_id` 同时给出、不能与已有分组重名）时新建本地分组并加入其中，内容无法解析时不会留下空分组 |
 | `PUT /nodes` | 编辑节点，另含原节点 `node_tag` |
 | `DELETE /nodes?group_id=...&node_tag=...` | 删除节点 |
 | `POST /nodes/import` | 导入文本，正文含 `content/allow_insecure` |
@@ -127,7 +127,7 @@ HTTP 保存必须提供读取时的 revision。发生 `config.conflict` 时重�
 | `PUT /smart-groups/{id}/selection` | 在分组内选择节点，正文 `manual` 为节点引用，省略时改回自动选择；同时让节点页改用这个分组 |
 | `GET/PUT /mode` | 查询或保存内核原生模式；正文为 `{"mode":"Rule"}` 等 |
 | `GET/POST /subscriptions` | 本地与订阅分组列表，或添加 URL 订阅 |
-| `GET/PUT/DELETE /subscriptions/{id}` | 查询分组详情，或编辑、删除 URL 订阅；`?private=true` 仅读取 URL 订阅私有设置 |
+| `GET/PUT/DELETE /subscriptions/{id}` | 查询分组详情，或编辑 URL 订阅；删除时 URL 订阅与自建本地分组整个删除，`default`（本地配置）只清空其中的节点；`?private=true` 仅读取 URL 订阅私有设置 |
 | `POST /subscriptions/{id}/update` | 更新一个订阅 |
 | `POST /subscriptions/update-all` | 更新全部订阅 |
 | `GET /subscriptions/{id}/history`、`progress` | 历史与当前进度 |

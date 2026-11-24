@@ -174,7 +174,9 @@ func (s *Server) exportNode(ctx context.Context, r *http.Request) (contract.Resu
 }
 
 type resourceNodeContent struct {
-	GroupID       string `json:"group_id"`
+	GroupID string `json:"group_id"`
+	// NewGroup 只用于添加节点：不为空时新建同名本地分组并加入其中，不能与 group_id 同时给出。
+	NewGroup      string `json:"new_group"`
 	Content       string `json:"content"`
 	AllowInsecure bool   `json:"allow_insecure"`
 }
@@ -183,6 +185,13 @@ func (s *Server) addNode(ctx context.Context, r *http.Request) (contract.Result,
 	var input resourceNodeContent
 	if err := resourceDecode(r, &input); err != nil {
 		return contract.Result{}, err
+	}
+	newGroup := strings.TrimSpace(input.NewGroup)
+	if newGroup != "" && input.GroupID != "" {
+		return contract.Result{}, invalid("group_id 与 new_group 只能给出一个")
+	}
+	if len([]rune(newGroup)) > 64 {
+		return contract.Result{}, invalid("分组名称不能超过 64 个字符")
 	}
 	if input.GroupID == "" {
 		input.GroupID = "default"
@@ -193,7 +202,7 @@ func (s *Server) addNode(ctx context.Context, r *http.Request) (contract.Result,
 	if strings.TrimSpace(input.Content) == "" {
 		return contract.Result{}, invalid("节点内容不能为空")
 	}
-	data, err := module.NodeAppendContent(ctx, s.options, input.GroupID, []byte(input.Content), input.AllowInsecure)
+	data, err := module.NodeAppendContent(ctx, s.options, input.GroupID, newGroup, []byte(input.Content), input.AllowInsecure)
 	return contract.Success("node.added", "节点已加入本地配置", data), err
 }
 

@@ -465,22 +465,41 @@ func appPolicy(config inbound.Config) AppPolicy {
 
 // NodeAppend 将节点加入本地分组并处理活动状态与运行时 reload。
 func NodeAppend(ctx context.Context, options Options, groupID, input string, allowInsecure bool) (mutation catalog.MutationResult, err error) {
-	return nodeAppend(ctx, options, groupID, "append", allowInsecure, func(mutationOptions catalog.MutationOptions) (catalog.MutationResult, error) {
+	return nodeAppend(ctx, options, groupID, "", "append", allowInsecure, func(mutationOptions catalog.MutationOptions) (catalog.MutationResult, error) {
 		mutationOptions.Input = input
 		return catalog.AppendNode(ctx, mutationOptions)
 	})
 }
 
 // NodeAppendContent 将原始内容加入本地分组，不读取客户端指定的文件路径。
-func NodeAppendContent(ctx context.Context, options Options, groupID string, content []byte, allowInsecure bool) (catalog.MutationResult, error) {
-	return nodeAppend(ctx, options, groupID, "append", allowInsecure, func(mutationOptions catalog.MutationOptions) (catalog.MutationResult, error) {
+// newGroupName 不为空时新建一个同名本地分组并加入其中，groupID 被忽略；解析失败时不留下空分组。
+func NodeAppendContent(ctx context.Context, options Options, groupID, newGroupName string, content []byte, allowInsecure bool) (catalog.MutationResult, error) {
+	return nodeAppend(ctx, options, groupID, newGroupName, "append", allowInsecure, func(mutationOptions catalog.MutationOptions) (catalog.MutationResult, error) {
 		return catalog.AppendNodeContent(ctx, mutationOptions, content)
 	})
 }
 
+// createLocalGroup 新建一个空的本地分组。名称不能与已有分组重复，否则按名称引用分组会产生歧义。
+func createLocalGroup(ctx context.Context, options Options, name string) (string, error) {
+	if _, err := catalog.ResolveGroup(ctx, options.CatalogRoot, name); err == nil || !strings.Contains(err.Error(), "分组不存在") {
+		if err == nil {
+			return "", fmt.Errorf("已有同名分组: %s", name)
+		}
+		return "", err
+	}
+	id, err := catalog.NewSubscriptionGroupID(ctx, options.CatalogRoot)
+	if err != nil {
+		return "", err
+	}
+	if err := catalog.InitializeGroup(ctx, catalog.GroupOptions{Root: options.CatalogRoot, GroupID: id, Name: name, Type: "local"}); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
 // NodeImport 将本地文件中的节点追加到 default 本地配置组。
 func NodeImport(ctx context.Context, options Options, input string, allowInsecure bool) (mutation catalog.MutationResult, err error) {
-	return nodeAppend(ctx, options, "default", "import", allowInsecure, func(mutationOptions catalog.MutationOptions) (catalog.MutationResult, error) {
+	return nodeAppend(ctx, options, "default", "", "import", allowInsecure, func(mutationOptions catalog.MutationOptions) (catalog.MutationResult, error) {
 		mutationOptions.Input = input
 		return catalog.AppendNode(ctx, mutationOptions)
 	})
@@ -488,12 +507,12 @@ func NodeImport(ctx context.Context, options Options, input string, allowInsecur
 
 // NodeImportContent 将原始节点内容追加到 default 组，不读取客户端指定的文件路径。
 func NodeImportContent(ctx context.Context, options Options, content []byte, allowInsecure bool) (catalog.MutationResult, error) {
-	return nodeAppend(ctx, options, "default", "import", allowInsecure, func(mutationOptions catalog.MutationOptions) (catalog.MutationResult, error) {
+	return nodeAppend(ctx, options, "default", "", "import", allowInsecure, func(mutationOptions catalog.MutationOptions) (catalog.MutationResult, error) {
 		return catalog.AppendNodeContent(ctx, mutationOptions, content)
 	})
 }
 
-func nodeAppend(ctx context.Context, options Options, groupID, action string, allowInsecure bool, appendNodes func(catalog.MutationOptions) (catalog.MutationResult, error)) (mutation catalog.MutationResult, err error) {
+func nodeAppend(ctx context.Context, options Options, groupID, newGroupName, action string, allowInsecure bool, appendNodes func(catalog.MutationOptions) (catalog.MutationResult, error)) (mutation catalog.MutationResult, err error) {
 	message := "节点添加"
 	if action == "import" {
 		message = "节点导入"
@@ -507,12 +526,26 @@ func nodeAppend(ctx context.Context, options Options, groupID, action string, al
 	if err := ensureDefaultGroup(ctx, options); err != nil {
 		return catalog.MutationResult{}, err
 	}
-	if groupID == "" {
-		groupID = "default"
-	}
-	groupID, err = catalog.ResolveGroup(ctx, options.CatalogRoot, groupID)
-	if err != nil {
-		return catalog.MutationResult{}, err
+	created := false
+	if newGroupName = strings.TrimSpace(newGroupName); newGroupName != "" {
+		if groupID, err = createLocalGroup(ctx, options, newGroupName); err != nil {
+			return catalog.MutationResult{}, err
+		}
+		created = true
+	} else {
+		if groupID == "" {
+			groupID = "default"
+		}
+		groupID, err = catalog.ResolveGroup(ctx, options.CatalogRoot, groupID)
+		if err != nil {
+			return catalog.MutationResult{}, err
+		}
+		// URL 订阅每次更新都会整组替换，手动加入的节点会丢失，因此只允许加入本地分组。
+		if typ, err := catalog.GroupType(ctx, options.CatalogRoot, groupID); err != nil {
+			return catalog.MutationResult{}, err
+		} else if typ != "local" {
+			return catalog.MutationResult{}, errors.New("只能把节点加入本地分组；URL 订阅更新时会覆盖手动加入的节点")
+		}
 	}
 	result, err := appendNodes(catalog.MutationOptions{
 		GroupDir:      filepath.Join(options.CatalogRoot, groupID),
@@ -521,6 +554,9 @@ func nodeAppend(ctx context.Context, options Options, groupID, action string, al
 		AllowInsecure: allowInsecure,
 	})
 	if err != nil {
+		if created {
+			_ = catalog.DeleteGroup(ctx, options.CatalogRoot, groupID)
+		}
 		return catalog.MutationResult{}, err
 	}
 	_, attempted, err := syncCatalogChange(ctx, options, saved, groupID, result.StructureChanged, service.ProcessRunning(options.SingBoxPath))
@@ -589,7 +625,7 @@ func NodeRemove(ctx context.Context, options Options, reference string) (mutatio
 	return result, catalogChangeError("node", attempted, err)
 }
 
-// RemoveSubscription 删除订阅并处理活动分组替代。
+// RemoveSubscription 删除 URL 订阅或本地分组（default 只清空节点），并处理活动分组替代。
 func RemoveSubscription(ctx context.Context, options Options, query, replacement string) (err error) {
 	deleted := false
 	defer func() { logOperation(options, "subscription", "subscription.remove", "订阅删除", deleted, err) }()
@@ -603,8 +639,8 @@ func RemoveSubscription(ctx context.Context, options Options, query, replacement
 		return err
 	}
 	typ, err := catalog.GroupType(ctx, options.CatalogRoot, groupID)
-	if err != nil || typ != "subscription" {
-		return errors.New("目标不是 URL 订阅")
+	if err != nil || (typ != "subscription" && typ != "local") {
+		return errors.New("目标不是订阅或本地分组")
 	}
 	if replacement != "" {
 		replacement, err = catalog.ResolveGroup(ctx, options.CatalogRoot, replacement)
@@ -618,7 +654,14 @@ func RemoveSubscription(ctx context.Context, options Options, query, replacement
 			return err
 		}
 	}
-	if err := catalog.DeleteGroup(ctx, options.CatalogRoot, groupID); err != nil {
+	// default 本地分组是添加节点的默认去处，不能删除，只清空其中的节点；其余分组整个删除。
+	if groupID == "default" {
+		if _, err := catalog.ClearGroup(ctx, catalog.MutationOptions{
+			GroupDir: filepath.Join(options.CatalogRoot, groupID), GroupID: groupID, Type: "local",
+		}); err != nil {
+			return err
+		}
+	} else if err := catalog.DeleteGroup(ctx, options.CatalogRoot, groupID); err != nil {
 		return err
 	}
 	deleted = true

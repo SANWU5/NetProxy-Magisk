@@ -90,7 +90,7 @@ func TestNodeContentDoesNotReadSystemPaths(t *testing.T) {
 		},
 		"empty-import": func() (catalog.MutationResult, error) { return NodeImportContent(t.Context(), options, nil, false) },
 		"content-append": func() (catalog.MutationResult, error) {
-			return NodeAppendContent(t.Context(), options, "default", []byte(source), false)
+			return NodeAppendContent(t.Context(), options, "default", "", []byte(source), false)
 		},
 		"content-edit": func() (catalog.MutationResult, error) {
 			return NodeEditContent(t.Context(), options, "default/NODE", []byte(source), false)
@@ -143,7 +143,7 @@ func TestNodeImportContentKeepsPersistedFailureSemantics(t *testing.T) {
 	if err := moduleconfig.UpdateSelection(t.Context(), options.ModuleConfig, moduleconfig.Selection{}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := nodeAppend(t.Context(), options, "default", "import", false, func(mutationOptions catalog.MutationOptions) (catalog.MutationResult, error) {
+	result, err := nodeAppend(t.Context(), options, "default", "", "import", false, func(mutationOptions catalog.MutationOptions) (catalog.MutationResult, error) {
 		result, err := catalog.AppendNodeContent(t.Context(), mutationOptions, []byte("socks://example.test:1080#COMMITTED"))
 		if err != nil {
 			return result, err
@@ -177,7 +177,7 @@ func TestNodeImportContentFinishesSelectionAfterCommitCancellation(t *testing.T)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	result, err := nodeAppend(ctx, options, "default", "import", false, func(mutationOptions catalog.MutationOptions) (catalog.MutationResult, error) {
+	result, err := nodeAppend(ctx, options, "default", "", "import", false, func(mutationOptions catalog.MutationOptions) (catalog.MutationResult, error) {
 		result, err := catalog.AppendNodeContent(ctx, mutationOptions, []byte("socks://example.test:1080#COMMITTED"))
 		cancel()
 		return result, err

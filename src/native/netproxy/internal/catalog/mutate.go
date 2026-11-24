@@ -285,6 +285,38 @@ func RemoveNode(ctx context.Context, options MutationOptions) (MutationResult, e
 	return commitMutation(ctx, options.GroupDir, document, metadata, result, options.Now)
 }
 
+// ClearGroup 删除分组中的全部节点并保留分组本身，用于不能删除的 default 本地分组。
+func ClearGroup(ctx context.Context, options MutationOptions) (MutationResult, error) {
+	if strings.TrimSpace(options.GroupDir) == "" {
+		return MutationResult{}, errors.New("Catalog 分组目录不能为空")
+	}
+	if strings.TrimSpace(options.GroupID) == "" {
+		options.GroupID = filepath.Base(options.GroupDir)
+	}
+	if !isValidGroupID(options.GroupID) {
+		return MutationResult{}, fmt.Errorf("非法分组 ID: %s", options.GroupID)
+	}
+	release, err := acquireCatalogMutation(ctx, filepath.Dir(options.GroupDir), options.GroupID)
+	if err != nil {
+		return MutationResult{}, err
+	}
+	defer release()
+	if options.Now.IsZero() {
+		options.Now = time.Now()
+	}
+	document, err := loadProvider(ctx, options.GroupDir)
+	if err != nil {
+		return MutationResult{}, err
+	}
+	hadNodes := len(document.Outbounds)+len(document.Endpoints) > 0
+	metadata, err := loadMutationMetadata(options)
+	if err != nil {
+		return MutationResult{}, err
+	}
+	result := mutationResult(options, metadata, provider.Document{}, hadNodes)
+	return commitMutation(ctx, options.GroupDir, provider.Document{}, metadata, result, options.Now)
+}
+
 // EditNode 原子替换 Catalog 分组中的一个节点。
 func EditNode(ctx context.Context, options MutationOptions) (MutationResult, error) {
 	return editNode(ctx, options, func() (provider.ParseResult, error) {

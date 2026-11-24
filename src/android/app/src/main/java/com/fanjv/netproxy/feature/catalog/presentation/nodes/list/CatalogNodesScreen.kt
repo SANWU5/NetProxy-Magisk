@@ -50,15 +50,16 @@ import dev.aiingjie.coui.Coui
 import dev.aiingjie.coui.CouiButton
 import dev.aiingjie.coui.CouiDialogButton
 import dev.aiingjie.coui.CouiDockSpace
+import dev.aiingjie.coui.CouiEmptyState
 import dev.aiingjie.coui.CouiGlyph
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiIcon
 import dev.aiingjie.coui.CouiLargeTitlePage
-import dev.aiingjie.coui.CouiLoading
 import dev.aiingjie.coui.CouiMenuRow
 import dev.aiingjie.coui.CouiRadio
 import dev.aiingjie.coui.CouiRadioRow
 import dev.aiingjie.coui.CouiRow
+import dev.aiingjie.coui.CouiStatus
 import dev.aiingjie.coui.LocalCouiOverlay
 import dev.aiingjie.coui.couiCardItems
 import dev.aiingjie.coui.couiPressable
@@ -197,11 +198,17 @@ internal fun CatalogNodesScreen(
     ) {
         if (selectedGroup == null) {
             item {
-                CouiGroup(first = true) {
-                    when {
-                        state.loading -> CouiRow(stringResource(R.string.loading), leading = { CouiLoading() })
-                        else -> CouiRow(stringResource(if (state.loadFailed) R.string.nodes_read_failed else R.string.node_empty))
-                    }
+                when {
+                    state.loading -> CouiEmptyState(stringResource(R.string.loading), loading = true)
+                    state.loadFailed -> CouiEmptyState(
+                        stringResource(R.string.nodes_read_failed), status = CouiStatus.Error,
+                        actionText = stringResource(R.string.retry), onAction = { viewModel.refresh() },
+                    )
+                    else -> CouiEmptyState(stringResource(R.string.node_empty), body = stringResource(R.string.node_empty_summary))
+                }
+            }
+            item {
+                CouiGroup {
                     CouiRow(singleLinkText, summary = stringResource(R.string.node_single_link_summary), onClick = ::showAddLink)
                     CouiRow(localFileText, summary = stringResource(R.string.node_local_file_summary),
                         onClick = { fileLauncher.launch(arrayOf("*/*")) })

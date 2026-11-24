@@ -44,12 +44,14 @@ import com.fanjv.netproxy.feature.chain.presentation.TextArea
 import dev.aiingjie.coui.CouiActionRow
 import dev.aiingjie.coui.CouiDialogButton
 import dev.aiingjie.coui.CouiDockSpace
+import dev.aiingjie.coui.CouiEmptyState
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiLargeTitlePage
 import dev.aiingjie.coui.CouiLoading
 import dev.aiingjie.coui.CouiPanel
 import dev.aiingjie.coui.CouiRadio
 import dev.aiingjie.coui.CouiRow
+import dev.aiingjie.coui.CouiStatus
 import dev.aiingjie.coui.LocalCouiOverlay
 import dev.aiingjie.coui.couiCardItems
 import java.time.Instant
@@ -138,10 +140,16 @@ internal fun SubscriptionsScreen(
         }
         if (state.groups.isEmpty()) {
             item {
-                CouiGroup(first = !updating) {
-                    if (state.loading) CouiRow(stringResource(R.string.loading), leading = { CouiLoading() })
-                    else CouiRow(stringResource(if (state.loadFailed) R.string.subscriptions_read_failed else R.string.subscription_empty))
-                    CouiActionRow(addText, onClick = { navigator.push(Route.SubscriptionEdit("")) })
+                when {
+                    state.loading -> CouiEmptyState(stringResource(R.string.loading), loading = true)
+                    state.loadFailed -> CouiEmptyState(
+                        stringResource(R.string.subscriptions_read_failed), status = CouiStatus.Error,
+                        actionText = stringResource(R.string.retry), onAction = { viewModel.refresh() },
+                    )
+                    else -> CouiEmptyState(
+                        stringResource(R.string.subscription_empty), body = stringResource(R.string.subscription_empty_summary),
+                        actionText = addText, onAction = { navigator.push(Route.SubscriptionEdit("")) },
+                    )
                 }
             }
         } else {

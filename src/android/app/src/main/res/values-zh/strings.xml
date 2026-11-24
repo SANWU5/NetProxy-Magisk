@@ -62,6 +62,7 @@
     <string name="latency_timeout">超时</string>
     <string name="node_test_current_group">测试当前分组延迟</string>
     <string name="node_empty">还没有可用节点</string>
+    <string name="node_empty_summary">可以添加分享链接，或导入本地文件</string>
     <string name="node_sort">排序</string>
     <string name="node_sort_default">默认</string>
     <string name="node_sort_name">名称</string>
@@ -100,6 +101,7 @@
     <string name="subscription_update_all">更新全部订阅</string>
     <string name="subscription_add_url">添加 URL 订阅</string>
     <string name="subscription_empty">暂无订阅</string>
+    <string name="subscription_empty_summary">添加订阅链接后会自动获取其中的节点</string>
     <string name="subscription_active">使用中</string>
     <string name="subscription_node_count">%1$d 个节点</string>
     <string name="subscription_usage">已用 %1$s / %2$s</string>
@@ -192,6 +194,7 @@
     <string name="clear_logs_success">日志已成功清空</string>
     <string name="clear_logs_failed">清空日志失败</string>
     <string name="no_logs">暂无日志内容</string>
+    <string name="no_logs_summary">新的日志会显示在这里</string>
 
     <!-- Apps Control -->
     <string name="apps">应用</string>
@@ -219,12 +222,12 @@
 
     <!-- Module prerequisites -->
     <string name="no_module_title">无法连接模块后台</string>
-    <string name="module_identity_failed">模块身份验证失败，点击重新连接</string>
+    <string name="module_identity_failed">模块身份验证失败，请重新连接</string>
     <string name="module_reconnect">重新连接</string>
     <string name="module_connecting">连接中…</string>
     <string name="module_address">本机 HTTPS 地址</string>
     <string name="module_address_invalid">请输入本机 IP 的 HTTPS 地址，例如 https://127.0.0.1:9091</string>
-    <string name="no_module_summary">请确认模块后台正在运行，点击重新连接</string>
+    <string name="no_module_summary">请确认模块后台正在运行，然后重新连接</string>
 
     <!-- About -->
     <string name="about_source_code">本分支源码与问题反馈：%1$s&lt;br/&gt;原项目（Fanju6）：%2$s</string>
@@ -680,6 +683,8 @@
     <string name="chain_policy_apps_retry">重试</string>
     <string name="dashboard_overview">概览</string>
     <string name="loading">正在加载…</string>
+    <string name="retry">重试</string>
+    <string name="operation_unfinished">操作未完成</string>
     <string name="node_group">分组</string>
     <string name="subscription_use">设为当前</string>
     <string name="node_delete_confirm">删除节点“%1$s”？此操作无法撤销。</string>

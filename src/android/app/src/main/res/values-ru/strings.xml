@@ -54,6 +54,7 @@
     <string name="latency_timeout">Тайм-аут</string>
     <string name="node_test_current_group">Проверить задержку группы</string>
     <string name="node_empty">Нет доступных узлов</string>
+    <string name="node_empty_summary">Добавьте ссылку или импортируйте локальный файл.</string>
     <string name="node_sort">Сортировка</string>
     <string name="node_sort_default">По умолчанию</string>
     <string name="node_sort_name">По имени</string>
@@ -90,6 +91,7 @@
     <string name="subscription_update_all">Обновить все подписки</string>
     <string name="subscription_add_url">Добавить подписку по URL</string>
     <string name="subscription_empty">Нет подписок</string>
+    <string name="subscription_empty_summary">Добавьте ссылку подписки, и её узлы загрузятся автоматически.</string>
     <string name="subscription_active">Активна</string>
     <string name="subscription_node_count">Узлов: %1$d</string>
     <string name="subscription_usage">Использовано %1$s / %2$s</string>
@@ -180,6 +182,7 @@
     <string name="clear_logs_success">Журналы очищены</string>
     <string name="clear_logs_failed">Не удалось очистить журналы</string>
     <string name="no_logs">Нет записей в журнале</string>
+    <string name="no_logs_summary">Новые записи появятся здесь.</string>
     <string name="apps">Приложения</string>
     <string name="proxy_apps">Прокси для приложений</string>
     <string name="app_proxy_mode">Режим прокси</string>
@@ -201,12 +204,12 @@
     <string name="auto_start">Запуск при загрузке</string>
     <string name="auto_start_summary">Запускать службу при загрузке системы</string>
     <string name="no_module_title">Нет соединения с модулем</string>
-    <string name="module_identity_failed">Не удалось подтвердить подлинность модуля. Нажмите для подключения.</string>
+    <string name="module_identity_failed">Не удалось подтвердить подлинность модуля. Подключитесь снова.</string>
     <string name="module_reconnect">Подключить</string>
     <string name="module_connecting">Подключение…</string>
     <string name="module_address">Локальный HTTPS-адрес</string>
     <string name="module_address_invalid">Укажите HTTPS-адрес с числовым loopback IP, например https://127.0.0.1:9091</string>
-    <string name="no_module_summary">Проверьте, что фоновая служба модуля работает. Нажмите для подключения.</string>
+    <string name="no_module_summary">Убедитесь, что фоновая служба модуля работает, и подключитесь снова.</string>
     <string name="about_source_code">Исходный код и вопросы этой ветки: %1$s&lt;br/&gt;Оригинальный проект Fanju6: %2$s</string>
     <string name="settings_theme">Настройки темы</string>
     <string name="settings_theme_summary">Светлая и тёмная тема, стиль, акцентный цвет и масштаб</string>
@@ -650,6 +653,8 @@
     <string name="chain_policy_apps_retry">Повторить</string>
     <string name="dashboard_overview">Обзор</string>
     <string name="loading">Загрузка…</string>
+    <string name="retry">Повторить</string>
+    <string name="operation_unfinished">Действие не выполнено</string>
     <string name="node_group">Группа</string>
     <string name="subscription_use">Использовать</string>
     <string name="node_delete_confirm">Удалить узел «%1$s»? Это действие нельзя отменить.</string>

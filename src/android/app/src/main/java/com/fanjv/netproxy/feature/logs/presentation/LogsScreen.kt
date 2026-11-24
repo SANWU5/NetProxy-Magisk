@@ -49,10 +49,10 @@ import com.fanjv.netproxy.R
 import dev.aiingjie.coui.Coui
 import dev.aiingjie.coui.CouiDialogButton
 import dev.aiingjie.coui.CouiDimens
+import dev.aiingjie.coui.CouiEmptyState
 import dev.aiingjie.coui.CouiGroup
-import dev.aiingjie.coui.CouiLoading
-import dev.aiingjie.coui.CouiRow
 import dev.aiingjie.coui.CouiShapes
+import dev.aiingjie.coui.CouiStatus
 import dev.aiingjie.coui.CouiSwitchRow
 import dev.aiingjie.coui.CouiSubPage
 import dev.aiingjie.coui.LocalCouiOverlay
@@ -251,12 +251,13 @@ internal fun LogsScreen(
         }
         if (logs.isEmpty()) {
             item {
-                CouiGroup(first = !showLoggingSwitch) {
-                    if (content.loading) CouiRow(stringResource(R.string.loading), leading = { CouiLoading() })
-                    else CouiRow(
-                        stringResource(if (content.error.isNotEmpty()) R.string.logs_read_failed else R.string.no_logs),
-                        summary = content.error.ifEmpty { null },
+                when {
+                    content.loading -> CouiEmptyState(stringResource(R.string.loading), loading = true)
+                    content.error.isNotEmpty() -> CouiEmptyState(
+                        stringResource(R.string.logs_read_failed), body = content.error, status = CouiStatus.Error,
+                        actionText = stringResource(R.string.retry), onAction = { viewModel.refresh(currentType) },
                     )
+                    else -> CouiEmptyState(stringResource(R.string.no_logs), body = stringResource(R.string.no_logs_summary))
                 }
             }
             return@CouiSubPage

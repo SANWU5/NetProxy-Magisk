@@ -41,6 +41,9 @@ import dev.aiingjie.coui.CouiActionRow
 import dev.aiingjie.coui.CouiButton
 import dev.aiingjie.coui.CouiDialog
 import dev.aiingjie.coui.CouiDialogButton
+import dev.aiingjie.coui.CouiEmptyState
+import dev.aiingjie.coui.CouiExpandContent
+import dev.aiingjie.coui.CouiExpandRow
 import dev.aiingjie.coui.CouiFooter
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiInputRow
@@ -49,8 +52,11 @@ import dev.aiingjie.coui.CouiLoading
 import dev.aiingjie.coui.CouiMenuRow
 import dev.aiingjie.coui.CouiPanel
 import dev.aiingjie.coui.CouiRow
+import dev.aiingjie.coui.CouiStatus
 import dev.aiingjie.coui.CouiSubPage
 import dev.aiingjie.coui.CouiSwitchRow
+import dev.aiingjie.coui.CouiTipsAction
+import dev.aiingjie.coui.CouiTopTips
 import dev.aiingjie.coui.LocalCouiOverlay
 import com.fanjv.netproxy.feature.chain.presentation.TextArea
 import kotlinx.serialization.json.JsonArray
@@ -127,29 +133,28 @@ internal fun InboundSettingsScreen(
     ) {
         if (state.snapshot == null && !state.hasPendingChanges) {
             item {
-                CouiGroup(first = true) {
-                    if (state.isInitialLoading) CouiRow(stringResource(R.string.loading), leading = { CouiLoading() })
-                    else CouiRow(stringResource(R.string.inbound_read_failed))
-                }
+                if (state.isInitialLoading) CouiEmptyState(stringResource(R.string.loading), loading = true)
+                else CouiEmptyState(
+                    stringResource(R.string.inbound_read_failed), body = state.error.ifBlank { null }, status = CouiStatus.Error,
+                    actionText = stringResource(R.string.retry), onAction = viewModel::refresh,
+                )
             }
             return@CouiSubPage
         }
         val hasError = state.error.isNotBlank() || state.errorCode.isNotBlank()
         if (hasError || state.requiresReload) item("error") {
-            CouiGroup(first = true) {
-                if (hasError) {
-                    val error = when (state.errorCode) {
-                        "config.conflict" -> stringResource(R.string.inbound_conflict)
-                        "inbound.not_confirmed" -> stringResource(R.string.inbound_apply_unconfirmed)
-                        "inbound.restart_required" -> stringResource(R.string.inbound_restart_required)
-                        else -> state.error
-                    }
-                    CouiRow(error, titleColor = Coui.colors.error)
-                }
-                if (state.requiresReload) CouiActionRow(stringResource(
-                    if (state.hasPendingChanges) R.string.routing_reload_draft else R.string.inbound_reload),
-                    viewModel::discardAndReload)
+            val error = when (state.errorCode) {
+                "config.conflict" -> stringResource(R.string.inbound_conflict)
+                "inbound.not_confirmed" -> stringResource(R.string.inbound_apply_unconfirmed)
+                "inbound.restart_required" -> stringResource(R.string.inbound_restart_required)
+                else -> state.error
             }
+            val reloadText = stringResource(if (state.hasPendingChanges) R.string.routing_reload_draft else R.string.inbound_reload)
+            CouiTopTips(
+                CouiStatus.Error, stringResource(R.string.operation_unfinished),
+                body = error.ifBlank { null },
+                actions = if (state.requiresReload) listOf(CouiTipsAction(reloadText, onClick = viewModel::discardAndReload)) else emptyList(),
+            )
         }
         if (state.canReviewDraft) item("draft") {
             CouiGroup(first = !hasError && !state.requiresReload) {
@@ -300,9 +305,6 @@ private fun LazyListScope.ebpfForm(
                 enabled = enabled,
                 onSelect = { vm.setField("network", if (it == 0) null else JsonPrimitive(if (it == 1) "tcp" else "udp")) }
             )
-        },
-        CardItem("advanced") {
-            CouiSwitchRow(title = stringResource(R.string.inbound_advanced), checked = advanced, onCheckedChange = { toggleAdvanced() })
         }
     ).withProgress(applyingField))
     for ((path, part, title) in listOf(Triple("local", local, R.string.ebpf_local_settings), Triple("shared", shared, R.string.ebpf_shared_settings))) {
@@ -350,7 +352,7 @@ private fun LazyListScope.ebpfForm(
         )
         couiSection("ebpf_$path", { stringResource(title) }, items.withProgress(applyingField))
     }
-    if (advanced) couiSection("ebpf_advanced", { stringResource(R.string.inbound_advanced) }, listOf(
+    couiExpandSection("ebpf_advanced", advanced, toggleAdvanced, listOf(
         CardItem("shared.default_interface") {
             CouiSwitchRow(title = stringResource(R.string.ebpf_shared_default_interface),
                 summary = stringResource(R.string.ebpf_shared_default_interface_hint),
@@ -382,12 +384,9 @@ private fun LazyListScope.tunForm(
             CouiSwitchRow(title = stringResource(R.string.tun_strict_route), summary = stringResource(R.string.tun_strict_route_hint),
                 checked = native.flagAt("strict_route"), enabled = enabled,
                 onCheckedChange = { vm.setField("strict_route", JsonPrimitive(it)) })
-        },
-        CardItem("advanced") {
-            CouiSwitchRow(title = stringResource(R.string.inbound_advanced), checked = advanced, onCheckedChange = { toggleAdvanced() })
         }
     ).withProgress(applyingField))
-    if (advanced) couiSection("tun_advanced", { stringResource(R.string.inbound_advanced) }, listOf(
+    couiExpandSection("tun_advanced", advanced, toggleAdvanced, listOf(
         textItem("address", R.string.tun_address, native, enabled, InputKind.Cidr, edit),
         textItem("interface_name", R.string.tun_interface_name, native, enabled, InputKind.Text, edit),
         textItem("mtu", R.string.tun_mtu, native, enabled, InputKind.Number, edit),
@@ -405,6 +404,17 @@ private fun LazyListScope.couiSection(
     item(sectionKey) {
         CouiGroup(title = title(), first = first) {
             items.forEach { item -> key(item.key) { Column(content = item.content) } }
+        }
+    }
+}
+
+/** 高级设置：卡片顶部是展开行，展开后各项在它下方逐行长出，收起时只留这一行。 */
+private fun LazyListScope.couiExpandSection(sectionKey: String, expanded: Boolean, onToggle: () -> Unit, items: List<CardItem>) {
+    if (items.isEmpty()) return
+    item(sectionKey) {
+        CouiGroup {
+            CouiExpandRow(stringResource(R.string.inbound_advanced), expanded, onToggle)
+            items.forEach { item -> key(item.key) { CouiExpandContent(expanded) { Column(content = item.content) } } }
         }
     }
 }

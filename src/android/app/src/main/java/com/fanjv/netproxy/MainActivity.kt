@@ -50,6 +50,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import com.fanjv.netproxy.core.ui.component.LocalModuleAvailability
+import com.fanjv.netproxy.core.ui.component.LocalModuleReconnect
 import com.fanjv.netproxy.core.ui.component.ModulePage
 import com.fanjv.netproxy.core.ui.theme.AccentColor
 import com.fanjv.netproxy.core.ui.theme.AppThemeSettings
@@ -188,16 +189,18 @@ internal fun NetProxyApp(themeViewModel: ThemeViewModel) {
         onPauseOrDispose { }
     }
 
+    val openReconnect = remember { { reconnect = true } }
     CompositionLocalProvider(
         LocalNavigator provides navigator,
         LocalModuleAvailability provides availability,
+        LocalModuleReconnect provides openReconnect,
     ) {
         Scaffold {
             NavDisplay(
                 backStack = navigator.backStack,
                 onBack = { navigator.pop() },
             ) {
-                entry<Main> { MainScreen(themeViewModel, catalogNodesViewModel, onReconnect = { reconnect = true }) }
+                entry<Main> { MainScreen(themeViewModel, catalogNodesViewModel, onReconnect = openReconnect) }
                 entry<Apps> {
                     ModulePage(R.string.proxy_apps, R.string.apps_read_failed, { navigator.pop() }) {
                         AppsScreen(onBack = { navigator.pop() })
@@ -410,7 +413,7 @@ private fun MainPager(
 
             AppDestination.Subscriptions -> SubscriptionsScreen(isActive = selected == pageIndex)
 
-            AppDestination.Settings -> SettingsScreen(isActive = selected == pageIndex)
+            AppDestination.Settings -> SettingsScreen(isActive = selected == pageIndex, colorMode = themeState.colorMode)
         }
     }
 }

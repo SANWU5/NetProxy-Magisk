@@ -20,9 +20,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.fanjv.netproxy.BuildConfig
 import com.fanjv.netproxy.R
 import com.fanjv.netproxy.core.di.netProxyViewModel
 import com.fanjv.netproxy.core.ui.component.LocalModuleAvailability
+import com.fanjv.netproxy.core.ui.theme.ColorMode
 import com.fanjv.netproxy.navigation.LocalNavigator
 import com.fanjv.netproxy.navigation.Route
 import dev.aiingjie.coui.Coui
@@ -32,10 +34,11 @@ import dev.aiingjie.coui.CouiJumpRow
 import dev.aiingjie.coui.CouiLargeTitlePage
 import dev.aiingjie.coui.CouiSwitchRow
 
-/** 设置页：模块开关与各功能入口。 */
+/** 设置页：模块开关与各功能入口。入口右侧显示当前状态，与 ColorOS 设置一致。 */
 @Composable
 internal fun SettingsScreen(
     isActive: Boolean = true,
+    colorMode: Int = ColorMode.SYSTEM.value,
     viewModel: SettingsViewModel = netProxyViewModel()
 ) {
     val settings by viewModel.state.collectAsStateWithLifecycle()
@@ -46,6 +49,17 @@ internal fun SettingsScreen(
         viewModel.setVisible(isActive && available)
         onPauseOrDispose { if (isActive && available) viewModel.setVisible(false) }
     }
+
+    val wifiValue = if (available && settings.hasLoaded) stringResource(when (settings.wifi.selection) {
+        "whitelist" -> R.string.wifi_ssid_mode_whitelist
+        "blacklist" -> R.string.wifi_ssid_mode_blacklist
+        else -> R.string.wifi_mode_off
+    }) else null
+    val themeValue = stringResource(when (ColorMode.fromValue(colorMode).appearance) {
+        ColorMode.SYSTEM -> R.string.settings_theme_mode_system
+        ColorMode.DARK -> R.string.settings_theme_mode_dark
+        else -> R.string.settings_theme_mode_light
+    })
 
     CouiLargeTitlePage(title = stringResource(R.string.settings), bottomSpace = CouiDockSpace) {
         item {
@@ -58,6 +72,7 @@ internal fun SettingsScreen(
                 )
                 CouiJumpRow(
                     title = stringResource(R.string.network_matching),
+                    value = wifiValue,
                     summary = stringResource(R.string.network_matching_summary),
                     leading = { RowIcon(Icons.Rounded.Wifi) },
                     onClick = { navigator.push(Route.NetworkMatching) },
@@ -85,11 +100,12 @@ internal fun SettingsScreen(
                         onCheckedChange = { viewModel.setAutoStartEnabled(it) },
                         summary = stringResource(R.string.auto_start_summary),
                         enabled = settings.hasLoaded,
-                        leading = { RowIcon(Icons.Rounded.PowerSettingsNew) },
+                        leading = { RowIcon(Icons.Rounded.PowerSettingsNew, enabled = settings.hasLoaded) },
                     )
                 }
                 CouiJumpRow(
                     title = stringResource(R.string.settings_theme),
+                    value = themeValue,
                     summary = stringResource(R.string.settings_theme_summary),
                     leading = { RowIcon(Icons.Rounded.Palette) },
                     onClick = { navigator.push(Route.ThemeSettings) },
@@ -105,6 +121,7 @@ internal fun SettingsScreen(
                 )
                 CouiJumpRow(
                     title = stringResource(R.string.about),
+                    value = BuildConfig.VERSION_NAME,
                     leading = { RowIcon(Icons.Rounded.ContactPage) },
                     onClick = { navigator.push(Route.About) },
                 )
@@ -113,8 +130,10 @@ internal fun SettingsScreen(
     }
 }
 
-/** 设置行左侧的线条图标，颜色跟随一级文字。 */
+/** 设置入口左侧的线条图标，用主题色绘制（ColorOS 设置的入口图标也是主题色）；不可用时变淡。 */
 @Composable
-internal fun RowIcon(icon: ImageVector) {
-    Image(icon, contentDescription = null, modifier = Modifier.size(24.dp), colorFilter = ColorFilter.tint(Coui.colors.label))
+internal fun RowIcon(icon: ImageVector, enabled: Boolean = true) {
+    val colors = Coui.colors
+    Image(icon, contentDescription = null, modifier = Modifier.size(24.dp),
+        colorFilter = ColorFilter.tint(if (enabled) colors.accent else colors.accentDisabled))
 }

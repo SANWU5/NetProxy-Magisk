@@ -45,6 +45,7 @@ import dev.aiingjie.coui.Coui
 import dev.aiingjie.coui.CouiActionRow
 import dev.aiingjie.coui.CouiButton
 import dev.aiingjie.coui.CouiDialogButton
+import dev.aiingjie.coui.CouiDimens
 import dev.aiingjie.coui.CouiDockSpace
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiInputRow
@@ -210,7 +211,7 @@ internal fun ChainScreen(
     ) {
         if (state.error.isNotEmpty() && !state.loaded) {
             item {
-                CouiTopTips(CouiStatus.Error, stringResource(R.string.chain_load_failed), Modifier.padding(horizontal = 16.dp),
+                CouiTopTips(CouiStatus.Error, stringResource(R.string.chain_load_failed), Modifier.padding(bottom = CouiDimens.categoryGap),
                     body = state.error)
             }
         }

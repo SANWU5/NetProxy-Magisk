@@ -25,6 +25,7 @@ import dev.aiingjie.coui.CouiAppIcon
 import dev.aiingjie.coui.CouiButton
 import dev.aiingjie.coui.CouiButtonStyle
 import dev.aiingjie.coui.CouiDialogButton
+import dev.aiingjie.coui.CouiDimens
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiInputRow
 import dev.aiingjie.coui.CouiLoading
@@ -196,6 +197,7 @@ internal fun ChainPolicyScreen(
                 items = filtered,
                 key = ChainAppChoice::packageName,
                 title = appsTitle,
+                dividerStart = CouiDimens.appIconTextStart,
             ) { app ->
                 CouiRow(
                     title = app.label,

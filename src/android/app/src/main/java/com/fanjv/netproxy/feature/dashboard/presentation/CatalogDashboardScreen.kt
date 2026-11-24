@@ -8,7 +8,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -17,6 +16,7 @@ import com.fanjv.netproxy.core.di.netProxyViewModel
 import com.fanjv.netproxy.core.module.ModuleConnectionState
 import com.fanjv.netproxy.core.ui.component.LocalModuleAvailability
 import com.fanjv.netproxy.core.ui.resolve
+import dev.aiingjie.coui.CouiDimens
 import dev.aiingjie.coui.CouiDockSpace
 import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiInfoRow
@@ -63,14 +63,14 @@ internal fun CatalogDashboardScreen(
         if (state.connection != null && !state.connected) {
             item {
                 CouiTopTips(
-                    CouiStatus.Error, stringResource(R.string.no_module_title), Modifier.padding(horizontal = 16.dp),
+                    CouiStatus.Error, stringResource(R.string.no_module_title), Modifier.padding(bottom = CouiDimens.categoryGap),
                     body = noModuleMessage,
                     actions = listOf(CouiTipsAction(reconnectText, onClick = onReconnect)),
                 )
             }
         } else if (state.serviceState == "failed" && state.serviceError.isNotBlank()) {
             item {
-                CouiTopTips(CouiStatus.Error, stringResource(R.string.service_status), Modifier.padding(horizontal = 16.dp),
+                CouiTopTips(CouiStatus.Error, stringResource(R.string.service_status), Modifier.padding(bottom = CouiDimens.categoryGap),
                     body = state.serviceError)
             }
         } else if (state.ipv6Bypassed) {
@@ -79,7 +79,7 @@ internal fun CatalogDashboardScreen(
                 CouiTopTips(
                     if (state.ipv6DnsGuard) CouiStatus.Info else CouiStatus.Warning,
                     stringResource(R.string.dashboard_ipv6_bypassed),
-                    Modifier.padding(horizontal = 16.dp),
+                    Modifier.padding(bottom = CouiDimens.categoryGap),
                     body = stringResource(if (state.ipv6DnsGuard) R.string.dashboard_ipv6_guarded else R.string.dashboard_ipv6_leaking),
                     actions = listOf(CouiTipsAction(stringResource(R.string.inbound_settings), onClick = {
                         navigator.push(Route.InboundSettings)

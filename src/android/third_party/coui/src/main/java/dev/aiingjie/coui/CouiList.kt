@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.max
@@ -154,6 +155,8 @@ fun CouiRow(
     role: Role? = null,
     source: MutableInteractionSource? = null,
     onClick: (() -> Unit)? = null,
+    /** 右侧内容（数值）过长时整体移到标题下方一行、靠右显示，而不是挤压标题；见 [CouiWrappingRow]。 */
+    wrapTrailing: Boolean = false,
     trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val colors = Coui.colors
@@ -165,10 +168,26 @@ fun CouiRow(
     val divider = if (leading != null && leadingWidth > 0.dp) {
         Modifier.layoutId(CouiDividerInset(CouiDimens.rowInnerPadding + leadingWidth + CouiDimens.iconToText))
     } else Modifier
-    Row(
-        modifier.then(divider).fillMaxWidth().heightIn(min = minHeight).then(clickable).padding(horizontal = CouiDimens.rowInnerPadding),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val rowModifier = modifier.then(divider).fillMaxWidth().heightIn(min = minHeight).then(clickable)
+        .padding(horizontal = CouiDimens.rowInnerPadding)
+    if (trailing != null && wrapTrailing) {
+        CouiWrappingRow(
+            rowModifier,
+            leading = leading?.let { icon -> { Box(Modifier.onSizeChanged { leadingWidth = with(density) { it.width.toDp() } }) { icon() } } },
+            label = {
+                Column(Modifier.padding(vertical = CouiDimens.textBlockVertical)) {
+                    BasicText(title, style = type.rowTitle.copy(color = if (!enabled) colors.labelTertiary else titleColor ?: colors.label))
+                    if (!summary.isNullOrEmpty()) {
+                        Spacer(Modifier.height(CouiDimens.titleSummaryGap))
+                        BasicText(summary, style = type.rowSummary.copy(color = if (enabled) colors.labelSecondary else colors.labelTertiary))
+                    }
+                }
+            },
+            trailing = trailing,
+        )
+        return
+    }
+    Row(rowModifier, verticalAlignment = Alignment.CenterVertically) {
         if (leading != null) {
             Box(Modifier.onSizeChanged { leadingWidth = with(density) { it.width.toDp() } }) { leading() }
             Spacer(Modifier.width(CouiDimens.iconToText))
@@ -184,6 +203,58 @@ fun CouiRow(
     }
 }
 
+/**
+ * 与 C17 一致的行布局：右侧内容最多占行宽的 44%，更长时（长数值、大字号）整体移到标题下方一行并靠右，
+ * 标题保持完整宽度。左侧图标与标题仍在第一行垂直居中。
+ */
+@Composable
+private fun CouiWrappingRow(
+    modifier: Modifier,
+    leading: (@Composable () -> Unit)?,
+    label: @Composable () -> Unit,
+    trailing: @Composable RowScope.() -> Unit,
+) {
+    Layout(
+        modifier = modifier,
+        content = {
+            if (leading != null) Box(Modifier.layoutId(WrapLeading)) { leading() }
+            Box(Modifier.layoutId(WrapLabel)) { label() }
+            Row(Modifier.layoutId(WrapTrailing), verticalAlignment = Alignment.CenterVertically, content = trailing)
+        },
+    ) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val start = measurables.firstOrNull { it.layoutId == WrapLeading }?.measure(loose)
+        val inset = if (start == null) 0 else start.width + CouiDimens.iconToText.roundToPx()
+        val remaining = (width - inset).coerceAtLeast(0)
+        val end = measurables.first { it.layoutId == WrapTrailing }
+        val natural = end.maxIntrinsicWidth(Constraints.Infinity)
+        val secondLine = natural > maxOf(48.dp.roundToPx(), (remaining * .44f).toInt())
+        val endPlaceable = end.measure(loose.copy(maxWidth = if (secondLine) remaining else minOf(natural, remaining)))
+        val labelWidth = if (secondLine) remaining else (remaining - endPlaceable.width).coerceAtLeast(0)
+        val center = measurables.first { it.layoutId == WrapLabel }.measure(loose.copy(minWidth = labelWidth, maxWidth = labelWidth))
+        val firstHeight = maxOf(start?.height ?: 0, center.height, if (secondLine) 0 else endPlaceable.height)
+        // 第二行紧贴标题文字：去掉标题块底部留白，只留标题与摘要之间的间距，底部再补回留白。
+        val lift = (CouiDimens.textBlockVertical - CouiDimens.titleSummaryGap).roundToPx()
+        val contentHeight = if (secondLine) firstHeight - lift + endPlaceable.height + CouiDimens.textBlockVertical.roundToPx()
+            else firstHeight
+        val height = maxOf(constraints.minHeight, contentHeight)
+        val top = (height - contentHeight) / 2
+        layout(width, height) {
+            start?.placeRelative(0, top + (firstHeight - start.height) / 2)
+            center.placeRelative(inset, top + (firstHeight - center.height) / 2)
+            endPlaceable.placeRelative(
+                width - endPlaceable.width,
+                if (secondLine) top + firstHeight - lift else top + (firstHeight - endPlaceable.height) / 2,
+            )
+        }
+    }
+}
+
+private const val WrapLeading = "wrap-leading"
+private const val WrapLabel = "wrap-label"
+private const val WrapTrailing = "wrap-trailing"
+
 @Composable
 private fun RowScope.JumpTrail(value: String?, dot: Boolean, enabled: Boolean, glyph: CouiGlyph) {
     val colors = Coui.colors
@@ -191,7 +262,7 @@ private fun RowScope.JumpTrail(value: String?, dot: Boolean, enabled: Boolean, g
     if (!value.isNullOrEmpty()) {
         BasicText(
             value,
-            Modifier.padding(start = if (dot) 4.dp else CouiDimens.titleToValue).widthIn(max = CouiDimens.jumpValueMaxWidth),
+            Modifier.padding(start = if (dot) 4.dp else CouiDimens.titleToValue),
             style = Coui.type.jumpValue.copy(color = if (enabled) colors.labelSecondary else colors.labelTertiary, textAlign = TextAlign.End),
             maxLines = 2, overflow = TextOverflow.Ellipsis,
         )
@@ -212,7 +283,7 @@ fun CouiJumpRow(
     leading: (@Composable () -> Unit)? = null,
 ) {
     CouiRow(title, modifier, summary, enabled, leading = leading, role = Role.Button, onClick = onClick,
-        minHeight = if (leading != null) 60.dp else CouiDimens.rowMinHeight) {
+        minHeight = if (leading != null) 60.dp else CouiDimens.rowMinHeight, wrapTrailing = true) {
         JumpTrail(value, dot, enabled, CouiGlyph.Next)
     }
 }
@@ -231,7 +302,7 @@ fun CouiMenuRow(
     val overlay = LocalCouiOverlay.current
     val bounds = remember { mutableStateOf(Rect.Zero) }
     CouiRow(title, modifier.onGloballyPositioned { bounds.value = it.boundsInRoot() }, summary, enabled, role = Role.DropdownList,
-        onClick = { overlay.showMenu(bounds.value, options, selected, onSelect) }) {
+        onClick = { overlay.showMenu(bounds.value, options, selected, onSelect) }, wrapTrailing = true) {
         JumpTrail(value, false, enabled, CouiGlyph.PopupNext)
     }
 }
@@ -304,8 +375,8 @@ fun CouiRadioRow(
 @Composable
 fun CouiInfoRow(title: String, value: String?, modifier: Modifier = Modifier, summary: String? = null, onClick: (() -> Unit)? = null) {
     val colors = Coui.colors
-    CouiRow(title, modifier, summary, onClick = onClick) {
-        if (!value.isNullOrEmpty()) BasicText(value, Modifier.padding(start = CouiDimens.titleToValue).widthIn(max = 200.dp),
+    CouiRow(title, modifier, summary, onClick = onClick, wrapTrailing = true) {
+        if (!value.isNullOrEmpty()) BasicText(value, Modifier.padding(start = CouiDimens.titleToValue),
             style = Coui.type.rowValue.copy(color = colors.labelSecondary, textAlign = TextAlign.End), maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }

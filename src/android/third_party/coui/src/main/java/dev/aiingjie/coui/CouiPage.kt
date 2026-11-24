@@ -3,18 +3,12 @@ package dev.aiingjie.coui
 import android.graphics.RuntimeShader
 import android.os.Build
 import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -34,7 +28,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -63,8 +56,6 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -279,21 +270,3 @@ fun CouiSubPage(
     }
 }
 
-@Composable
-fun CouiBarButton(glyph: CouiGlyph, description: String, onClick: () -> Unit, enabled: Boolean = true) {
-    val colors = Coui.colors
-    val dark = colors.page.luminance() < .5f
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) .9f else 1f, spring(dampingRatio = .6f, stiffness = 600f), label = "bar-button")
-    CouiGlass(
-        Modifier.size(40.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clickable(source, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = description },
-    ) {
-        CouiIcon(glyph, if (enabled) colors.label else colors.labelTertiary)
-        if (pressed) Box(Modifier.matchParentSize().clip(CircleShape)
-            .background(if (dark) Color.White.copy(alpha = .08f) else Color.Black.copy(alpha = .06f)))
-    }
-}

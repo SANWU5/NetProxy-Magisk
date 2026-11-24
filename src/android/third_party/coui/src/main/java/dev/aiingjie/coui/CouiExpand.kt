@@ -9,7 +9,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,12 +48,12 @@ fun CouiExpandRow(
             }
         },
         summary, enabled, leading = leading, role = Role.Button, onClick = onClick,
-        minHeight = if (leading != null) 60.dp else CouiDimens.rowMinHeight,
+        minHeight = if (leading != null) 60.dp else CouiDimens.rowMinHeight, wrapTrailing = true,
     ) {
         if (!value.isNullOrEmpty()) {
             BasicText(
                 value,
-                Modifier.padding(start = CouiDimens.titleToValue).widthIn(max = CouiDimens.jumpValueMaxWidth),
+                Modifier.padding(start = CouiDimens.titleToValue),
                 style = Coui.type.jumpValue.copy(color = if (enabled) colors.labelSecondary else colors.labelTertiary, textAlign = TextAlign.End),
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
             )

@@ -54,6 +54,9 @@ jobs:
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    with:
+      # 分支仓库没有官方的 PostHog 上报凭据，与开发包一样构建无遥测变体；官方仓库仍要求带遥测凭据。
+      no-telemetry: ${{ github.repository != 'Fanju6/NetProxy-Magisk' }}
 
   release:
     name: 发布 Release

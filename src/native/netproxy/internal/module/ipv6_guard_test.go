@@ -59,9 +59,13 @@ func TestPrepareGuardsIPv6DNSWhenIPv6IsNotIntercepted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hijack, direct := strings.Index(string(route), "hijack-dns"), strings.Index(string(route), `"ip_version": 6`)
-	if hijack < 0 || direct < 0 || hijack > direct {
-		t.Fatalf("IPv6 直连规则应排在 DNS 劫持之后: %s", route)
+	hijack, reject := strings.Index(string(route), "hijack-dns"), strings.Index(string(route), `"ip_version": 6`)
+	if hijack < 0 || reject < 0 || hijack > reject {
+		t.Fatalf("IPv6 拒绝规则应排在 DNS 劫持之后: %s", route)
+	}
+	// 不能直连：本地先接住的 IPv6 连接直连超时前应用不会回退 IPv4，谷歌等双栈站点会整体打不开。
+	if !strings.Contains(string(route), `"action": "reject"`) || strings.Contains(string(route), `"outbound": "direct"`) {
+		t.Fatalf("其余 IPv6 连接应被拒绝而不是直连: %s", route)
 	}
 	saved, err := os.ReadFile(options.InboundConfig)
 	if err != nil || !strings.Contains(string(saved), `"ipv6": false`) {
@@ -102,11 +106,11 @@ func TestPrepareSkipsIPv6GuardWithoutDNSHijack(t *testing.T) {
 	}
 }
 
-func TestWithIPv6DirectRuleFollowsExistingDNSHijack(t *testing.T) {
+func TestWithIPv6RejectRuleFollowsExistingDNSHijack(t *testing.T) {
 	overlay := `{"route":{"rules":[{"clash_mode":"Direct","action":"route","outbound":"direct"},` +
 		`{"type":"logical","mode":"or","rules":[{"port":53},{"protocol":"dns"}],"action":"hijack-dns"},` +
 		`{"package_name":["com.example.app"],"action":"route","outbound":"落地/L"}]}}`
-	content, err := withIPv6DirectRule([]byte(overlay))
+	content, err := withIPv6RejectRule([]byte(overlay))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +123,41 @@ func TestWithIPv6DirectRuleFollowsExistingDNSHijack(t *testing.T) {
 		t.Fatal(err)
 	}
 	rules := document.Route.Rules
-	if len(rules) != 4 || rules[1]["action"] != "hijack-dns" || rules[2]["ip_version"] == nil || rules[3]["outbound"] != "落地/L" {
-		t.Fatalf("IPv6 直连规则应插在 DNS 劫持之后、策略组之前: %s", content)
+	if len(rules) != 4 || rules[1]["action"] != "hijack-dns" || rules[2]["action"] != "reject" || rules[3]["outbound"] != "落地/L" {
+		t.Fatalf("IPv6 拒绝规则应插在 DNS 劫持之后、策略组之前: %s", content)
+	}
+}
+
+// Direct 模式与私网地址必须排除在拒绝之外：前者要求全部直连，后者是局域网 IPv6。
+func TestIPv6RejectRuleExcludesDirectModeAndPrivateAddresses(t *testing.T) {
+	content, err := withIPv6RejectRule([]byte(emptyOverlay))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Route struct {
+			Rules []struct {
+				Action string           `json:"action"`
+				Mode   string           `json:"mode"`
+				Rules  []map[string]any `json:"rules"`
+			} `json:"rules"`
+		} `json:"route"`
+	}
+	if err := json.Unmarshal(content, &document); err != nil {
+		t.Fatal(err)
+	}
+	rules := document.Route.Rules
+	if len(rules) != 2 || rules[0].Action != "hijack-dns" || rules[1].Action != "reject" || rules[1].Mode != "and" || len(rules[1].Rules) != 3 {
+		t.Fatalf("没有 DNS 劫持规则时应先补劫持再加拒绝: %s", content)
+	}
+	conditions := rules[1].Rules
+	if conditions[0]["ip_version"] != float64(6) {
+		t.Fatalf("拒绝规则只应匹配 IPv6: %s", content)
+	}
+	if conditions[1]["clash_mode"] != "Direct" || conditions[1]["invert"] != true {
+		t.Fatalf("Direct 模式不应被拒绝: %s", content)
+	}
+	if conditions[2]["ip_is_private"] != true || conditions[2]["invert"] != true {
+		t.Fatalf("私网 IPv6 不应被拒绝: %s", content)
 	}
 }

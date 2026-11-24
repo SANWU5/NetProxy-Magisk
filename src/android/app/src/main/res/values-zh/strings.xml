@@ -805,9 +805,9 @@
     <string name="chain_policy_excluded_footer">这些应用不经过本组，交给后面的组或当前模式处理。点按可移除。</string>
     <string name="chain_policy_reorder">调整顺序</string>
     <string name="dashboard_ipv6_bypassed">未接管 IPv6</string>
-    <string name="dashboard_ipv6_guarded">IPv6 连接直连，不经过代理；IPv6 的 DNS 查询仍由代理接管，不会被污染。</string>
+    <string name="dashboard_ipv6_guarded">IPv6 连接会被拒绝，应用随即改用 IPv4 并按规则分流；IPv6 的 DNS 查询仍由代理接管，不会被污染。</string>
     <string name="dashboard_ipv6_leaking">本机不支持 IPv6 DNS 保护，IPv6 的 DNS 查询与连接都绕过代理，部分应用可能解析到被污染的地址而无法联网。建议在入站设置中开启 IPv6 接管。</string>
-    <string name="ebpf_local_ipv6_off_summary">IPv6 连接直连，不经过代理；IPv6 的 DNS 查询仍交给代理处理以防污染，设备不支持时仪表盘会提示。</string>
+    <string name="ebpf_local_ipv6_off_summary">IPv6 连接会被拒绝，应用随即改用 IPv4 并按规则分流；IPv6 的 DNS 查询仍交给代理处理以防污染，设备不支持时仪表盘会提示。</string>
     <string name="smart_sources">订阅分组</string>
     <string name="smart_sources_scope">范围</string>
     <string name="smart_sources_all">全部订阅</string>

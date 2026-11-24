@@ -30,10 +30,14 @@ func markIPv6DNSGuardUnsupported(options Options) error {
 	return os.WriteFile(inbound.IPv6GuardMarker(options.StateFile), []byte("1\n"), 0o600)
 }
 
-// withIPv6DirectRule 在策略路由覆盖中加入「IPv6 流量直连」，放在 DNS 劫持规则之后：
-// 走 IPv6 的 DNS 仍被劫持到代理的 DNS，其余 IPv6 连接保持用户「不接管 IPv6」时的直连行为。
-// 覆盖文件排在主配置之前，没有 DNS 劫持规则时先补一条，保证 IPv6 的 DNS 不会被直连规则抢先命中。
-func withIPv6DirectRule(content []byte) ([]byte, error) {
+// withIPv6RejectRule 在策略路由覆盖中加入「拒绝 IPv6 连接」，放在 DNS 劫持规则之后：
+// 走 IPv6 的 DNS 仍被劫持到代理的 DNS，其余 IPv6 连接立即被拒绝，应用随即回退到 IPv4 并按正常规则分流。
+//
+// 不能直连：本机接管会在本地先接住应用的 IPv6 连接，应用以为已连上，不会回退 IPv4；
+// 而谷歌等境外双栈站点的 IPv6 直连在国内不通，连接要等直连超时（约 5 秒）后才被重置，表现为这些站点全部打不开。
+// Direct 模式（Wi-Fi 绕过等）与私网地址不在拒绝范围内，仍保持直连。
+// 覆盖文件排在主配置之前，没有 DNS 劫持规则时先补一条，保证 IPv6 的 DNS 不会被拒绝规则抢先命中。
+func withIPv6RejectRule(content []byte) ([]byte, error) {
 	var document map[string]any
 	if err := json.Unmarshal(content, &document); err != nil {
 		return nil, err
@@ -46,7 +50,15 @@ func withIPv6DirectRule(content []byte) ([]byte, error) {
 		route = map[string]any{}
 	}
 	rules, _ := route["rules"].([]any)
-	direct := map[string]any{"ip_version": 6, "action": "route", "outbound": "direct"}
+	reject := map[string]any{
+		"type": "logical", "mode": "and",
+		"rules": []any{
+			map[string]any{"ip_version": 6},
+			map[string]any{"clash_mode": "Direct", "invert": true},
+			map[string]any{"ip_is_private": true, "invert": true},
+		},
+		"action": "reject",
+	}
 	last := -1
 	for index, rule := range rules {
 		if object, ok := rule.(map[string]any); ok && object["action"] == "hijack-dns" {
@@ -59,9 +71,9 @@ func withIPv6DirectRule(content []byte) ([]byte, error) {
 			"rules":  []any{map[string]any{"port": 53}, map[string]any{"protocol": "dns"}},
 			"action": "hijack-dns",
 		}
-		rules = append([]any{hijack, direct}, rules...)
+		rules = append([]any{hijack, reject}, rules...)
 	} else {
-		rules = slices.Insert(rules, last+1, any(direct))
+		rules = slices.Insert(rules, last+1, any(reject))
 	}
 	route["rules"] = rules
 	document["route"] = route

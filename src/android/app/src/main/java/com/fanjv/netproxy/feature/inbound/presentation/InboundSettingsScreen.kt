@@ -326,7 +326,7 @@ private fun LazyListScope.ebpfForm(
                 }
             },
             if (isLocal) CardItem("$path.ipv6") {
-                // 关闭本机 IPv6 接管时说明后果：IPv6 连接直连，IPv6 的 DNS 仍尽量交给代理以防污染。
+                // 关闭本机 IPv6 接管时说明后果：IPv6 连接被拒绝、应用回退 IPv4，IPv6 的 DNS 仍尽量交给代理以防污染。
                 val checked = part.flagAt("ipv6", true)
                 CouiSwitchRow(
                     title = stringResource(R.string.ebpf_local_ipv6), checked = checked, enabled = enabled,

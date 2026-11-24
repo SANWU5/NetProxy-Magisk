@@ -199,7 +199,7 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 	if err != nil {
 		return PrepareResult{}, err
 	}
-	// IPv6 DNS 保护：用户不接管 IPv6 时，运行时仍接管 IPv6，但只劫持 DNS、其余 IPv6 直连，
+	// IPv6 DNS 保护：用户不接管 IPv6 时，运行时仍接管 IPv6，但只劫持 DNS、其余 IPv6 拒绝（应用回退 IPv4），
 	// 避免应用经网络下发的 IPv6 DNS 服务器查询而被污染。策略路由文件因此在这里才写出。
 	ipv6Guard, err := ipv6DNSGuardApplies(options, config)
 	if err != nil {
@@ -209,7 +209,7 @@ func Prepare(ctx context.Context, options Options, allowEmpty bool) (PrepareResu
 		if config, err = config.WithIPv6DNSGuard(); err != nil {
 			return PrepareResult{}, err
 		}
-		if routeContent, err = withIPv6DirectRule(routeContent); err != nil {
+		if routeContent, err = withIPv6RejectRule(routeContent); err != nil {
 			return PrepareResult{}, err
 		}
 	}

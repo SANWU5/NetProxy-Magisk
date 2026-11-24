@@ -111,14 +111,16 @@ internal class SubscriptionsViewModel(
         UiText.Resource(R.string.subscription_update_all_success)
     }
 
-    fun activate(id: String) = runOperation("activate", id) {
-        repository.activate(id)
-        UiText.Resource(R.string.subscription_activated)
+    fun remove(id: String, replacement: String = "") = runOperation("remove", id) {
+        val local = _state.value.groups.firstOrNull { it.id == id }?.type == "local"
+        repository.remove(id, replacement)
+        UiText.Resource(if (local) R.string.local_group_deleted else R.string.subscription_deleted)
     }
 
-    fun remove(id: String, replacement: String = "") = runOperation("remove", id) {
-        repository.remove(id, replacement)
-        UiText.Resource(R.string.subscription_deleted)
+    /** 「导入节点」：内容加入所选本地分组，或新建分组。 */
+    fun importNodes(content: String, groupId: String, newGroup: String) = runOperation("import", groupId) {
+        repository.importNodes(content, groupId, newGroup)
+        UiText.Resource(R.string.subscription_import_done)
     }
 
     fun clearNotice() {

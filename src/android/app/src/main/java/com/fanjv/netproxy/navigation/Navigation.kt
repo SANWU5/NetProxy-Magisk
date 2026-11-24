@@ -29,7 +29,8 @@ sealed interface Route : NavKey, Parcelable {
 
     @Parcelize
     @Serializable
-    data class SubscriptionEdit(val id: String) : Route
+    /** [url] 只在新建时使用：从「导入节点」粘贴的订阅地址预先填好。 */
+    data class SubscriptionEdit(val id: String, val url: String = "") : Route
 
     @Parcelize
     @Serializable
@@ -111,6 +112,9 @@ fun rememberNavigator(startRoute: Route): Navigator {
     val backStack = rememberNavBackStack<Route>(startRoute)
     return remember(backStack) { Navigator(backStack) }
 }
+
+/** 切到节点页并显示指定分组（订阅页的「查看节点」），由应用根部提供。 */
+internal val LocalOpenNodesGroup = staticCompositionLocalOf<(String) -> Unit> { {} }
 
 val LocalNavigator = staticCompositionLocalOf<Navigator> {
     error("LocalNavigator not provided")

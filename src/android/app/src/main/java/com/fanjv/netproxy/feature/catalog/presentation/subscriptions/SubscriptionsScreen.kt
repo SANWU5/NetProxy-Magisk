@@ -1,5 +1,17 @@
 package com.fanjv.netproxy.feature.catalog.presentation.subscriptions
 
+import dev.aiingjie.coui.CouiRadioRow
+import com.fanjv.netproxy.feature.catalog.data.NodeImportStore
+import com.fanjv.netproxy.core.ui.userMessage
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import android.provider.OpenableColumns
+import android.net.Uri
+import android.content.Context
 import com.fanjv.netproxy.core.ui.component.showActionSheet
 import com.fanjv.netproxy.core.ui.component.SheetAction
 import com.fanjv.netproxy.core.ui.component.MenuAction
@@ -30,6 +42,7 @@ import com.fanjv.netproxy.feature.catalog.model.CatalogGroupSummary
 import com.fanjv.netproxy.feature.catalog.model.CatalogNode
 import com.fanjv.netproxy.feature.catalog.model.SubscriptionHistoryEntry
 import com.fanjv.netproxy.navigation.LocalNavigator
+import com.fanjv.netproxy.navigation.LocalOpenNodesGroup
 import com.fanjv.netproxy.navigation.Route
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.ui.semantics.Role
@@ -49,7 +62,6 @@ import dev.aiingjie.coui.CouiGroup
 import dev.aiingjie.coui.CouiLargeTitlePage
 import dev.aiingjie.coui.CouiLoading
 import dev.aiingjie.coui.CouiPanel
-import dev.aiingjie.coui.CouiRadio
 import dev.aiingjie.coui.CouiRow
 import dev.aiingjie.coui.CouiStatus
 import dev.aiingjie.coui.LocalCouiOverlay
@@ -83,30 +95,76 @@ internal fun SubscriptionsScreen(
 
     val busy = state.operation.isNotEmpty()
     val hasSubscriptions = state.groups.any { it.type == "subscription" }
+    // 本地配置被清空后不再列出，像被删除一样；需要时从「导入节点」或节点页再加入。
+    val shownGroups = state.groups.filterNot { it.id == "default" && it.nodeCount == 0 }
     val addText = stringResource(R.string.subscription_add_url)
     val updateAllText = stringResource(R.string.subscription_update_all)
     val cancelText = stringResource(R.string.common_cancel)
     val moreText = stringResource(R.string.more_actions)
-    val useText = stringResource(R.string.subscription_use)
+    val viewNodesText = stringResource(R.string.subscription_view_nodes)
+    val openNodesGroup = LocalOpenNodesGroup.current
     val updateText = stringResource(R.string.common_update)
     val deleteText = stringResource(R.string.common_delete)
     val deleteTitle = stringResource(R.string.subscription_delete_title)
     val deleteMessage = stringResource(R.string.subscription_delete_message)
     val subscriptionDetailsText = stringResource(R.string.subscription_details)
     val localDetailsText = stringResource(R.string.local_config_details)
+    val localDeleteTitle = stringResource(R.string.local_group_delete_title)
+    val localDeleteMessage = stringResource(R.string.local_group_delete_message)
+    val localClearMessage = stringResource(R.string.local_config_clear_message)
+    val importTitle = stringResource(R.string.subscription_import_nodes)
+    val importFileText = stringResource(R.string.subscription_import_file)
+
+    // 「导入节点」：从文件导入时先读出内容，再在同一个面板里选择导入到哪个分组。
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val importStore = remember(context) { NodeImportStore(context) }
+    var importFile by remember { mutableStateOf<ImportFile?>(null) }
+    fun showImport() = overlay.showPanel(importTitle, onDismiss = { importFile = null }) {
+        val groups = viewModel.state.collectAsStateWithLifecycle().value.groups
+        ImportNodesPanel(
+            groups = groups,
+            file = importFile,
+            onClearFile = { importFile = null },
+            onAddUrl = { url -> overlay.dismissPanel(); navigator.push(Route.SubscriptionEdit("", url)) },
+            onImport = { content, groupId, newGroup ->
+                viewModel.importNodes(content, groupId, newGroup)
+                overlay.dismissPanel()
+            },
+        )
+    }
+    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) scope.launch {
+            try {
+                importFile = ImportFile(displayName(context, uri), importStore.read(uri))
+                showImport()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                overlay.showSnack(error.userMessage())
+            }
+        }
+    }
 
     fun showGroupActions(group: CatalogGroupSummary) {
         val isSubscription = group.type == "subscription"
         overlay.showActionSheet(
             title = group.name,
             actions = buildList {
-                if (!group.active) add(SheetAction(useText) { viewModel.activate(group.id) })
+                // 订阅页只管理分组；代理用哪个分组、哪个节点在节点页选择。
+                add(SheetAction(viewNodesText) { openNodesGroup(group.id) })
                 if (isSubscription && !busy) add(SheetAction(updateText) { viewModel.updateSubscription(group.id) })
                 add(SheetAction(if (isSubscription) subscriptionDetailsText else localDetailsText) {
                     navigator.push(Route.SubscriptionDetails(group.id))
                 })
-                if (isSubscription && !busy) add(SheetAction(deleteText, danger = true) {
-                    overlay.showDialog(deleteTitle, String.format(deleteMessage, group.name), listOf(
+                // URL 订阅与自建本地分组整个删除；default（本地配置）只清空节点。
+                if (!busy) add(SheetAction(deleteText, danger = true) {
+                    val (title, message) = when {
+                        isSubscription -> deleteTitle to String.format(deleteMessage, group.name)
+                        group.id == "default" -> localDeleteTitle to localClearMessage
+                        else -> localDeleteTitle to String.format(localDeleteMessage, group.name)
+                    }
+                    overlay.showDialog(title, message, listOf(
                         CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) { viewModel.remove(group.id) },
                         CouiDialogButton(cancelText),
                     ))
@@ -127,6 +185,8 @@ internal fun SubscriptionsScreen(
         actions = {
             CouiBarMenuButton(moreText, listOf(
                 MenuAction(addText) { navigator.push(Route.SubscriptionEdit("")) },
+                MenuAction(importTitle, enabled = !busy) { importFile = null; showImport() },
+                MenuAction(importFileText, enabled = !busy) { fileLauncher.launch(arrayOf("*/*")) },
                 MenuAction(updateAllText, enabled = hasSubscriptions && !busy) { viewModel.updateAll() },
             ))
         },
@@ -138,7 +198,7 @@ internal fun SubscriptionsScreen(
                 }
             }
         }
-        if (state.groups.isEmpty()) {
+        if (shownGroups.isEmpty()) {
             item {
                 when {
                     state.loading -> CouiEmptyState(stringResource(R.string.loading), loading = true)
@@ -153,21 +213,21 @@ internal fun SubscriptionsScreen(
                 }
             }
         } else {
-            couiCardItems(state.groups, key = CatalogGroupSummary::id, title = listTitle, first = !updating) { group ->
+            couiCardItems(shownGroups, key = CatalogGroupSummary::id, title = listTitle, first = !updating) { group ->
                 CouiRow(
                     title = group.name,
                     summary = groupSummary(group),
                     role = Role.Button,
                     onClick = { showGroupActions(group) },
                 ) {
+                    // 只读标记：节点页当前使用的分组。
                     if (group.active) {
                         BasicText(
                             stringResource(R.string.subscription_active),
-                            Modifier.padding(start = 12.dp, end = 12.dp),
+                            Modifier.padding(start = 12.dp),
                             style = Coui.type.rowValue.copy(color = Coui.colors.success),
                         )
                     }
-                    CouiRadio(selected = group.active)
                 }
             }
         }
@@ -209,6 +269,7 @@ internal fun SubscriptionDetailsScreen(
     val navigator = LocalNavigator.current
     val context = LocalContext.current
     val overlay = LocalCouiOverlay.current
+    val openNodesGroup = LocalOpenNodesGroup.current
     var editedNodeLink by remember { mutableStateOf("") }
 
     LaunchedEffect(id) { viewModel.load(id) }
@@ -237,6 +298,9 @@ internal fun SubscriptionDetailsScreen(
     val deleteText = stringResource(R.string.common_delete)
     val deleteTitle = stringResource(R.string.subscription_delete_title)
     val deleteMessage = stringResource(R.string.subscription_delete_details_message)
+    val localDeleteTitle = stringResource(R.string.local_group_delete_title)
+    val localDeleteMessage = stringResource(R.string.local_group_delete_message)
+    val localClearMessage = stringResource(R.string.local_config_clear_message)
     val nodeDeleteConfirm = stringResource(R.string.node_delete_confirm)
     fun showNodeActions(node: CatalogNode) = overlay.showActionSheet(
         title = node.tag,
@@ -253,10 +317,19 @@ internal fun SubscriptionDetailsScreen(
         ),
         cancel = cancelText,
     )
-    fun confirmDelete() = overlay.showDialog(deleteTitle, deleteMessage, listOf(
-        CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) { viewModel.remove(id, onBack) },
-        CouiDialogButton(cancelText),
-    ))
+    // URL 订阅与自建本地分组整个删除；default（本地配置）只清空节点。
+    fun confirmDelete() {
+        val group = state.details?.group ?: return
+        val (title, message) = when {
+            group.type == "subscription" -> deleteTitle to deleteMessage
+            group.id == "default" -> localDeleteTitle to localClearMessage
+            else -> localDeleteTitle to String.format(localDeleteMessage, group.name)
+        }
+        overlay.showDialog(title, message, listOf(
+            CouiDialogButton(deleteText, CouiDialogButton.Kind.Danger) { viewModel.remove(id, onBack) },
+            CouiDialogButton(cancelText),
+        ))
+    }
 
     val details = state.details
     val isSubscription = details?.group?.type == "subscription"
@@ -297,9 +370,7 @@ internal fun SubscriptionDetailsScreen(
                         style = Coui.type.rowValue.copy(color = if (group.active) Coui.colors.success else status.color),
                     )
                 }
-                if (!group.active) CouiActionRow(stringResource(
-                    if (isSubscription) R.string.subscription_set_active else R.string.local_config_set_active
-                ), { viewModel.activate(id) })
+                CouiJumpRow(stringResource(R.string.subscription_view_nodes), { openNodesGroup(id) })
             }
         }
         if (isSubscription) item("actions") {
@@ -329,9 +400,9 @@ internal fun SubscriptionDetailsScreen(
             } else couiCardItems(history, key = { "history:" + it.index }, title = historyTitle) { entry ->
                 HistoryRow(entry.value)
             }
-            item("delete") {
-                CouiGroup { CouiActionRow(deleteText, ::confirmDelete, danger = true) }
-            }
+        }
+        item("delete") {
+            CouiGroup { CouiActionRow(deleteText, ::confirmDelete, danger = true, enabled = state.operation.isEmpty()) }
         }
     }
 
@@ -364,13 +435,18 @@ internal fun SubscriptionDetailsScreen(
 internal fun SubscriptionEditorScreen(
     id: String,
     onBack: () -> Unit,
+    initialUrl: String = "",
     viewModel: SubscriptionEditorViewModel = netProxyViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val draft = state.draft
     val overlay = LocalCouiOverlay.current
 
-    LaunchedEffect(id) { viewModel.load(id) }
+    LaunchedEffect(id) {
+        viewModel.load(id)
+        // 新建时带入「导入节点」里粘贴的订阅地址；已填写过的地址不覆盖。
+        if (id.isBlank() && initialUrl.isNotBlank()) viewModel.update { if (it.url.isBlank()) it.copy(url = initialUrl) else it }
+    }
     LaunchedEffect(state.saved) {
         if (state.saved) onBack()
     }
@@ -565,3 +641,82 @@ private fun formatBytes(bytes: Long): String {
     return if (value >= 100) "${value.roundToInt()} ${units[index]}"
     else "%.1f %s".format(value, units[index])
 }
+
+/** 从文件导入时读出的内容；[name] 是文件名，只用于显示。 */
+private data class ImportFile(val name: String, val content: String)
+
+private const val NewGroupTarget = "+new"
+
+/**
+ * 「导入节点」面板：粘贴分享链接或配置内容（或已选的文件），选择导入到哪个本地分组，或新建分组。
+ * 只粘贴了一个订阅地址时改为引导添加 URL 订阅。URL 订阅每次更新会整组替换，因此不能作为导入目标。
+ */
+@Composable
+private fun ImportNodesPanel(
+    groups: List<CatalogGroupSummary>,
+    file: ImportFile?,
+    onClearFile: () -> Unit,
+    onAddUrl: (String) -> Unit,
+    onImport: (content: String, groupId: String, newGroup: String) -> Unit,
+) {
+    var text by rememberSaveable { mutableStateOf("") }
+    val localGroups = groups.filter { it.type == "local" }
+    var target by rememberSaveable { mutableStateOf("default") }
+    var newName by rememberSaveable { mutableStateOf("") }
+    val url = text.trim().takeIf { file == null && '\n' !in it && ' ' !in it &&
+        (it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true)) }
+    if (file != null) {
+        CouiGroup(first = true) {
+            CouiRow(stringResource(R.string.subscription_import_file_selected, file.name), summary = formatSize(file.content.length.toLong()))
+            CouiActionRow(stringResource(R.string.subscription_import_file_clear), onClearFile)
+        }
+    } else {
+        CouiGroup(first = true, footer = stringResource(if (url != null) R.string.subscription_import_url_hint else R.string.subscription_import_formats)) {
+            TextArea(text, { text = it }, stringResource(R.string.subscription_import_content))
+        }
+    }
+    if (url != null) {
+        CouiButton(
+            text = stringResource(R.string.subscription_import_as_url),
+            onClick = { onAddUrl(url) },
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+        )
+        return
+    }
+    CouiGroup(title = stringResource(R.string.subscription_import_target), footer = stringResource(R.string.subscription_import_target_footer)) {
+        if (localGroups.none { it.id == "default" }) {
+            CouiRadioRow(stringResource(R.string.node_local_config), target == "default", { target = "default" })
+        }
+        localGroups.forEach { group ->
+            CouiRadioRow(group.name, target == group.id, { target = group.id },
+                summary = stringResource(R.string.local_config_summary, group.nodeCount))
+        }
+        CouiRadioRow(stringResource(R.string.subscription_import_new_group), target == NewGroupTarget, { target = NewGroupTarget })
+        if (target == NewGroupTarget) {
+            CouiInputRow(stringResource(R.string.subscription_import_group_name), newName, { newName = it })
+        }
+    }
+    val content = file?.content ?: text
+    val creating = target == NewGroupTarget
+    CouiButton(
+        text = stringResource(R.string.subscription_import_action),
+        onClick = { onImport(content, if (creating) "" else target, if (creating) newName.trim() else "") },
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+        enabled = content.isNotBlank() && (!creating || newName.isNotBlank()),
+    )
+}
+
+/** 文件选择器给出的显示名称；读不到时用路径最后一段。 */
+private fun displayName(context: Context, uri: Uri): String =
+    runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+    }.getOrNull() ?: uri.lastPathSegment.orEmpty()
+
+private fun formatSize(bytes: Long): String = when {
+    bytes < 1024 -> "$bytes B"
+    bytes < 1024 * 1024 -> "%.1f KB".format(bytes / 1024.0)
+    else -> "%.1f MB".format(bytes / 1024.0 / 1024.0)
+}
+

@@ -19,7 +19,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,6 +77,8 @@ internal class CatalogNodesViewModel(
     private var refreshRevision = 0L
     private var loaded = false
     private var eventsJob: Job? = null
+    private var lastEnterTestAt = 0L
+    private fun nowMillis() = System.nanoTime() / 1_000_000
 
     fun setVisible(visible: Boolean) {
         if (!visible) { eventsJob?.cancel(); eventsJob = null; return }
@@ -124,6 +130,17 @@ internal class CatalogNodesViewModel(
 
     fun selectGroup(id: String) {
         _state.update { it.copy(selectedGroupId = id) }
+    }
+
+    private val openRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** 主页收到后切到节点页；见 [openGroup]。 */
+    val pageRequests: SharedFlow<Unit> = openRequests.asSharedFlow()
+
+    /** 订阅页的「查看节点」：节点页显示这个分组，并请求切到节点页（在那里选择自动或某个节点）。 */
+    fun openGroup(id: String) {
+        selectGroup(id)
+        openRequests.tryEmit(Unit)
     }
 
     fun useAuto(groupId: String) = runOperation("select", refreshAfter = false) {
@@ -235,17 +252,34 @@ internal class CatalogNodesViewModel(
     }
 
     fun testGroupDelay(groupId: String) {
+        testGroup(groupId, silent = false)
+    }
+
+    /**
+     * 切到节点页时自动测一次当前分组的延迟。结果只显示在列表里，不弹提示；
+     * [ENTER_TEST_INTERVAL_MS] 内重复进入不再测，避免来回切页时反复测速。
+     */
+    fun testOnEnter(groupId: String) {
+        val now = nowMillis()
+        if (lastEnterTestAt != 0L && now - lastEnterTestAt < ENTER_TEST_INTERVAL_MS) return
+        if (testGroup(groupId, silent = true)) lastEnterTestAt = now
+    }
+
+    private fun testGroup(groupId: String, silent: Boolean): Boolean {
+        if (_state.value.operation.isNotEmpty()) return false
         val targets = _state.value.groups
             .firstOrNull { it.group.id == groupId }
             ?.nodes
             .orEmpty()
             .map { "$groupId/${it.tag}" }
-        if (targets.isEmpty()) return
+        if (targets.isEmpty()) return false
         testDelays(
             requestTarget = "auto",
             requestGroupId = groupId,
-            targets = targets + "Auto/$groupId"
+            targets = targets + "Auto/$groupId",
+            silent = silent,
         )
+        return true
     }
 
     fun importFile(uri: Uri) = runOperation(
@@ -287,7 +321,8 @@ internal class CatalogNodesViewModel(
     private fun testDelays(
         requestTarget: String,
         targets: List<String>,
-        requestGroupId: String = ""
+        requestGroupId: String = "",
+        silent: Boolean = false,
     ) {
         if (_state.value.operation.isNotEmpty()) return
         viewModelScope.launch {
@@ -334,8 +369,8 @@ internal class CatalogNodesViewModel(
                             latencies = current.latencies + targets.associateWith { target ->
                                 measured[target] ?: "timeout"
                             },
-                            notice = UiText.Resource(R.string.node_latency_complete),
-                            noticeId = current.noticeId + 1
+                            notice = if (silent) current.notice else UiText.Resource(R.string.node_latency_complete),
+                            noticeId = if (silent) current.noticeId else current.noticeId + 1
                         )
                     }
                 }
@@ -346,8 +381,8 @@ internal class CatalogNodesViewModel(
                         current.copy(
                             operation = "",
                             latencies = current.latencies + targets.associateWith { "failed" },
-                            error = error.userMessage().toUiText(),
-                            noticeId = current.noticeId + 1
+                            error = if (silent) current.error else error.userMessage().toUiText(),
+                            noticeId = if (silent) current.noticeId else current.noticeId + 1
                         )
                     }
                 }
@@ -411,6 +446,7 @@ internal class CatalogNodesViewModel(
 
     private companion object {
         const val DEFAULT_GROUP_ID = "default"
+        const val ENTER_TEST_INTERVAL_MS = 30_000L
     }
 }
 

@@ -111,6 +111,11 @@ internal fun CatalogNodesScreen(
     val selectedIndex = state.groups.indexOfFirst { it.group.id == state.selectedGroupId }.coerceAtLeast(0)
     val selectedGroup = state.groups.getOrNull(selectedIndex)
     val busy = state.operation.isNotEmpty()
+    // 每次切到节点页、分组读取完成后自动测一次当前分组的延迟（30 秒内重复进入不再测）。
+    val groupsReady = !state.loading && selectedGroup != null
+    LaunchedEffect(isActive, groupsReady) {
+        if (isActive && groupsReady) viewModel.testOnEnter(selectedGroup.group.id)
+    }
 
     val addTitle = stringResource(R.string.node_add_single)
     val linkLabel = stringResource(R.string.node_link_label)

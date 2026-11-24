@@ -23,9 +23,14 @@ internal class SubscriptionRepository(private val client: ModuleApiClient) {
 
     suspend fun update(id: String) { client.post("/subscriptions/$id/update") }
     suspend fun updateAll() { client.post("/subscriptions/update-all") }
-    suspend fun activate(id: String) {
-        client.put("/selection", buildJsonObject { put("group_id", id); put("node_tag", "") })
-    }
+    /** 把分享链接或配置内容导入本地分组；[newGroup] 不为空时新建同名本地分组，[groupId] 被忽略。 */
+    suspend fun importNodes(content: String, groupId: String, newGroup: String): JsonElement =
+        client.post("/nodes", buildJsonObject {
+            put("content", content)
+            if (newGroup.isNotBlank()) put("new_group", newGroup.trim()) else put("group_id", groupId)
+        }).data
+
+    /** URL 订阅与自建本地分组整个删除；default（本地配置）只清空其中的节点。 */
     suspend fun remove(id: String, replacementGroupId: String = "") {
         client.delete("/subscriptions/$id", if (replacementGroupId.isBlank()) emptyMap() else mapOf("replacement_group_id" to replacementGroupId))
     }

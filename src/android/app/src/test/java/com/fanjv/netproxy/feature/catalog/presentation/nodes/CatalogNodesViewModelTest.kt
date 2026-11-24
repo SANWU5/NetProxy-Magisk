@@ -171,4 +171,27 @@ class CatalogNodesViewModelTest {
         assertEquals(UiText.Empty, vm.state.value.error)
         assertEquals(0L, vm.state.value.noticeId)
     }
+
+    @Test fun enteringNodesPageTestsCurrentGroupOnceAndQuietly() = runBlocking {
+        val delays = AtomicInteger()
+        val vm = model(this, Transport { request ->
+            when (request.path) {
+                "/nodes/delay" -> {
+                    delays.incrementAndGet()
+                    """{"target":"Auto/Local","groups":[{"tag":"Auto/Local","items":[{"tag":"Local/a","url_test_delay":120}]}]}"""
+                }
+                else -> """{"groups":[{"group":{"id":"default","name":"Local","type":"local"},"nodes":[{"tag":"a"}]}],""" +
+                    """"selection":{"active_group_id":"default","selector_mode":"urltest"}}"""
+            }
+        })
+        vm.refresh()
+        withTimeout(5_000) { vm.state.first { it.groups.isNotEmpty() } }
+        val notices = vm.state.value.noticeId
+        vm.testOnEnter("default")
+        withTimeout(5_000) { vm.state.first { it.operation.isEmpty() && it.latencies["default/a"] == "120" } }
+        vm.testOnEnter("default")
+        settle()
+        assertEquals(1, delays.get())
+        assertEquals(notices, vm.state.value.noticeId)
+    }
 }

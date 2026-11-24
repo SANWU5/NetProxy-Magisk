@@ -82,6 +82,7 @@ import com.fanjv.netproxy.navigation.AppDestination
 import com.fanjv.netproxy.navigation.DockHost
 import com.fanjv.netproxy.navigation.LocalDockHost
 import com.fanjv.netproxy.navigation.LocalNavigator
+import com.fanjv.netproxy.navigation.LocalOpenNodesGroup
 import com.fanjv.netproxy.navigation.Route.ChainPolicy
 import com.fanjv.netproxy.navigation.Route.About
 import com.fanjv.netproxy.navigation.Route.Apps
@@ -190,10 +191,12 @@ internal fun NetProxyApp(themeViewModel: ThemeViewModel) {
     }
 
     val openReconnect = remember { { reconnect = true } }
+    val openNodesGroup: (String) -> Unit = remember(catalogNodesViewModel) { { id -> catalogNodesViewModel.openGroup(id) } }
     CompositionLocalProvider(
         LocalNavigator provides navigator,
         LocalModuleAvailability provides availability,
         LocalModuleReconnect provides openReconnect,
+        LocalOpenNodesGroup provides openNodesGroup,
     ) {
         Scaffold {
             NavDisplay(
@@ -218,6 +221,7 @@ internal fun NetProxyApp(themeViewModel: ThemeViewModel) {
                     ModulePage(R.string.subscriptions, R.string.subscriptions_read_failed, { navigator.pop() }) {
                         SubscriptionEditorScreen(
                             id = it.id,
+                            initialUrl = it.url,
                             onBack = { navigator.pop() }
                         )
                     }
@@ -377,6 +381,16 @@ private fun MainPager(
         onDestinationChanged(destinations[selected])
     }
     LaunchedEffect(dock) { dock.pageRequests.collect { selected = it.coerceIn(0, destinations.lastIndex) } }
+    // 订阅页「查看节点」：回到主页并切到节点页，节点页已切换到对应分组。
+    LaunchedEffect(catalogNodesViewModel) {
+        catalogNodesViewModel.pageRequests.collect {
+            val index = destinations.indexOf(AppDestination.Nodes)
+            if (index != -1) {
+                while (navigator.backStack.size > 1) navigator.pop()
+                selected = index
+            }
+        }
+    }
     // 底栏只在主分页可见：进入二级页或 COUI 弹出层盖住页面时隐藏，避免挡住内容。
     val rootVisible = navigator.backStack.size == 1 && !overlay.isCovering
     SideEffect { dock.setShown(rootVisible) }

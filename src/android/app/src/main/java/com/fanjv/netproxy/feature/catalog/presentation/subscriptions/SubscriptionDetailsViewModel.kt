@@ -87,11 +87,6 @@ internal class SubscriptionDetailsViewModel(
         UiText.Resource(R.string.subscription_updated)
     }
 
-    fun activate(id: String) = runOperation("activate", id) {
-        repository.activate(id)
-        UiText.Resource(R.string.subscription_activated)
-    }
-
     fun remove(id: String, onRemoved: () -> Unit) = runOperation("remove", id) {
         repository.remove(id)
         currentCoroutineContext().ensureActive()

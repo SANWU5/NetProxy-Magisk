@@ -250,20 +250,59 @@ private fun DialogCard(spec: DialogSpec, close: () -> Unit) {
             .padding(start = 24.dp, end = 24.dp, top = if (spec.title == null) 24.dp else 0.dp, bottom = 16.dp),
             style = type.dialogMessage.copy(color = colors.labelSecondary, textAlign = TextAlign.Center))
         spec.content?.invoke()
-        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)) {
-            spec.buttons.forEachIndexed { i, b ->
-                if (i > 0) Spacer(Modifier.height(8.dp))
-                // 每个按钮都有自己的底色：主按钮用强调色填充，其余按钮用浅灰底，危险操作用红字。
+        DialogButtons(spec, close)
+    }
+}
+
+/**
+ * 对话框按钮：与 C17 一致，两个按钮放得下时左右并排（取消在左、确认在右），放不下或多于两个时上下排列、确认在上。
+ * 每个按钮都有自己的底色：主按钮用强调色填充，其余按钮用浅灰底，危险操作用红字。
+ */
+@Composable
+private fun DialogButtons(spec: DialogSpec, close: () -> Unit) {
+    val colors = Coui.colors
+    val type = Coui.type
+    val ordered = if (spec.buttons.size == 2) spec.buttons.reversed() else spec.buttons
+    Layout(
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+        content = {
+            ordered.forEach { b ->
                 val (fill, color) = when (b.kind) {
                     CouiDialogButton.Kind.Primary -> colors.accent to colors.onColor
                     CouiDialogButton.Kind.Danger -> colors.container8 to colors.error
                     CouiDialogButton.Kind.Normal -> colors.container8 to colors.label
                 }
                 Box(
-                    Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(50)).background(fill)
-                        .couiPressable(role = Role.Button) { if (spec.autoClose) close(); b.onClick() },
+                    Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(50)).background(fill)
+                        .couiPressable(role = Role.Button) { if (spec.autoClose) close(); b.onClick() }
+                        .padding(horizontal = 12.dp),
                     contentAlignment = Alignment.Center,
-                ) { BasicText(b.text, style = type.dialogButton.copy(color = color)) }
+                ) { BasicText(b.text, style = type.dialogButton.copy(color = color), maxLines = 1) }
+            }
+        },
+    ) { measurables, constraints ->
+        val gap = 8.dp.roundToPx()
+        val width = constraints.maxWidth
+        val half = (width - gap) / 2
+        val sideBySide = measurables.size == 2 && measurables.all { it.maxIntrinsicWidth(Constraints.Infinity) <= half }
+        if (sideBySide) {
+            val placeables = measurables.map { it.measure(Constraints.fixedWidth(half).copy(minHeight = 0, maxHeight = constraints.maxHeight)) }
+            val height = placeables.maxOf { it.height }
+            layout(width, height) {
+                placeables[0].placeRelative(0, (height - placeables[0].height) / 2)
+                placeables[1].placeRelative(width - half, (height - placeables[1].height) / 2)
+            }
+        } else {
+            // 竖排时恢复原有顺序：确认在上，取消在下。
+            val stacked = if (measurables.size == 2) measurables.reversed() else measurables
+            val placeables = stacked.map { it.measure(Constraints.fixedWidth(width).copy(minHeight = 0, maxHeight = constraints.maxHeight)) }
+            val height = placeables.sumOf { it.height } + gap * (placeables.size - 1).coerceAtLeast(0)
+            layout(width, height) {
+                var y = 0
+                placeables.forEach { placeable ->
+                    placeable.placeRelative(0, y)
+                    y += placeable.height + gap
+                }
             }
         }
     }

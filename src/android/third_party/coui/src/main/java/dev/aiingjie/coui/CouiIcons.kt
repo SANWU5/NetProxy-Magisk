@@ -25,6 +25,8 @@ enum class CouiGlyph(val widthDp: Int, val heightDp: Int, val mirrored: Boolean 
     Clear(24, 24),
     Close(24, 24),
     More(24, 24),
+    /** 展开行右侧向下的箭头；展开后转 180°。 */
+    Expand(16, 24),
 }
 
 @Composable
@@ -65,6 +67,7 @@ private fun DrawScope.drawGlyph(glyph: CouiGlyph, color: Color, u: Float) {
             line(color, u, 1.6f, 17.5f to 6.5f, 6.5f to 17.5f)
         }
         CouiGlyph.More -> for (x in listOf(6f, 12f, 18f)) drawCircle(color, radius = 1.6f * u, center = Offset(x * u, 12f * u))
+        CouiGlyph.Expand -> line(color, u, 1.4f, 3.4f to 9.8f, 8f to 14.2f, 12.6f to 9.8f)
     }
 }
 
@@ -93,6 +96,29 @@ fun CouiStatusIcon(status: CouiStatus, modifier: Modifier = Modifier, sizeDp: In
                 drawCircle(white, radius = 1.15f * u, center = Offset(10f * u, 14.4f * u))
             }
             CouiStatus.Success -> line(white, u, 1.8f, 5.8f to 10.2f, 8.8f to 13.2f, 14.4f to 7.2f)
+        }
+    }
+}
+
+/** 空状态插图里的线条图形，按 36 单位绘制：没有状态时是空托盘，有状态时是对应的提示符号。 */
+@Composable
+internal fun CouiEmptyGlyph(status: CouiStatus?, color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val u = size.width / 36f
+        when (status) {
+            null -> {
+                line(color, u, 1.8f, 6f to 20f, 10.5f to 9.5f, 25.5f to 9.5f, 30f to 20f, 30f to 26.5f, 6f to 26.5f, 6f to 20f)
+                line(color, u, 1.8f, 6f to 20f, 13f to 20f, 15f to 23f, 21f to 23f, 23f to 20f, 30f to 20f)
+            }
+            CouiStatus.Warning, CouiStatus.Error -> {
+                line(color, u, 2.2f, 18f to 9.5f, 18f to 20.5f)
+                drawCircle(color, radius = 1.5f * u, center = Offset(18f * u, 26f * u))
+            }
+            CouiStatus.Info -> {
+                drawCircle(color, radius = 1.5f * u, center = Offset(18f * u, 10f * u))
+                line(color, u, 2.2f, 18f to 15.5f, 18f to 26.5f)
+            }
+            CouiStatus.Success -> line(color, u, 2.2f, 10f to 18.5f, 15.5f to 24f, 26f to 12.5f)
         }
     }
 }

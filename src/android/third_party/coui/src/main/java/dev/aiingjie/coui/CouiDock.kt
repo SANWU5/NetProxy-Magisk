@@ -2,6 +2,10 @@
 // Copyright (C) 2026 aiingjie
 package dev.aiingjie.coui
 
+import android.view.animation.PathInterpolator
+import android.animation.ValueAnimator
+import android.animation.AnimatorListenerAdapter
+import android.animation.Animator
 import android.annotation.SuppressLint
 import android.graphics.Outline
 import android.graphics.drawable.GradientDrawable
@@ -131,11 +135,39 @@ class CouiDockBar(
         if (params.bottomMargin != margin) { params.bottomMargin = margin; view.layoutParams = params }
     }
 
+    // 显示与隐藏的位移单独记录，与按压回弹的位移相加，二者互不打断。
+    private var shownOffset = 0f
+    private var shownTarget = true
+    private var shownAnimator: ValueAnimator? = null
+
+    /** 与 C17 一致：出现时自下而上升起（330ms），隐藏时下沉（240ms）后再移除。 */
     fun setShown(shown: Boolean) {
-        val target = if (shown) View.VISIBLE else View.GONE
-        if (view.visibility == target) return
+        if (shownTarget == shown && (shownAnimator != null || view.visibility == if (shown) View.VISIBLE else View.GONE)) return
+        shownTarget = shown
         if (!shown) cancel()
-        view.visibility = target
+        shownAnimator?.cancel()
+        val params = view.layoutParams as? FrameLayout.LayoutParams
+        val away = (view.height.takeIf { it > 0 } ?: (72 * density).roundToInt()) + (params?.bottomMargin ?: 0) + 16 * density
+        if (shown && view.visibility != View.VISIBLE) {
+            shownOffset = away
+            view.visibility = View.VISIBLE
+            applyMotion()
+        }
+        shownAnimator = ValueAnimator.ofFloat(shownOffset, if (shown) 0f else away).apply {
+            duration = if (shown) 330L else 240L
+            interpolator = PathInterpolator(.3f, 0f, if (shown) .1f else 1f, 1f)
+            addUpdateListener { shownOffset = it.animatedValue as Float; applyMotion() }
+            addListener(object : AnimatorListenerAdapter() {
+                private var canceled = false
+                override fun onAnimationCancel(animation: Animator) { canceled = true }
+                override fun onAnimationEnd(animation: Animator) {
+                    if (canceled) return
+                    shownAnimator = null
+                    if (!shown) view.visibility = View.GONE
+                }
+            })
+            start()
+        }
     }
 
     private fun handle(host: View, event: MotionEvent): Boolean {
@@ -212,7 +244,7 @@ class CouiDockBar(
         val s = pressScale.value
         val k = stretch.value
         view.translationX = moveX.value
-        view.translationY = moveY.value
+        view.translationY = moveY.value + shownOffset
         view.scaleX = s * (1f + .045f * k)
         view.scaleY = s * (1f - .03f * k)
         touch.light = glow.value.coerceIn(0f, 1f)

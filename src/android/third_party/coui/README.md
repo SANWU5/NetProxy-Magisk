@@ -3,7 +3,7 @@
 来源：AiingJie 的 `coui-ui-kit` 1.0.0（GitHub：sanwu5，GPL-3.0-only），仿 ColorOS 17（COUI）设计的
 Jetpack Compose 组件，只依赖 Compose Foundation。
 
-- `src/main/java/dev/aiingjie/coui/`：组件源码，与 1.0.0 发布包一致，未修改包名。
+- `src/main/java/dev/aiingjie/coui/`：组件源码，基于 1.0.0 发布包，未修改包名。NetProxy 在此基础上有改动（弹出层、按压、列表分割线、操作行与开关触感、对话框按钮、底栏显隐动画，新增空状态与展开行），数值记在 `DESIGN.md`。
 - `DESIGN.md`：颜色、字体、尺寸、圆角与动效数值，改动组件时同步更新。
 - `NOTICE.md`：第三方声明（figma-squircle，MIT）。
 

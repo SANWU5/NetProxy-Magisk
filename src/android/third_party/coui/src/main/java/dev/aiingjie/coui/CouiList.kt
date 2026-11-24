@@ -23,6 +23,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,11 +33,16 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -152,13 +158,19 @@ fun CouiRow(
 ) {
     val colors = Coui.colors
     val type = Coui.type
+    val density = LocalDensity.current
     val clickable = if (onClick != null) Modifier.couiPressable(enabled = enabled, role = role, source = source, onClick = onClick) else Modifier
+    // 有左侧图标时，卡片分割线从文字起点开始（DESIGN.md：分割线从行文字起点画到距右边 16）。
+    var leadingWidth by remember { mutableStateOf(0.dp) }
+    val divider = if (leading != null && leadingWidth > 0.dp) {
+        Modifier.layoutId(CouiDividerInset(CouiDimens.rowInnerPadding + leadingWidth + CouiDimens.iconToText))
+    } else Modifier
     Row(
-        modifier.fillMaxWidth().heightIn(min = minHeight).then(clickable).padding(horizontal = CouiDimens.rowInnerPadding),
+        modifier.then(divider).fillMaxWidth().heightIn(min = minHeight).then(clickable).padding(horizontal = CouiDimens.rowInnerPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (leading != null) {
-            leading()
+            Box(Modifier.onSizeChanged { leadingWidth = with(density) { it.width.toDp() } }) { leading() }
             Spacer(Modifier.width(CouiDimens.iconToText))
         }
         Column(Modifier.weight(1f).padding(vertical = CouiDimens.textBlockVertical)) {
@@ -236,8 +248,9 @@ fun CouiSwitchRow(
 ) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
+    val haptics = LocalHapticFeedback.current
     CouiRow(title, modifier, summary, enabled, leading = leading, role = Role.Switch, source = source,
-        minHeight = if (leading != null) 60.dp else CouiDimens.rowMinHeight, onClick = { onCheckedChange(!checked) }) {
+        minHeight = if (leading != null) 60.dp else CouiDimens.rowMinHeight, onClick = { haptics.toggle(!checked); onCheckedChange(!checked) }) {
         Spacer(Modifier.width(CouiDimens.widgetGap))
         CouiSwitch(checked, null, enabled = enabled, pressed = pressed)
     }
@@ -258,6 +271,7 @@ fun CouiSwitchJumpRow(
     val colors = Coui.colors
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
+    val haptics = LocalHapticFeedback.current
     Row(modifier.fillMaxWidth().heightIn(min = if (leading != null) 60.dp else CouiDimens.rowMinHeight),
         verticalAlignment = Alignment.CenterVertically) {
         CouiRow(title, Modifier.weight(1f), summary, enabled, leading = leading, role = Role.Button,
@@ -265,7 +279,7 @@ fun CouiSwitchJumpRow(
         Box(Modifier.width(1.dp).height(22.dp).background(colors.divider))
         Box(
             Modifier.heightIn(min = if (leading != null) 60.dp else CouiDimens.rowMinHeight)
-                .couiPressable(enabled = switchEnabled, role = Role.Switch, source = source) { onCheckedChange(!checked) }
+                .couiPressable(enabled = switchEnabled, role = Role.Switch, source = source) { haptics.toggle(!checked); onCheckedChange(!checked) }
                 .padding(start = CouiDimens.widgetGap, end = CouiDimens.rowInnerPadding),
             contentAlignment = Alignment.Center,
         ) { CouiSwitch(checked, null, enabled = switchEnabled, pressed = pressed) }
@@ -300,7 +314,8 @@ fun CouiInfoRow(title: String, value: String?, modifier: Modifier = Modifier, su
 fun CouiActionRow(title: String, onClick: () -> Unit, modifier: Modifier = Modifier, danger: Boolean = false, enabled: Boolean = true,
                   summary: String? = null) {
     val colors = Coui.colors
-    CouiRow(title, modifier, summary, enabled, titleColor = if (danger) colors.error else colors.accentText, role = Role.Button, onClick = onClick)
+    // 与 C17 一致：操作行用正文颜色、不带箭头，只有危险操作用红色。
+    CouiRow(title, modifier, summary, enabled, titleColor = if (danger) colors.error else colors.label, role = Role.Button, onClick = onClick)
 }
 
 @Composable
@@ -346,3 +361,7 @@ fun CouiAppIcon(bitmap: ImageBitmap?, modifier: Modifier = Modifier, sizeDp: Int
 
 @Composable
 fun CouiListTop() = Spacer(Modifier.height(CouiDimens.listTop))
+
+/** 开关切换的触感反馈：打开与关闭使用不同的系统触感。 */
+private fun HapticFeedback.toggle(on: Boolean) =
+    performHapticFeedback(if (on) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)

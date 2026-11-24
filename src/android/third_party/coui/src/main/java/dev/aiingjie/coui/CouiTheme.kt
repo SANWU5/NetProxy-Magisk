@@ -172,6 +172,8 @@ object CouiDimens {
     val arrowGap = 4.dp
     val widgetGap = 16.dp
     val iconToText = 16.dp
+    /** 左侧是默认尺寸（36）应用图标的行，文字起点；懒加载卡片的分割线从这里开始。 */
+    val appIconTextStart = 16.dp + 36.dp + 16.dp
     val dividerThickness = 0.33.dp
     val cardRadius = 20.dp
     val cardRadiusSmooth = 24.dp

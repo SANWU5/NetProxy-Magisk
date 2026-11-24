@@ -68,7 +68,7 @@ func BuildRuntime(ctx context.Context, dir string, state State, domestic ...stri
 		result.Landings = append(result.Landings, object)
 		result.LandingTags = append(result.LandingTags, runtimeTag)
 	}
-	if UsesPolicies(state.Mode) {
+	if state.Mode != ModeOff {
 		result.Route, err = routeOverlay(state, domestic)
 		if err != nil {
 			return nil, err
@@ -96,9 +96,14 @@ func landingObjects(dir string) ([]map[string]jsontext.Value, error) {
 // 主配置的 Direct 模式与 DNS 劫持必须保持优先：Wi-Fi 绕过时策略应用同样直连，
 // 应用自身的 DNS 查询仍由内核接管，不能被送进后置代理。
 // domestic 是主配置中已定义的中国大陆规则集，组开启「国内直连」时这些目标先于组出口直连。
+//
+// 后置代理大多只有 IPv4 出口：应用按 AAAA 记录走 IPv6 时，经后置的连接会在握手时被重置，表现为开启链式后
+// 双栈网站全部打不开。因此 IPv6 连接改用嗅探到的域名（TLS SNI、HTTP Host、QUIC）作为目标，由后置自己解析；
+// 主配置随后的 sniff 会因已嗅探而跳过，没有嗅探到域名的 IPv6 连接保持原样。
 func routeOverlay(state State, domestic []string) ([]byte, error) {
 	rules := []map[string]any{
 		{"clash_mode": "Direct", "action": "route", "outbound": "direct"},
+		{"action": "sniff"},
 		{
 			"type": "logical",
 			"mode": "or",
@@ -109,6 +114,10 @@ func routeOverlay(state State, domestic []string) ([]byte, error) {
 			"action": "hijack-dns",
 		},
 		{"ip_is_private": true, "action": "route", "outbound": "direct"},
+		{"ip_version": 6, "action": "sniff-override-destination"},
+	}
+	if !UsesPolicies(state.Mode) {
+		return marshalOverlay(rules)
 	}
 	policyRules := 0
 	// 组按列表顺序生成规则，sing-box 自上而下匹配，先命中的组生效。
@@ -144,9 +153,13 @@ func routeOverlay(state State, domestic []string) ([]byte, error) {
 		rules = append(rules, rule)
 		policyRules++
 	}
-	if policyRules == 0 {
+	if policyRules == 0 && !UsesManual(state.Mode) {
 		return nil, nil
 	}
+	return marshalOverlay(rules)
+}
+
+func marshalOverlay(rules []map[string]any) ([]byte, error) {
 	content, err := json.Marshal(map[string]any{"route": map[string]any{"rules": rules}}, json.Deterministic(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return nil, err

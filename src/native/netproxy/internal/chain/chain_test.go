@@ -170,7 +170,11 @@ func TestRouteOverlayOrdersGroupsAndDomesticDirect(t *testing.T) {
 	if err := json.Unmarshal(content, &document); err != nil {
 		t.Fatal(err)
 	}
-	rules := document.Route.Rules[3:]
+	base := document.Route.Rules[:5]
+	if base[1]["action"] != "sniff" || base[2]["action"] != "hijack-dns" || base[4]["action"] != "sniff-override-destination" {
+		t.Fatalf("策略组之前应依次嗅探、劫持 DNS、私有地址直连，并把 IPv6 目标改为域名: %s", content)
+	}
+	rules := document.Route.Rules[5:]
 	if len(rules) != 4 {
 		t.Fatalf("规则数量错误: %s", content)
 	}
@@ -248,10 +252,13 @@ func TestBuildRuntimeSetsDetourAndPolicyRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	rules := overlay.Route.Rules
-	if len(rules) != 4 || string(rules[0]["clash_mode"]) != `"Direct"` || string(rules[1]["action"]) != `"hijack-dns"` {
+	if len(rules) != 6 || string(rules[0]["clash_mode"]) != `"Direct"` || string(rules[2]["action"]) != `"hijack-dns"` {
 		t.Fatalf("策略路由必须保持 Direct 与 DNS 劫持优先: %s", runtime.Route)
 	}
-	if string(rules[3]["outbound"]) != `"落地/B"` || !strings.Contains(string(rules[3]["package_name"]), "com.example.two") {
+	if string(rules[4]["action"]) != `"sniff-override-destination"` || string(rules[4]["ip_version"]) != "6" {
+		t.Fatalf("经后置的 IPv6 连接应改用嗅探到的域名: %s", runtime.Route)
+	}
+	if string(rules[5]["outbound"]) != `"落地/B"` || !strings.Contains(string(rules[5]["package_name"]), "com.example.two") {
 		t.Fatalf("策略规则错误: %s", runtime.Route)
 	}
 	_, manual, _, err := Update(t.Context(), dir, func(state *State) error {
@@ -263,8 +270,12 @@ func TestBuildRuntimeSetsDetourAndPolicyRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime, err = BuildRuntime(t.Context(), dir, manual)
-	if err != nil || !runtime.ProxyChain || runtime.Manual != "落地/A" || runtime.Route != nil {
+	if err != nil || !runtime.ProxyChain || runtime.Manual != "落地/A" {
 		t.Fatalf("手动模式运行时错误: %#v %v", runtime, err)
+	}
+	// 手动模式没有策略组，但经后置的 IPv6 连接同样需要改用域名，否则后置没有 IPv6 时全部失败。
+	if !strings.Contains(string(runtime.Route), `"sniff-override-destination"`) || strings.Contains(string(runtime.Route), "package_name") {
+		t.Fatalf("手动模式的策略路由应只包含 IPv6 目标改写: %s", runtime.Route)
 	}
 }
 

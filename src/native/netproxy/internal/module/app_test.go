@@ -209,9 +209,10 @@ func TestPrepareWritesChainRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 不使用策略时策略路由仍然存在但为空配置，原位重载不会因文件缺失失败。
-	if content, err := os.ReadFile(prepared.Route); err != nil || string(content) != emptyOverlay {
-		t.Fatalf("手动模式的策略路由应为空配置: %q %v", content, err)
+	// 手动模式没有策略组，策略路由只把经后置的 IPv6 连接改用嗅探到的域名。
+	if content, err := os.ReadFile(prepared.Route); err != nil || !strings.Contains(string(content), `"sniff-override-destination"`) ||
+		strings.Contains(string(content), "package_name") {
+		t.Fatalf("手动模式的策略路由应只包含 IPv6 目标改写: %q %v", content, err)
 	}
 	args, err := preparedConfigArgs(options, prepared)
 	if err != nil || len(args) != 12 {

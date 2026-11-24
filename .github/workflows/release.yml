@@ -83,12 +83,28 @@ jobs:
         with:
           name: module-package
 
+      # 官方仓库发布到 KernelSU Modules，只接受 v<主>.<次>.<修订> 形式的 tag；分支仓库（如链式分支 v8.6.5-chain）
+      # 不分发到官方的 KernelSU 仓库，也没有官方的 Telegram 密钥，只校验模块包并发布到本仓库的 Release。
       - name: 校验模块包与发布身份
+        if: github.repository == 'Fanju6/NetProxy-Magisk'
         env:
           TAG: ${{ github.ref_name }}
         run: node .github/scripts/prepare-kernelsu.mjs check "$TAG" "$MODULE_NAME" "$COMMIT_COUNT"
 
+      - name: 校验模块包版本（分支仓库）
+        if: github.repository != 'Fanju6/NetProxy-Magisk'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          prop="$(7z x -so "$MODULE_NAME" module.prop)"
+          for field in "id=netproxy" "version=$TAG" "versionCode=$COMMIT_COUNT"; do
+            printf '%s\n' "$prop" | grep -qxF "$field" || { echo "模块包缺少 $field" >&2; exit 1; }
+          done
+          printf '%s\n' "$prop" | grep -q '^updateJson=https://github.com/${{ github.repository }}/' || {
+            echo '模块包的 updateJson 必须指向本仓库，否则用户会被更新为其他仓库的版本' >&2; exit 1; }
+
       - name: KernelSU 分发预检
+        if: github.repository == 'Fanju6/NetProxy-Magisk'
         uses: KernelSU-Modules/tools/actions/module-release@ca1187c92135b3c31e48d37e008d61153120a08b
         with:
           zip: ${{ env.MODULE_NAME }}
@@ -107,7 +123,7 @@ jobs:
             --arg version "Module ${TAG}" \
             --argjson versionCode "${COMMIT_COUNT}" \
             --arg zipUrl "https://github.com/${REPO}/releases/download/${TAG}/${MODULE_NAME}" \
-            --arg changelog "https://raw.githubusercontent.com/${REPO}/refs/heads/main/docs/changelog.md" \
+            --arg changelog "https://raw.githubusercontent.com/${REPO}/refs/tags/${TAG}/docs/changelog.md" \
             '{version: $version, versionCode: $versionCode, zipUrl: $zipUrl, changelog: $changelog}' \
             > update.json
           cat update.json
@@ -130,6 +146,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 发布通知到 Telegram
+        if: github.repository == 'Fanju6/NetProxy-Magisk'
         continue-on-error: true
         uses: cbrgm/telegram-github-action@v1
         with:
@@ -151,6 +168,7 @@ jobs:
     name: 分发至 KernelSU Modules
     needs: release
     uses: ./.github/workflows/publish-kernelsu.yml
+    if: github.repository == 'Fanju6/NetProxy-Magisk'
     with:
       tag: ${{ github.ref_name }}
     secrets:
@@ -177,7 +195,7 @@ jobs:
   failure:
     name: 通知构建或发布失败
     needs: [preflight, build, release]
-    if: always() && contains(needs.*.result, 'failure')
+    if: always() && contains(needs.*.result, 'failure') && github.repository == 'Fanju6/NetProxy-Magisk'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

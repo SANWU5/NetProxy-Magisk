@@ -88,6 +88,13 @@ internal class SmartGroupsViewModel(
         response.smart
     }
 
+    /** 切换订阅分组范围或自选的分组，模块随即重新分组，地区分组内容随之变化。 */
+    fun setSources(mode: String, groups: List<String>, english: Boolean) = write("sources") {
+        val response = repository.setSources(mode, groups, english)
+        emit(SmartEvent.Generated(response.summary))
+        response.smart
+    }
+
     fun select(id: String) = write("select:$id") {
         repository.select(id)
         emit(SmartEvent.Selected)

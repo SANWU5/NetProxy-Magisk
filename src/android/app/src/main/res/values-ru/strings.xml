@@ -754,4 +754,15 @@
     <string name="chain_policy_excluded">Исключённые (%1$d)</string>
     <string name="chain_policy_excluded_footer">Эти приложения пропускают группу и обрабатываются следующими группами или текущим режимом. Нажмите, чтобы убрать.</string>
     <string name="chain_policy_reorder">Порядок групп</string>
+    <string name="dashboard_ipv6_bypassed">IPv6 не перехватывается</string>
+    <string name="dashboard_ipv6_guarded">IPv6-соединения идут напрямую, минуя прокси; DNS-запросы по IPv6 по-прежнему обрабатывает прокси, поэтому подмена невозможна.</string>
+    <string name="dashboard_ipv6_leaking">Устройство не поддерживает защиту DNS по IPv6: DNS-запросы и соединения по IPv6 идут мимо прокси, и некоторые приложения могут получать подменённые адреса. Включите перехват IPv6 в настройках входящих.</string>
+    <string name="ebpf_local_ipv6_off_summary">IPv6-соединения идут напрямую; DNS-запросы по IPv6 обрабатывает прокси для защиты от подмены. Если устройство это не поддерживает, появится предупреждение на панели.</string>
+    <string name="smart_sources">Группы подписок</string>
+    <string name="smart_sources_scope">Охват</string>
+    <string name="smart_sources_all">Все подписки</string>
+    <string name="smart_sources_custom">Выборочно</string>
+    <string name="smart_sources_all_footer">Умные группы используют все подписки и локальные узлы.</string>
+    <string name="smart_sources_custom_footer">Умные группы используют только отмеченные подписки или локальные группы; изменения сразу пересобирают группы.</string>
+    <string name="smart_sources_nodes">Узлов: %1$d</string>
 </resources>

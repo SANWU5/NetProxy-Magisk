@@ -27,6 +27,9 @@ internal data class ServiceStatusSnapshot(
     /** 节点页使用智能分组时不为空。 */
     @SerialName("smart_group_id") val smartGroupId: String = "",
     @SerialName("smart_group_name") val smartGroupName: String = "",
+    /** eBPF 本机接管未开启 IPv6；ipv6DnsGuard 为真时 IPv6 的 DNS 仍由代理接管。 */
+    @SerialName("ipv6_bypassed") val ipv6Bypassed: Boolean = false,
+    @SerialName("ipv6_dns_guard") val ipv6DnsGuard: Boolean = false,
     @SerialName("chain_mode") val chainMode: String = "off",
     @SerialName("chain_landing") val chainLanding: String = "",
     @SerialName("memory_bytes") val memoryBytes: Long = 0,

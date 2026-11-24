@@ -754,4 +754,15 @@
     <string name="chain_policy_excluded">Excluded apps (%1$d)</string>
     <string name="chain_policy_excluded_footer">These apps skip this group and fall through to later groups or the current mode. Tap to remove.</string>
     <string name="chain_policy_reorder">Reorder groups</string>
+    <string name="dashboard_ipv6_bypassed">IPv6 not intercepted</string>
+    <string name="dashboard_ipv6_guarded">IPv6 connections go direct, bypassing the proxy; IPv6 DNS lookups are still handled by the proxy, so they cannot be poisoned.</string>
+    <string name="dashboard_ipv6_leaking">This device cannot protect IPv6 DNS, so IPv6 DNS lookups and connections bypass the proxy and some apps may get poisoned addresses. Turn on IPv6 interception in inbound settings.</string>
+    <string name="ebpf_local_ipv6_off_summary">IPv6 connections go direct; IPv6 DNS lookups are still handled by the proxy to prevent poisoning. The dashboard warns if the device cannot do this.</string>
+    <string name="smart_sources">Subscription groups</string>
+    <string name="smart_sources_scope">Scope</string>
+    <string name="smart_sources_all">All subscriptions</string>
+    <string name="smart_sources_custom">Custom</string>
+    <string name="smart_sources_all_footer">Smart groups use all subscriptions and local nodes.</string>
+    <string name="smart_sources_custom_footer">Smart groups only use the ticked subscriptions or local groups; changes regroup right away.</string>
+    <string name="smart_sources_nodes">%1$d nodes</string>
 </resources>

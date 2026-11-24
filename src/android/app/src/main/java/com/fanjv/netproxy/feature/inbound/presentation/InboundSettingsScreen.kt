@@ -323,8 +323,17 @@ private fun LazyListScope.ebpfForm(
                     vm.setField("$path.dns_mode", JsonPrimitive(it))
                 }
             },
-            toggleItem("$path.ipv6", if (isLocal) R.string.ebpf_local_ipv6 else R.string.ebpf_shared_ipv6,
-                part.flagAt("ipv6", true), enabled) { vm.setField("$path.ipv6", JsonPrimitive(it)) },
+            if (isLocal) CardItem("$path.ipv6") {
+                // 关闭本机 IPv6 接管时说明后果：IPv6 连接直连，IPv6 的 DNS 仍尽量交给代理以防污染。
+                val checked = part.flagAt("ipv6", true)
+                CouiSwitchRow(
+                    title = stringResource(R.string.ebpf_local_ipv6), checked = checked, enabled = enabled,
+                    summary = if (checked) null else stringResource(R.string.ebpf_local_ipv6_off_summary),
+                    onCheckedChange = { vm.setField("$path.ipv6", JsonPrimitive(it)) },
+                )
+            } else toggleItem("$path.ipv6", R.string.ebpf_shared_ipv6, part.flagAt("ipv6", true), enabled) {
+                vm.setField("$path.ipv6", JsonPrimitive(it))
+            },
             toggleItem("$path.bypass_private_address", R.string.ebpf_bypass_private_address, part.flagAt("bypass_private_address", true), enabled) {
                 vm.setField("$path.bypass_private_address", JsonPrimitive(it))
             },

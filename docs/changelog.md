@@ -40,6 +40,12 @@
 - 修复：停用最后一个启用的策略组（或切换「记录核心日志」）后，核心原位重载找不到已删除的策略路由文件而失败，服务进入异常状态，之后链式设置都无法切换。策略路由与日志覆盖文件现在始终存在，不需要时为空配置。
 - 旧策略自动转为白名单组，出口与行为保持不变；命令行新增 `chain policy enable|disable|order`，HTTP API 新增 `PUT /chain/policies/order`。
 
+### 智能分组与 IPv6
+
+- 智能分组新增「订阅分组」范围：全部订阅或自选部分订阅，切换后立即重新分组，地区分组只包含所选分组的节点；命令行新增 `smart sources`，HTTP API 新增 `PUT /smart-groups/sources`。
+- 修复部分应用无法联网：本机不接管 IPv6 而网络下发 IPv6 DNS 时，YouTube 等使用自带解析器的应用经 IPv6 DNS 查询被污染。现在不接管 IPv6 时仍劫持 IPv6 的 DNS、其余 IPv6 直连；设备不支持时本次开机自动退回并重试。
+- 仪表盘在未接管 IPv6 时提示当前状态，入站设置的 IPv6 开关说明关闭后的行为。
+
 ### 规则资源
 
 - 内置规则同步官方 8.7.1：广告拦截（AWAvenue、category-ads-all）、中国大陆 IP 与域名、境外常用域名、境外 AI、Google、GitHub 与 Netflix。

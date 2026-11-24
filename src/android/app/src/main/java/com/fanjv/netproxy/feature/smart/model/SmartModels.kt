@@ -44,6 +44,31 @@ internal data class SmartGroups(
     /** 节点页当前使用的智能分组 id；为空表示使用普通分组。 */
     val active: String = "",
     val running: Boolean = false,
+    /** 重新智能分组使用的订阅分组范围；available 是可以选择的订阅与本地分组。 */
+    val sources: SmartSources = SmartSources(),
+    val available: List<SmartSourceGroup> = emptyList(),
+)
+
+/** 订阅分组范围：all 使用全部订阅与本地分组，custom 只使用 groups 中的分组。 */
+@Serializable
+internal data class SmartSources(
+    val mode: String = MODE_ALL,
+    val groups: List<String> = emptyList(),
+) {
+    val isCustom: Boolean get() = mode == MODE_CUSTOM
+
+    companion object {
+        const val MODE_ALL = "all"
+        const val MODE_CUSTOM = "custom"
+    }
+}
+
+@Serializable
+internal data class SmartSourceGroup(
+    val id: String,
+    val name: String,
+    val type: String = "",
+    @SerialName("node_count") val nodeCount: Int = 0,
 )
 
 @Serializable

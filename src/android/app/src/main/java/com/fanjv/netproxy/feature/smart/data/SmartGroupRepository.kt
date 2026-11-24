@@ -12,6 +12,7 @@ import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.putJsonArray
 
 /** 智能分组与自建分组的模块接口。 */
@@ -24,6 +25,14 @@ internal class SmartGroupRepository(private val client: ModuleApiClient) {
     /** 手动触发智能分组：重新按地区整理全部节点，保留手动修改与自建分组。 */
     suspend fun generate(english: Boolean): SmartGenerateResponse =
         decode(client.post("/smart-groups/generate", buildJsonObject { put("english", english) }).data)
+
+    /** 设置订阅分组范围并立即重新分组：custom 只使用 groups 中的订阅或本地分组。 */
+    suspend fun setSources(mode: String, groups: List<String>, english: Boolean): SmartGenerateResponse =
+        decode(client.put("/smart-groups/sources", buildJsonObject {
+            put("mode", mode)
+            putJsonArray("groups") { groups.forEach(::add) }
+            put("english", english)
+        }).data)
 
     suspend fun create(name: String, members: List<SmartNodeRef>): SmartSaveResponse =
         decode(client.post("/smart-groups", body(name, members)).data)

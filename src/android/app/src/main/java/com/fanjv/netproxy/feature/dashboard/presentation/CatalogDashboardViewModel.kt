@@ -34,6 +34,8 @@ internal data class CatalogDashboardUiState(
     val loading: Boolean = true,
     val serviceState: String = "stopped",
     val serviceError: String = "",
+    val ipv6Bypassed: Boolean = false,
+    val ipv6DnsGuard: Boolean = false,
     val readyAt: Long = 0,
     val uptimeSeconds: Long = 0,
     val outboundMode: String = "unknown",
@@ -227,6 +229,8 @@ internal class CatalogDashboardViewModel(
                     localAddress = localAddress
                 ).copy(
                     downloadBytesPerSecond = timeline.downloadBytesPerSecond,
+                    ipv6Bypassed = service.ipv6Bypassed,
+                    ipv6DnsGuard = service.ipv6DnsGuard,
                     uploadBytesPerSecond = timeline.uploadBytesPerSecond,
                     trafficSamples = timeline.samples
                 )

@@ -1,5 +1,7 @@
 package com.fanjv.netproxy.feature.dashboard.presentation
 
+import com.fanjv.netproxy.navigation.Route
+import com.fanjv.netproxy.navigation.LocalNavigator
 import dev.aiingjie.coui.CouiMenuRow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,6 +58,7 @@ internal fun CatalogDashboardScreen(
     }
 
     val reconnectText = stringResource(R.string.module_reconnect)
+    val navigator = LocalNavigator.current
     CouiLargeTitlePage(title = stringResource(R.string.dashboard), bottomSpace = CouiDockSpace) {
         if (state.connection != null && !state.connected) {
             item {
@@ -69,6 +72,19 @@ internal fun CatalogDashboardScreen(
             item {
                 CouiTopTips(CouiStatus.Error, stringResource(R.string.service_status), Modifier.padding(horizontal = 16.dp),
                     body = state.serviceError)
+            }
+        } else if (state.ipv6Bypassed) {
+            // 未接管 IPv6：有 DNS 保护时只是提示；保护未能启用时 IPv6 的 DNS 与连接都绕过代理，可能被污染。
+            item {
+                CouiTopTips(
+                    if (state.ipv6DnsGuard) CouiStatus.Info else CouiStatus.Warning,
+                    stringResource(R.string.dashboard_ipv6_bypassed),
+                    Modifier.padding(horizontal = 16.dp),
+                    body = stringResource(if (state.ipv6DnsGuard) R.string.dashboard_ipv6_guarded else R.string.dashboard_ipv6_leaking),
+                    actions = listOf(CouiTipsAction(stringResource(R.string.inbound_settings), onClick = {
+                        navigator.push(Route.InboundSettings)
+                    })),
+                )
             }
         }
 

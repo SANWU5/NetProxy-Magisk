@@ -1,5 +1,9 @@
 package com.fanjv.netproxy.feature.smart.presentation
 
+import com.fanjv.netproxy.feature.smart.model.SmartGroups
+import com.fanjv.netproxy.feature.smart.model.SmartSources
+import dev.aiingjie.coui.CouiSwitchRow
+import dev.aiingjie.coui.CouiMenuRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -161,6 +165,9 @@ internal fun SmartGroupsScreen(
                     CouiActionRow(newCustomText, onClick = { navigator.push(Route.SmartGroupEdit("")) }, enabled = idle)
                 }
             }
+            if (smart.available.size > 1 || smart.sources.isCustom) item {
+                SmartSourcesSection(smart, idle) { mode, groups -> viewModel.setSources(mode, groups, english) }
+            }
             return@CouiSubPage
         }
         item {
@@ -168,6 +175,9 @@ internal fun SmartGroupsScreen(
                 CouiInfoRow(inUseTitle, inUseValue, summary = inUseSummary,
                     onClick = inUse?.let { group -> { navigator.push(Route.SmartGroupDetail(group.id)) } })
             }
+        }
+        if (smart.available.size > 1 || smart.sources.isCustom) item {
+            SmartSourcesSection(smart, idle) { mode, groups -> viewModel.setSources(mode, groups, english) }
         }
         val regions = smart.groups.filter { !it.custom }
         val customs = smart.groups.filter { it.custom }
@@ -234,4 +244,41 @@ internal fun DelayText(delay: Int, modifier: Modifier = Modifier) {
         else -> colors.error
     }
     BasicText(text, modifier.padding(start = 12.dp), style = Coui.type.rowValue.copy(color = color))
+}
+
+/**
+ * 订阅分组范围：全部订阅，或自选参与智能分组的订阅与本地分组。切换后模块立即重新分组，
+ * 地区分组只包含所选分组的节点。切到自选时先勾选全部，内容不变，再按需取消；至少保留一个分组。
+ */
+@Composable
+private fun SmartSourcesSection(smart: SmartGroups, idle: Boolean, onChange: (String, List<String>) -> Unit) {
+    val sources = smart.sources
+    CouiGroup(
+        title = stringResource(R.string.smart_sources),
+        footer = stringResource(if (sources.isCustom) R.string.smart_sources_custom_footer else R.string.smart_sources_all_footer),
+    ) {
+        CouiMenuRow(
+            stringResource(R.string.smart_sources_scope),
+            listOf(stringResource(R.string.smart_sources_all), stringResource(R.string.smart_sources_custom)),
+            if (sources.isCustom) 1 else 0,
+            { index ->
+                if (index == 0 && sources.isCustom) onChange(SmartSources.MODE_ALL, emptyList())
+                else if (index == 1 && !sources.isCustom) onChange(SmartSources.MODE_CUSTOM, smart.available.map { it.id })
+            },
+            enabled = idle,
+        )
+        if (sources.isCustom) smart.available.forEach { group ->
+            val checked = group.id in sources.groups
+            CouiSwitchRow(
+                title = group.name,
+                checked = checked,
+                onCheckedChange = { on ->
+                    val next = if (on) sources.groups + group.id else sources.groups - group.id
+                    if (next.isNotEmpty()) onChange(SmartSources.MODE_CUSTOM, next)
+                },
+                summary = stringResource(R.string.smart_sources_nodes, group.nodeCount),
+                enabled = idle && (!checked || sources.groups.size > 1),
+            )
+        }
+    }
 }

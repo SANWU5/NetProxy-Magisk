@@ -64,6 +64,15 @@ func (e *RedirectError) Error() string {
 	return "subscription redirect rejected: " + e.Reason
 }
 
+// HTTPStatusError 表示订阅服务器返回了非 2xx 状态码；调用方可据状态码决定是否换用其他 User-Agent 重试。
+type HTTPStatusError struct {
+	StatusCode int
+}
+
+func (e *HTTPStatusError) Error() string {
+	return fmt.Sprintf("subscription request failed: HTTP %d", e.StatusCode)
+}
+
 type Usage struct {
 	Upload   *int64 `json:"upload,omitempty"`
 	Download *int64 `json:"download,omitempty"`
@@ -162,7 +171,7 @@ func Subscription(ctx context.Context, request Request) (Response, error) {
 		return Response{Metadata: metadata}, nil
 	}
 	if httpResponse.StatusCode < 200 || httpResponse.StatusCode >= 300 {
-		return Response{Metadata: metadata}, fmt.Errorf("subscription request failed: HTTP %d", httpResponse.StatusCode)
+		return Response{Metadata: metadata}, &HTTPStatusError{StatusCode: httpResponse.StatusCode}
 	}
 	body, err := io.ReadAll(io.LimitReader(httpResponse.Body, maxSubscriptionSize+1))
 	if err != nil {

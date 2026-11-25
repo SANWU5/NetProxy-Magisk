@@ -129,6 +129,7 @@ func Edit(ctx context.Context, options EditOptions) (EditResult, error) {
 		}
 		if metadata.URL != *options.URL {
 			metadata.URL = *options.URL
+			metadata.ResolvedUserAgent = ""
 			metadata.ETag = ""
 			metadata.LastModified = ""
 			requiresUpdate = true
@@ -140,6 +141,7 @@ func Edit(ctx context.Context, options EditOptions) (EditResult, error) {
 		}
 		if metadata.UserAgent != *options.UserAgent {
 			metadata.UserAgent = *options.UserAgent
+			metadata.ResolvedUserAgent = ""
 			metadata.ETag = ""
 			metadata.LastModified = ""
 			requiresUpdate = true
@@ -151,6 +153,7 @@ func Edit(ctx context.Context, options EditOptions) (EditResult, error) {
 		}
 		if metadata.HWID != *options.HWID {
 			metadata.HWID = *options.HWID
+			metadata.ResolvedUserAgent = ""
 			metadata.ETag = ""
 			metadata.LastModified = ""
 			requiresUpdate = true

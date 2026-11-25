@@ -1547,7 +1547,7 @@ func TestWorkerBackoffDoesNotDelayHealthySubscription(t *testing.T) {
 }
 
 func TestWorkerRetryStopsWhenAutoUpdateDisabled(t *testing.T) {
-	requests := make(chan struct{}, 4)
+	requests := make(chan struct{}, 8)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests <- struct{}{}
 		_, _ = w.Write([]byte("invalid subscription"))
@@ -1563,6 +1563,15 @@ func TestWorkerRetryStopsWhenAutoUpdateDisabled(t *testing.T) {
 	go func() { done <- Run(ctx, options, nil, log.New(io.Discard, "", 0)) }()
 	waitRequest(t, requests)
 	waitTimerDelay(t, clock, 15*time.Minute, 0)
+	// 取不到节点时同一轮更新会依次换用备选 User-Agent 再试；先清掉这一轮的请求，
+	// 之后再出现的请求才说明退避重试仍在继续。
+	for drained := false; !drained; {
+		select {
+		case <-requests:
+		default:
+			drained = true
+		}
+	}
 	path := filepath.Join(root, "fixture", "meta.json")
 	metadata, err := catalog.LoadMetadata(t.Context(), path, "fixture")
 	if err != nil {

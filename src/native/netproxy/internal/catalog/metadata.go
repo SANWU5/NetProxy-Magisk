@@ -24,12 +24,15 @@ const (
 // Metadata 是 Catalog 分组的持久元数据。
 // 订阅更新必须由 Go 统一读写，避免 Shell 通过 awk/sed 解析 JSON。
 type Metadata struct {
-	Schema             int                   `json:"schema"`
-	ID                 string                `json:"id"`
-	Name               string                `json:"name"`
-	Type               string                `json:"type"`
-	URL                string                `json:"url"`
-	UserAgent          string                `json:"user_agent"`
+	Schema    int    `json:"schema"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	URL       string `json:"url"`
+	UserAgent string `json:"user_agent"`
+	// ResolvedUserAgent 是自动识别出的 User-Agent：UserAgent 为空且默认标识取不到节点时，
+	// 更新流程换用其他客户端标识并记住成功的那个；为空表示使用默认标识。UserAgent 非空时不使用也不改写它。
+	ResolvedUserAgent  string                `json:"resolved_user_agent,omitempty"`
 	HWID               string                `json:"hwid"`
 	CustomHeaders      map[string]string     `json:"custom_headers"`
 	AutoUpdate         bool                  `json:"auto_update"`

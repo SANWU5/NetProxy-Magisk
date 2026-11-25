@@ -59,6 +59,12 @@ su -c '/data/adb/modules/netproxy/netproxyctl node use default/my-socks'
 
 名称留空时，依次尝试响应中的 `Profile-Title`、下载文件名、URL 主机名，最后使用“订阅”。支持的响应信息还包括流量用量和到期时间。
 
+### User-Agent 自动识别
+
+很多订阅服务按 User-Agent 区分客户端并返回不同格式：对 `sing-box` 只给一份没有节点的配置模板，对 `clash.meta` 才返回带节点的 Clash 配置。User-Agent 留空时，NetProxy 先用默认标识 `sing-box`；下载到内容却解析不出节点（或服务端返回 403）时，会依次改用 `clash.meta`、`v2rayN`、`Shadowrocket` 再试，取到节点后记住成功的那个，之后的更新直接使用，识别结果记录在订阅元数据的 `resolved_user_agent` 与 `last_diagnostics` 字段里（管理器界面暂不显示）。记住的标识失效时会回到默认标识重新识别；修改订阅地址、User-Agent 或 HWID 后也会重新识别。
+
+手动填写了 User-Agent 就只使用你填写的值，不会自动替换。所有标识都取不到节点时更新失败，`last_diagnostics` 会说明已尝试的标识。每次失败的更新最多多发 3 个请求。
+
 订阅更新不依赖正式服务运行。下载、转换或校验失败时，上一版有效节点会继续保留；服务运行时会继续确认新 Provider 是否已在核心中生效，并在失败时记录待同步状态。
 
 ## 自动与手动选择

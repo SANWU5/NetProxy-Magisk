@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -363,7 +364,8 @@ func Update(ctx context.Context, options UpdateOptions) (Result, error) {
 	if err := writeProgress(options.ProgressDir, options.GroupID, "download", "正在下载订阅"); err != nil {
 		return updateFailure(ctx, options, metadata, groupDir, started, fetch.Response{}, "subscription.progress_write_failed", "订阅状态写入失败", err)
 	}
-	response, usedProxy, fetchErr := fetchSubscription(ctx, metadata, options)
+	response, usedProxy, fetchErr := fetchSubscription(ctx, withUserAgent(metadata, effectiveUserAgent(metadata)), options)
+	var fallback *userAgentFallback
 	if fetchErr != nil {
 		if errors.Is(fetchErr, context.Canceled) || cancelled(ctx, options.ProgressDir, options.GroupID) {
 			return updateFailure(ctx, options, metadata, groupDir, started, response, "subscription.cancelled", "订阅更新已取消", fetchErr)
@@ -374,7 +376,19 @@ func Update(ctx context.Context, options UpdateOptions) (Result, error) {
 		if progressErr, ok := errors.AsType[*progressWriteError](fetchErr); ok {
 			return updateFailure(ctx, options, metadata, groupDir, started, response, "subscription.progress_write_failed", "订阅状态写入失败", progressErr)
 		}
-		return updateFailure(ctx, options, metadata, groupDir, started, response, "subscription.convert_failed", "订阅下载或转换失败", fetchErr)
+		// 个别服务对默认 User-Agent 直接返回 403：用户没有手填 UA 时换用其他客户端标识再试。
+		if statusErr, ok := errors.AsType[*fetch.HTTPStatusError](fetchErr); ok && statusErr.StatusCode == http.StatusForbidden && metadata.UserAgent == "" {
+			fallback = tryFallbackUserAgents(ctx, metadata, options, metadata.ResolvedUserAgent)
+			if fallback == nil && !cancelled(ctx, options.ProgressDir, options.GroupID) {
+				response.Metadata.Diagnostics = append(response.Metadata.Diagnostics, provider.Diagnostic{
+					Code: "subscription.user_agent_exhausted", Message: userAgentExhaustedMessage,
+				})
+			}
+		}
+		if fallback == nil {
+			return updateFailure(ctx, options, metadata, groupDir, started, response, "subscription.convert_failed", "订阅下载或转换失败", fetchErr)
+		}
+		response, usedProxy = fallback.response, fallback.usedProxy
 	}
 	metadata = applyResponseMetadata(metadata, response.Metadata)
 	metadata.Name = resolveName(metadata)
@@ -386,13 +400,45 @@ func Update(ctx context.Context, options UpdateOptions) (Result, error) {
 	if err := writeProgress(options.ProgressDir, options.GroupID, "convert", "正在转换订阅节点"); err != nil {
 		return updateFailure(ctx, options, metadata, groupDir, started, response, "subscription.progress_write_failed", "订阅状态写入失败", err)
 	}
-	parsed, parseErr := convert.Content(ctx, string(response.Body), metadata.AllowInsecure)
+	var parsed provider.ParseResult
+	var parseErr error
+	if fallback != nil {
+		parsed = fallback.parsed
+	} else {
+		parsed, parseErr = convert.Content(ctx, string(response.Body), metadata.AllowInsecure)
+	}
 	metadata.LastDiagnostics = append(response.Metadata.Diagnostics, parsed.Diagnostics...)
 	if parseErr != nil {
 		if cancelled(ctx, options.ProgressDir, options.GroupID) {
 			return updateFailure(ctx, options, metadata, groupDir, started, response, "subscription.cancelled", "订阅更新已取消", parseErr)
 		}
-		return updateFailure(ctx, options, metadata, groupDir, started, response, "subscription.convert_failed", "订阅下载、转换或校验失败", parseErr)
+		// 拿到了内容却没有节点：很多服务按 User-Agent 返回不同格式（例如对 sing-box 只给配置模板）。
+		// 用户没有手填 UA 时自动换用其他客户端标识，成功的那个会被记住，之后的更新直接使用。
+		if _, noNodes := errors.AsType[*convert.DiagnosticsError](parseErr); noNodes && metadata.UserAgent == "" {
+			if alternative := tryFallbackUserAgents(ctx, metadata, options, metadata.ResolvedUserAgent); alternative != nil {
+				fallback = alternative
+				response, usedProxy = alternative.response, alternative.usedProxy
+				metadata = applyResponseMetadata(metadata, response.Metadata)
+				metadata.Name = resolveName(metadata)
+				parsed, parseErr = alternative.parsed, nil
+				metadata.LastDiagnostics = append(response.Metadata.Diagnostics, parsed.Diagnostics...)
+			} else if !cancelled(ctx, options.ProgressDir, options.GroupID) {
+				response.Metadata.Diagnostics = append(response.Metadata.Diagnostics, provider.Diagnostic{
+					Code: "subscription.user_agent_exhausted", Message: userAgentExhaustedMessage,
+				})
+			}
+		}
+		if parseErr != nil {
+			return updateFailure(ctx, options, metadata, groupDir, started, response, "subscription.convert_failed", "订阅下载、转换或校验失败", parseErr)
+		}
+	}
+	if fallback != nil {
+		metadata.ResolvedUserAgent = fallback.userAgent
+		if fallback.userAgent != "" {
+			metadata.LastDiagnostics = append(metadata.LastDiagnostics, provider.Diagnostic{
+				Code: "subscription.user_agent_fallback", Message: "默认客户端标识没有取到节点，已自动改用 " + fallback.userAgent,
+			})
+		}
 	}
 	filtered, filterErr := provider.Filter(parsed.Document, metadata.Include, metadata.Exclude)
 	if filterErr != nil || len(filtered.Outbounds)+len(filtered.Endpoints) == 0 {
@@ -612,6 +658,64 @@ func fetchSubscription(ctx context.Context, metadata catalog.Metadata, options U
 	request.ProxyURL = ""
 	response, err = fetch.Subscription(ctx, request)
 	return response, false, err
+}
+
+// fallbackUserAgents 是默认标识取不到节点时依次尝试的客户端标识，空字符串表示默认标识（sing-box）。
+// 订阅服务按 User-Agent 区分客户端并返回不同格式：clash.meta 通常得到包含完整节点的 Clash 配置，
+// v2rayN 与 Shadowrocket 通常得到分享链接列表。每次失败的更新最多多发 3 个请求。
+var fallbackUserAgents = []string{"", "clash.meta", "v2rayN", "Shadowrocket"}
+
+const userAgentExhaustedMessage = "已尝试默认标识以及 clash.meta、v2rayN、Shadowrocket，仍没有取到节点；可在订阅设置里手动填写 User-Agent"
+
+// userAgentFallback 是换用其他 User-Agent 后成功下载并解析出节点的结果。
+type userAgentFallback struct {
+	userAgent string
+	response  fetch.Response
+	parsed    provider.ParseResult
+	usedProxy bool
+}
+
+// effectiveUserAgent 返回本次更新首先使用的 User-Agent：用户手填的优先，其次是上次自动识别并记住的，空表示默认标识。
+func effectiveUserAgent(metadata catalog.Metadata) string {
+	if metadata.UserAgent != "" {
+		return metadata.UserAgent
+	}
+	return metadata.ResolvedUserAgent
+}
+
+func withUserAgent(metadata catalog.Metadata, userAgent string) catalog.Metadata {
+	metadata.UserAgent = userAgent
+	return metadata
+}
+
+// tryFallbackUserAgents 依次换用其他 User-Agent 下载并解析订阅，返回第一个取到节点的结果；都不行返回 nil。
+// tried 是已经用过的标识，不再重复；备选请求不带 ETag 与 Last-Modified，保证拿到完整内容。
+func tryFallbackUserAgents(ctx context.Context, metadata catalog.Metadata, options UpdateOptions, tried string) *userAgentFallback {
+	for _, candidate := range fallbackUserAgents {
+		if candidate == tried {
+			continue
+		}
+		if cancelled(ctx, options.ProgressDir, options.GroupID) {
+			return nil
+		}
+		label := candidate
+		if label == "" {
+			label = "默认标识"
+		}
+		_ = writeProgress(options.ProgressDir, options.GroupID, "download", "没有取到节点，正在尝试其他客户端标识："+label)
+		attempt := withUserAgent(metadata, candidate)
+		attempt.ETag, attempt.LastModified = "", ""
+		response, usedProxy, err := fetchSubscription(ctx, attempt, options)
+		if err != nil || response.Metadata.NotModified {
+			continue
+		}
+		parsed, err := convert.Content(ctx, string(response.Body), metadata.AllowInsecure)
+		if err != nil || len(parsed.Document.Outbounds)+len(parsed.Document.Endpoints) == 0 {
+			continue
+		}
+		return &userAgentFallback{userAgent: candidate, response: response, parsed: parsed, usedProxy: usedProxy}
+	}
+	return nil
 }
 
 type progressWriteError struct {

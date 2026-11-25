@@ -2,6 +2,10 @@
 
 本页收录 GitHub Releases 中发布的正式版本，按发布时间倒序排列；不包含持续更新的 `nightly Pre-release`。
 
+## 未发布
+
+- 订阅自动识别 User-Agent：很多服务按 User-Agent 返回不同格式（例如对 sing-box 只给没有节点的配置模板，对 clash.meta 才给带节点的配置），导致订阅一直报「没有节点」。User-Agent 留空时，默认标识取不到节点（或被 403 拒绝）会依次改用 clash.meta、v2rayN、Shadowrocket 再试，并记住成功的标识，之后的更新直接使用；识别结果记录在订阅元数据的 resolved_user_agent 与 last_diagnostics 字段里（管理器界面暂不显示）。手动填写的 User-Agent 不会被替换，修改地址、User-Agent 或 HWID 后重新识别，所有标识都取不到节点时在 last_diagnostics 里说明。
+
 ## 版本 8.6.5-chain.1（2026-11-25）
 
 - 修复关闭本机 IPv6 接管后谷歌、YouTube、Play 商店等双栈站点打不开：8.6.5-chain 的 IPv6 DNS 保护把其余 IPv6 连接直连，本机接管先在本地接住应用的连接，应用以为已连上而不回退 IPv4，谷歌的 IPv6 直连在国内不通，要等约 5 秒超时后才被重置。现在其余 IPv6 连接立即被拒绝，应用随即改用 IPv4 并按规则分流；Direct 模式与私网 IPv6 仍然直连。

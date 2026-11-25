@@ -1,6 +1,6 @@
 id=netproxy
 name=NetProxy 链式分支
-version=v8.6.5-chain.1
+version=v8.6.5-chain.2
 versionCode=8
 author=Fanju（原作者）, AiingJie（链式分支）
 description=基于 sing-box 内核的透明代理工具。非官方链式代理分支，问题请到 github.com/SANWU5/NetProxy-Magisk 反馈
